@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>登录 - SimpleWMS</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="login-page">
+<main class="login-card">
+    <h1>📦 SimpleWMS</h1>
+    <p class="subtitle">简单仓库管理系统</p>
+    <form id="login-form">
+        <label>用户名<input id="username" autocomplete="username" required></label>
+        <label>密码<input id="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit" class="btn btn-primary">登录</button>
+        <div id="login-error" class="error" hidden></div>
+    </form>
+</main>
+<script src="/js/auth.js"></script>
+<script>
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const err = document.getElementById('login-error');
+    err.hidden = true;
+    try {
+        await Auth.login(
+            document.getElementById('username').value.trim(),
+            document.getElementById('password').value
+        );
+    } catch (msg) {
+        err.textContent = msg;
+        err.hidden = false;
+    }
+});
+</script>
+</body>
+</html>

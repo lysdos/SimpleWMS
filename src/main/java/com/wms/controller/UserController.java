@@ -1,0 +1,52 @@
+package com.wms.controller;
+
+import com.wms.annotation.RequireRole;
+import com.wms.model.ApiResponse;
+import com.wms.model.AppUser;
+import com.wms.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/users")
+@RequireRole("ADMIN")
+public class UserController {
+
+    private final UserService userService;
+
+    @Autowired
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping
+    public ApiResponse<List<AppUser>> list() {
+        return ApiResponse.ok(userService.list());
+    }
+
+    @PostMapping
+    public ApiResponse<AppUser> create(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String password = body.get("password");
+        String role = body.get("role");
+        AppUser u = userService.create(username, password, role);
+        // 不返回 password_hash
+        u.setPasswordHash(null);
+        return ApiResponse.ok(u);
+    }
+
+    @PostMapping("/{id}/password")
+    public ApiResponse<Void> resetPassword(@PathVariable int id, @RequestBody Map<String, String> body) {
+        userService.resetPassword(id, body.get("password"));
+        return ApiResponse.ok();
+    }
+
+    @PostMapping("/{id}/enabled")
+    public ApiResponse<Void> setEnabled(@PathVariable int id, @RequestBody Map<String, Boolean> body) {
+        userService.setEnabled(id, Boolean.TRUE.equals(body.get("enabled")));
+        return ApiResponse.ok();
+    }
+}

@@ -1,0 +1,106 @@
+# =====================================================
+#  SimpleWMS  -  docker-compose
+#  项目名 (container 前缀): simplewms
+#  服务: mysql + backend + frontend
+#  启动: docker compose up -d --build
+#  停止: docker compose down
+# =====================================================
+
+name: simplewms
+
+services:
+
+  # ---------- 1. MySQL ----------
+  mysql:
+    image: mysql:8.0
+    container_name: simplewms-mysql
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: simple_wms
+      MYSQL_USER: wms
+      MYSQL_PASSWORD: wmspass
+      # 让 utf8mb4 默认生效
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+    # ports:
+      # 原映射 "3306:3306" 因 Windows Hyper-V 端口预留被拒绝绑定
+      # 后端通过 docker 网络服务名 mysql:3306 访问,无需宿主机映射
+      # 如需 Navicat/DBeaver 调试,改为其他端口如 "3307:3306"
+    volumes:
+      # 数据持久化(删容器数据不丢)
+      - mysql-data:/var/lib/mysql
+      # 首次启动自动建库 + 建表
+      - ./sql/mysql-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks:
+      - simplewms-net
+
+  # ---------- 2. Backend (Spring Boot) ----------
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: simplewms-backend:1.0.0
+    container_name: simplewms-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Shanghai
+      # 关键:切到 mysql profile,DB host 用 docker 服务名
+      SPRING_PROFILES_ACTIVE: mysql
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: wms
+      SPRING_DATASOURCE_PASSWORD: wmspass
+      SPRING_SQL_INIT_MODE: always
+      SPRING_SQL_INIT_CONTINUE_ON_ERROR: true
+      # JVM 调优
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+      # 用户与角色 bootstrap
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: change-me-now
+      JWT_SECRET: change-this-jwt-secret-in-production-32bytes!
+      JWT_TTL_HOURS: "24"
+    ports:
+      # 暴露给宿主机,便于直接 curl 测试 API(原 8080 被 Windows Hyper-V 预留,改 9090)
+      - "9090:8080"
+    networks:
+      - simplewms-net
+
+  # ---------- 3. Frontend (nginx 反向代理) ----------
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: simplewms-frontend:1.0.0
+    container_name: simplewms-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      # 用户访问入口(原 8081:80,但 8081 也落在 Hyper-V 预留 8033-8132 内,改 9080)
+      - "9080:80"
+    networks:
+      - simplewms-net
+
+# ---------- 卷 & 网络 ----------
+volumes:
+  mysql-data:
+    name: simplewms-mysql-data
+
+networks:
+  simplewms-net:
+    name: simplewms-net
+    driver: bridge

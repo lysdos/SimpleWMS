@@ -1,0 +1,15 @@
+# 切到 MySQL 模式启动:
+#   java -jar simple-wms.jar --spring.profiles.active=mysql
+# 或设置环境变量 SPRING_PROFILES_ACTIVE=mysql
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/simple_wms?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: root
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      continue-on-error: true

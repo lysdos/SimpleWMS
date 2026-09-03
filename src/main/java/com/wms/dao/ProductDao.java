@@ -1,0 +1,148 @@
+package com.wms.dao;
+
+import com.wms.model.Product;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+import java.sql.PreparedStatement;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+@Repository
+public class ProductDao {
+
+    private final JdbcTemplate jdbc;
+    private static final RowMapper<Product> ROW = (rs, n) -> {
+        Product p = new Product();
+        p.setId(rs.getInt("id"));
+        p.setSku(rs.getString("sku"));
+        p.setName(rs.getString("name"));
+        p.setCategory(rs.getString("category"));
+        p.setUnit(rs.getString("unit"));
+        p.setLocation(rs.getString("location"));
+        p.setQuantity(rs.getInt("quantity"));
+        p.setUnitPrice(rs.getBigDecimal("unit_price"));
+        p.setLowStock(rs.getInt("low_stock"));
+        p.setRemark(rs.getString("remark"));
+        p.setCreatedAt(rs.getTimestamp("created_at") == null
+                ? null : rs.getTimestamp("created_at").toLocalDateTime());
+        p.setUpdatedAt(rs.getTimestamp("updated_at") == null
+                ? null : rs.getTimestamp("updated_at").toLocalDateTime());
+        return p;
+    };
+
+    @Autowired
+    public ProductDao(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    public List<Product> findAll(String keyword) {
+        String sql = "SELECT * FROM product WHERE 1=1";
+        Object[] args;
+        if (keyword != null && !keyword.isBlank()) {
+            sql += " AND (sku LIKE ? OR name LIKE ? OR category LIKE ?)";
+            String like = "%" + keyword.trim() + "%";
+            args = new Object[]{like, like, like};
+        } else {
+            args = new Object[]{};
+        }
+        sql += " ORDER BY id DESC";
+        return jdbc.query(sql, ROW, args);
+    }
+
+    public Optional<Product> findById(int id) {
+        try {
+            return Optional.ofNullable(jdbc.queryForObject(
+                    "SELECT * FROM product WHERE id = ?", ROW, id));
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<Product> findBySku(String sku) {
+        try {
+            return Optional.ofNullable(jdbc.queryForObject(
+                    "SELECT * FROM product WHERE sku = ?", ROW, sku));
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    public int insert(Product p) {
+        String sql = "INSERT INTO product (sku, name, category, unit, location, " +
+                "quantity, unit_price, low_stock, remark) VALUES (?,?,?,?,?,?,?,?,?)";
+        KeyHolder kh = new GeneratedKeyHolder();
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
+            ps.setString(1, p.getSku());
+            ps.setString(2, p.getName());
+            ps.setString(3, emptyTo(p.getCategory(), "默认"));
+            ps.setString(4, emptyTo(p.getUnit(), "件"));
+            ps.setString(5, emptyTo(p.getLocation(), "默认库位"));
+            ps.setInt(6, p.getQuantity() == null ? 0 : p.getQuantity());
+            ps.setBigDecimal(7, p.getUnitPrice() == null ? BigDecimal.ZERO : p.getUnitPrice());
+            ps.setInt(8, p.getLowStock() == null ? 10 : p.getLowStock());
+            ps.setString(9, p.getRemark());
+            return ps;
+        }, kh);
+        Map<String, Object> keys = kh.getKeys();
+        if (keys != null && keys.get("id") != null) {
+            return ((Number) keys.get("id")).intValue();
+        }
+        return 0;
+    }
+
+    public int update(Product p) {
+        String sql = "UPDATE product SET sku=?, name=?, category=?, unit=?, location=?, " +
+                "quantity=?, unit_price=?, low_stock=?, remark=? WHERE id=?";
+        return jdbc.update(sql,
+                p.getSku(), p.getName(), emptyTo(p.getCategory(), "默认"),
+                emptyTo(p.getUnit(), "件"), emptyTo(p.getLocation(), "默认库位"),
+                p.getQuantity(), p.getUnitPrice(), p.getLowStock(), p.getRemark(), p.getId());
+    }
+
+    public int delete(int id) {
+        return jdbc.update("DELETE FROM product WHERE id = ?", id);
+    }
+
+    /** 库存 +/- 原子操作,返回受影响行数(0 表示失败,如 SKU 不存在) */
+    public int adjustQuantity(int id, int delta) {
+        return jdbc.update(
+                "UPDATE product SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP " +
+                        "WHERE id = ?",
+                delta, id);
+    }
+
+    public long count() {
+        Long v = jdbc.queryForObject("SELECT COUNT(*) FROM product", Long.class);
+        return v == null ? 0 : v;
+    }
+
+    public Long sumQuantity() {
+        Long v = jdbc.queryForObject("SELECT COALESCE(SUM(quantity),0) FROM product", Long.class);
+        return v == null ? 0L : v;
+    }
+
+    public BigDecimal sumValue() {
+        BigDecimal v = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(quantity * unit_price),0) FROM product", BigDecimal.class);
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    public long countLowStock() {
+        Long v = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM product WHERE quantity <= low_stock", Long.class);
+        return v == null ? 0L : v;
+    }
+
+    private static String emptyTo(String s, String fallback) {
+        return (s == null || s.isBlank()) ? fallback : s;
+    }
+}

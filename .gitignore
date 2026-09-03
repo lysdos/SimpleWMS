@@ -1,0 +1,53 @@
+# ============================================================
+#  SimpleWMS .gitignore
+# ============================================================
+
+# 1) 构建产物
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# 2) 运行时数据 / H2 文件
+data/
+*.mv.db
+*.trace.db
+
+# 3) 日志 / 临时
+logs/
+*.log
+*.tmp
+*.bak
+*.swp
+*.orig
+
+# 4) IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+
+# 5) OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 6) 本地工具/迁移脚本(临时)
+tools/
+!tools/.gitkeep
+
+# 7) 容器卷数据(避免误提交)
+docker-data/
+
+# 8) 后端构建缓存 — 故意忽略,首次构建时 build.bat 会从本机 Maven 缓存自动同步
+.m2-repo/
+
+# 9) 其他工具/AI 内部目录(不属于本项目)
+.superpowers/
+.claude/
+docs/

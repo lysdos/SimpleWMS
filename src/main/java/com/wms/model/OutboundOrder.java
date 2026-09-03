@@ -1,0 +1,51 @@
+package com.wms.model;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+public class OutboundOrder {
+
+    private Integer id;
+    private String orderNo;
+    private String customer;
+    private String externalNo;
+    private String remark;
+    private String operator;
+    private Integer totalQuantity;
+    private Integer itemCount;
+    private LocalDateTime createdAt;
+    private List<OutboundOrderItem> items;
+
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
+    public String getOrderNo() { return orderNo; }
+    public void setOrderNo(String orderNo) { this.orderNo = orderNo; }
+    public String getCustomer() { return customer; }
+    public void setCustomer(String customer) { this.customer = customer; }
+    public String getExternalNo() { return externalNo; }
+    public void setExternalNo(String externalNo) { this.externalNo = externalNo; }
+    public String getRemark() { return remark; }
+    public void setRemark(String remark) { this.remark = remark; }
+    public String getOperator() { return operator; }
+    public void setOperator(String operator) { this.operator = operator; }
+    public Integer getTotalQuantity() { return totalQuantity; }
+    public void setTotalQuantity(Integer totalQuantity) { this.totalQuantity = totalQuantity; }
+    public Integer getItemCount() { return itemCount; }
+    public void setItemCount(Integer itemCount) { this.itemCount = itemCount; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public List<OutboundOrderItem> getItems() { return items; }
+    public void setItems(List<OutboundOrderItem> items) { this.items = items; }
+
+    /** 整单估算金额(出库价值,按当时单价) */
+    public BigDecimal estimateTotalAmount() {
+        if (items == null) return BigDecimal.ZERO;
+        BigDecimal sum = BigDecimal.ZERO;
+        for (OutboundOrderItem it : items) {
+            BigDecimal p = it.getUnitPrice() == null ? BigDecimal.ZERO : it.getUnitPrice();
+            sum = sum.add(p.multiply(BigDecimal.valueOf(it.getQuantity() == null ? 0 : it.getQuantity())));
+        }
+        return sum;
+    }
+}

@@ -1,0 +1,15 @@
+target/
+data/
+*.log
+*.iml
+.idea/
+.vscode/
+.git/
+.gitignore
+.mvn/
+README.md
+*.bat
+.dockerignore
+docker-compose.yml
+docker-start.bat
+docker-stop.bat
