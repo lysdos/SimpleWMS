@@ -17,6 +17,27 @@ public class Product {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    // 联表展示(不存表)
+    private String defaultSupplier;       // 默认供应商名
+    private Integer defaultSupplierId;    // 默认供应商 id
+    private java.util.List<SupplierRef> suppliers;
+
+    public static class SupplierRef {
+        private Integer id;
+        private String name;
+        private Boolean isDefault;
+        public SupplierRef() {}
+        public SupplierRef(Integer id, String name, Boolean isDefault) {
+            this.id = id; this.name = name; this.isDefault = isDefault;
+        }
+        public Integer getId() { return id; }
+        public void setId(Integer id) { this.id = id; }
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public Boolean getIsDefault() { return isDefault; }
+        public void setIsDefault(Boolean isDefault) { this.isDefault = isDefault; }
+    }
+
     public Product() {}
 
     public Integer getId() { return id; }
@@ -43,6 +64,18 @@ public class Product {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getDefaultSupplier() { return defaultSupplier; }
+    public void setDefaultSupplier(String defaultSupplier) { this.defaultSupplier = defaultSupplier; }
+    public Integer getDefaultSupplierId() { return defaultSupplierId; }
+    public void setDefaultSupplierId(Integer defaultSupplierId) { this.defaultSupplierId = defaultSupplierId; }
+    public java.util.List<SupplierRef> getSuppliers() { return suppliers; }
+    public void setSuppliers(java.util.List<SupplierRef> suppliers) { this.suppliers = suppliers; }
+
+    // 服务层使用的关联 supplier 写入载体(不返回给前端)
+    private transient java.util.List<ProductSupplier> suppliersAsList;
+    public java.util.List<ProductSupplier> getSuppliersAsList() { return suppliersAsList; }
+    public void setSuppliersAsList(java.util.List<ProductSupplier> suppliersAsList) { this.suppliersAsList = suppliersAsList; }
 
     public BigDecimal getStockValue() {
         if (unitPrice == null || quantity == null) return BigDecimal.ZERO;

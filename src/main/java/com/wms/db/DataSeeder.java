@@ -56,7 +56,9 @@ public class DataSeeder implements CommandLineRunner {
                 return;
             }
             log.info("DataSeeder: 首次启动,开始写入演示数据");
+            seedSuppliers();
             seedProducts();
+            seedProductSuppliers();
             seedLogs();
             log.info("DataSeeder: 演示数据写入完成");
         } catch (Exception e) {
@@ -75,7 +77,8 @@ public class DataSeeder implements CommandLineRunner {
         tryAddIndex("idx_log_order", "inventory_log", "order_id");
         // 2026-09-03: 入库单明细行级 supplier(支持同一单据多供应商)
         tryAddColumn("inbound_order_item", "supplier", "VARCHAR(128) DEFAULT NULL");
-        // 入库单主表去掉 supplier(若仍在则无害,前端不再使用)
+        // 注:supplier / product_supplier 表在 schema.sql 里 CREATE IF NOT EXISTS
+        // 全新装库会自动建,老库(已有 supplier 表但表结构升级)靠 schema.sql 同样幂等
     }
 
     private void tryAddIndex(String indexName, String table, String col) {
@@ -116,6 +119,30 @@ public class DataSeeder implements CommandLineRunner {
         } catch (Exception e) {
             // 静默:多半是已存在/不支持
         }
+    }
+
+    private void seedSuppliers() {
+        jdbc.update("INSERT INTO supplier (name, contact, phone, email, address, remark) " +
+                "VALUES ('得力办公旗舰店','王经理','021-66889900','sales@deli.com.cn','上海市浦东新区','主营办公文具')");
+        jdbc.update("INSERT INTO supplier (name, contact, phone, email, address, remark) " +
+                "VALUES ('晨光文具股份有限公司','李经理','021-67778899','b2b@mg-pen.com','上海市奉贤区','文具/笔类批量供应')");
+        jdbc.update("INSERT INTO supplier (name, contact, phone, email, address, remark) " +
+                "VALUES ('京东企业购','客户经理','4006-000-000','enterprise@jd.com','北京市亦庄','一站式办公采购')");
+    }
+
+    private void seedProductSuppliers() {
+        // 假设已写入 product id 1..5,supplier id 1..3
+        // SP-001 A4 复印纸:得力(默认)
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (1, 1, TRUE)");
+        // SP-002 中性笔:晨光(默认)+ 得力
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (2, 2, TRUE)");
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (2, 1, FALSE)");
+        // SP-003 便利贴:晨光
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (3, 2, TRUE)");
+        // SP-004 订书机:得力
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (4, 1, TRUE)");
+        // SP-005 矿泉水:京东企业购
+        jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (5, 3, TRUE)");
     }
 
     private void seedProducts() {

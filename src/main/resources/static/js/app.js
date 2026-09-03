@@ -5,6 +5,8 @@
 const state = {
     products: [],
     productsKw: '',
+    suppliers: [],
+    supplierKw: '',
     ledgerType: 'ALL',
     ledgerKw: '',
     orderType: 'IN',
@@ -22,7 +24,8 @@ const routes = {
     outbound : loadOutbound,
     orders   : loadOrders,
     ledger   : loadLedger,
-    users    : loadUsers
+    users    : loadUsers,
+    suppliers: loadSuppliers
 };
 
 function go(route) {
@@ -62,18 +65,36 @@ async function loadProducts() {
 
 async function loadInbound() {
     setActive('inbound');
-    if (state.products.length === 0) {
-        state.products = await api.get('/api/products');
-    }
-    document.getElementById('view').innerHTML = Views.inbound(state.products);
+    await ensureProducts();
+    let recent = [];
+    try {
+        const d = await api.get('/api/inbound/orders?pageSize=10');
+        recent = d.list || [];
+    } catch (e) {}
+    document.getElementById('view').innerHTML = Views.inbound(state.products, recent);
 }
 
 async function loadOutbound() {
     setActive('outbound');
+    await ensureProducts();
+    let recent = [];
+    try {
+        const d = await api.get('/api/outbound/orders?pageSize=10');
+        recent = d.list || [];
+    } catch (e) {}
+    document.getElementById('view').innerHTML = Views.outbound(state.products, recent);
+}
+
+async function ensureProducts() {
     if (state.products.length === 0) {
         state.products = await api.get('/api/products');
     }
-    document.getElementById('view').innerHTML = Views.outbound(state.products);
+}
+
+async function loadSuppliers() {
+    setActive('suppliers');
+    state.suppliers = await api.get('/api/suppliers' + (state.supplierKw ? '?keyword=' + encodeURIComponent(state.supplierKw) : ''));
+    document.getElementById('view').innerHTML = Views.suppliers(state.suppliers);
 }
 
 async function loadLedger() {
@@ -175,12 +196,14 @@ function searchLedger() {
 
 /* ---------- 商品新增/编辑/删除 ---------- */
 async function newProduct() {
-    showModal('新增商品', Views.productForm({}), async () => {
+    await ensureSuppliers();
+    showModal('新增商品', Views.productForm({}, state.suppliers), async () => {
         const body = readProductForm();
         if (!body) return false;
         try {
             await api.post('/api/products', body);
             toast('新增成功', 'success');
+            state.products = []; // 强制刷新
             await loadProducts();
         } catch (e) { toast(e.message, 'error'); return false; }
     });
@@ -189,12 +212,14 @@ async function newProduct() {
 async function editProduct(id) {
     try {
         const p = await api.get('/api/products/' + id);
-        showModal('编辑商品 #' + id, Views.productForm(p), async () => {
+        await ensureSuppliers();
+        showModal('编辑商品 #' + id, Views.productForm(p, state.suppliers), async () => {
             const body = readProductForm();
             if (!body) return false;
             try {
                 await api.put('/api/products/' + id, body);
                 toast('保存成功', 'success');
+                state.products = [];
                 await loadProducts();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
@@ -206,9 +231,16 @@ function delProduct(id, name) {
         try {
             await api.delete('/api/products/' + id);
             toast('已删除', 'success');
+            state.products = [];
             await loadProducts();
         } catch (e) { toast(e.message, 'error'); }
     });
+}
+
+async function ensureSuppliers() {
+    if (!state.suppliers || state.suppliers.length === 0) {
+        state.suppliers = await api.get('/api/suppliers');
+    }
 }
 
 function readProductForm() {
@@ -217,6 +249,16 @@ function readProductForm() {
     const name  = document.getElementById('pf-name').value.trim();
     if (!sku)  { toast('SKU 不能为空', 'error'); return null; }
     if (!name) { toast('名称不能为空', 'error'); return null; }
+
+    // 收集选中的 supplier id
+    const sel = document.getElementById('pf-suppliers');
+    const def = document.getElementById('pf-default-supplier').value;
+    const selectedIds = sel ? Array.from(sel.selectedOptions).map(o => Number(o.value)).filter(Boolean) : [];
+    const suppliers = selectedIds.map(sid => ({
+        supplierId: sid,
+        isDefault: String(sid) === String(def)
+    }));
+
     return {
         sku, name,
         category : document.getElementById('pf-cat').value.trim(),
@@ -226,88 +268,182 @@ function readProductForm() {
         unitPrice: Number(document.getElementById('pf-price').value || 0),
         lowStock : Number(document.getElementById('pf-low').value || 10),
         remark   : document.getElementById('pf-remark').value.trim(),
+        suppliers
     };
 }
 
-/* ---------- 入库(多货) ---------- */
-function addInboundRow() {
-    const tbody = document.getElementById('ib-rows');
-    if (!tbody) return;
-    const first = tbody.querySelector('tr.ib-row');
-    const clone = first.cloneNode(true);
-    clone.querySelector('.ib-qty').value = '';
-    clone.querySelector('.ib-supplier').value = '';
-    clone.querySelector('.ib-row-remark').value = '';
-    tbody.appendChild(clone);
-    renumberInboundRows();
+/* ---------- 供应商管理 ---------- */
+function searchSuppliers() {
+    state.supplierKw = document.getElementById('sup-kw').value.trim();
+    loadSuppliers();
 }
-function removeInboundRow(btn) {
-    const tbody = document.getElementById('ib-rows');
+async function newSupplier() {
+    showModal('新增供应商', Views.supplierForm({}), async () => {
+        const body = readSupplierForm();
+        if (!body) return false;
+        try {
+            await api.post('/api/suppliers', body);
+            toast('已新增', 'success');
+            await loadSuppliers();
+        } catch (e) { toast(e.message, 'error'); return false; }
+    });
+}
+async function editSupplier(id) {
+    try {
+        const s = await api.get('/api/suppliers/' + id);
+        showModal('编辑供应商 #' + id, Views.supplierForm(s), async () => {
+            const body = readSupplierForm();
+            if (!body) return false;
+            try {
+                await api.put('/api/suppliers/' + id, body);
+                toast('已保存', 'success');
+                await loadSuppliers();
+            } catch (e) { toast(e.message, 'error'); return false; }
+        });
+    } catch (e) { toast(e.message, 'error'); }
+}
+function delSupplier(id, name) {
+    confirmModal(`确认删除供应商「${name}」?该操作不可恢复。`, async () => {
+        try {
+            await api.delete('/api/suppliers/' + id);
+            toast('已删除', 'success');
+            await loadSuppliers();
+        } catch (e) { toast(e.message, 'error'); }
+    });
+}
+function readSupplierForm() {
+    const name = document.getElementById('sf-name').value.trim();
+    if (!name) { toast('名称不能为空', 'error'); return null; }
+    return {
+        name,
+        contact: document.getElementById('sf-contact').value.trim(),
+        phone  : document.getElementById('sf-phone').value.trim(),
+        email  : document.getElementById('sf-email').value.trim(),
+        address: document.getElementById('sf-address').value.trim(),
+        remark : document.getElementById('sf-remark').value.trim(),
+        enabled: document.getElementById('sf-enabled').value === 'true'
+    };
+}
+
+/* ---------- 新增入库/出库单 弹窗 ---------- */
+async function openNewOrderModal(type) {
+    await ensureProducts();
+    document.getElementById('modal-title').textContent = type === 'IN' ? '新增入库单' : '新增出库单';
+    document.getElementById('modal-body').innerHTML = Views.newOrderModal(type, state.products);
+    document.getElementById('modal-mask').hidden = false;
+    const ok = document.getElementById('modal-ok');
+    const newOk = ok.cloneNode(true);
+    newOk.textContent = '提交';
+    ok.parentNode.replaceChild(newOk, ok);
+    newOk.addEventListener('click', submitNewOrder);
+    const modal = document.querySelector('.modal');
+    if (modal) modal.classList.add('modal-wide');
+    // 绑定商品 change 事件 + 初次预填默认供应商
+    document.querySelectorAll('#nw-rows .nw-product').forEach(sel => {
+        sel.addEventListener('change', onNewOrderProductChange);
+        if (sel.value) onNewOrderProductChange.call(sel);
+    });
+    renumberNewOrderRows();
+}
+
+function onNewOrderProductChange() {
+    const opt = this.selectedOptions[0];
+    if (!opt) return;
+    const def = opt.getAttribute('data-default') || '';
+    const tr = this.closest('tr');
+    const sup = tr.querySelector('.nw-supplier');
+    if (sup && !sup.value) sup.value = def;
+}
+
+function addNewOrderRow() {
+    const tbody = document.getElementById('nw-rows');
+    if (!tbody) return;
+    const first = tbody.querySelector('tr.nw-row');
+    const clone = first.cloneNode(true);
+    clone.querySelector('.nw-qty').value = '';
+    clone.querySelector('.nw-supplier').value = '';
+    clone.querySelector('.nw-row-remark').value = '';
+    tbody.appendChild(clone);
+    clone.querySelector('.nw-product').addEventListener('change', onNewOrderProductChange);
+    renumberNewOrderRows();
+}
+function removeNewOrderRow(btn) {
+    const tbody = document.getElementById('nw-rows');
     if (!tbody) return;
     const tr = btn.closest('tr');
     if (!tr) return;
-    if (tbody.querySelectorAll('tr.ib-row').length <= 1) {
-        tr.querySelector('.ib-qty').value = '';
-        tr.querySelector('.ib-supplier').value = '';
-        tr.querySelector('.ib-row-remark').value = '';
+    if (tbody.querySelectorAll('tr.nw-row').length <= 1) {
+        tr.querySelector('.nw-qty').value = '';
+        tr.querySelector('.nw-supplier').value = '';
+        tr.querySelector('.nw-row-remark').value = '';
         return;
     }
     tr.remove();
-    renumberInboundRows();
+    renumberNewOrderRows();
 }
-function renumberInboundRows() {
-    const rows = document.querySelectorAll('#ib-rows tr.ib-row');
+function renumberNewOrderRows() {
+    const rows = document.querySelectorAll('#nw-rows tr.nw-row');
     rows.forEach((r, i) => {
         const idx = r.querySelector('.row-idx');
         if (idx) idx.textContent = (i + 1);
     });
 }
 
-function readInboundItems() {
-    const rows = document.querySelectorAll('#ib-rows tr.ib-row');
+function readNewOrderItems() {
+    const rows = document.querySelectorAll('#nw-rows tr.nw-row');
     const items = [];
     let hasError = false;
     rows.forEach((tr) => {
-        const productId = Number(tr.querySelector('.ib-product').value);
-        const qtyRaw    = tr.querySelector('.ib-qty').value;
+        const productId = Number(tr.querySelector('.nw-product').value);
+        const qtyRaw    = tr.querySelector('.nw-qty').value;
         const quantity  = Number(qtyRaw);
-        const supplier  = tr.querySelector('.ib-supplier').value.trim();
-        const rowRemark = tr.querySelector('.ib-row-remark').value.trim();
-        if (!productId && !qtyRaw) return; // 跳过空行
+        const supplier  = tr.querySelector('.nw-supplier').value.trim();
+        const rowRemark = tr.querySelector('.nw-row-remark').value.trim();
+        if (!productId && !qtyRaw) return;
         if (!productId) { toast('存在未选择商品的行', 'error'); hasError = true; return; }
         if (!Number.isFinite(quantity) || quantity <= 0) {
-            toast('入库数量必须大于 0', 'error'); hasError = true; return;
+            toast('数量必须大于 0', 'error'); hasError = true; return;
         }
         items.push({ productId, quantity, supplier, rowRemark });
     });
     return hasError ? null : items;
 }
 
-async function submitInbound() {
-    const items = readInboundItems();
+async function submitNewOrder() {
+    const type = document.getElementById('nw-type').value;
+    const items = readNewOrderItems();
     if (items == null) return;
-    if (items.length === 0) { toast('请至少填写一条入库明细', 'error'); return; }
+    if (items.length === 0) { toast('请至少填写一条明细', 'error'); return; }
 
     const body = {
-        externalNo: document.getElementById('ib-external-no').value.trim(),
-        remark:     document.getElementById('ib-remark').value.trim(),
+        externalNo: (document.getElementById('nw-external-no') || {}).value?.trim() || '',
+        remark:     (document.getElementById('nw-remark') || {}).value?.trim() || '',
         items
     };
-
-    try {
-        const order = await api.post('/api/inbound/batch', body);
-        const suppliers = new Set(items.map(i => (i.supplier || '').trim()).filter(Boolean));
-        const spInfo = suppliers.size > 0 ? `(${suppliers.size} 个供应商)` : '';
-        toast(`入库成功 ${spInfo} 共 ${order.itemCount} 行 / ${order.totalQuantity} 件`, 'success');
-        state.products = await api.get('/api/products');
-        openInboundOrderModal(order);
-        document.getElementById('ib-external-no').value = '';
-        document.getElementById('ib-remark').value = '';
-        const tbody = document.getElementById('ib-rows');
-        if (tbody) {
-            tbody.innerHTML = '';
-            for (let i = 0; i < 3; i++) addInboundRow();
+    if (type === 'OUT') {
+        body.customer = (document.getElementById('nw-customer') || {}).value?.trim() || '';
+        const need = new Map();
+        for (const it of items) need.set(it.productId, (need.get(it.productId) || 0) + it.quantity);
+        for (const [pid, qty] of need) {
+            const p = state.products.find(x => x.id === pid);
+            if (!p) { toast('商品不存在 id=' + pid, 'error'); return; }
+            if (p.quantity < qty) {
+                toast(`库存不足:SKU ${p.sku} 当前 ${p.quantity},需要 ${qty}`, 'error');
+                return;
+            }
         }
+    }
+
+    const url = type === 'IN' ? '/api/inbound/batch' : '/api/outbound/batch';
+    try {
+        const order = await api.post(url, body);
+        toast(`${type === 'IN' ? '入库' : '出库'}成功:共 ${order.itemCount} 行 / ${order.totalQuantity} 件`, 'success');
+        state.products = [];
+        await ensureProducts();
+        closeModal();
+        if (type === 'IN') openInboundOrderModal(order);
+        else              openOutboundOrderModal(order);
+        if (type === 'IN') await loadInbound(); else await loadOutbound();
     } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -315,119 +451,15 @@ function openInboundOrderModal(order) {
     document.getElementById('modal-title').textContent = '入库单 ' + (order.orderNo || '');
     document.getElementById('modal-body').innerHTML = Views.inboundOrderModal(order);
     document.getElementById('modal-mask').hidden = false;
-    // 打印时间
     const t = document.getElementById('order-print-time');
     if (t) t.textContent = new Date().toLocaleString();
-    // 重新绑 OK 按钮:仅关闭
     const ok = document.getElementById('modal-ok');
     const newOk = ok.cloneNode(true);
     newOk.textContent = '关闭';
     ok.parentNode.replaceChild(newOk, ok);
     newOk.addEventListener('click', closeModal);
-    // 模态变宽
     const modal = document.querySelector('.modal');
-    if (modal) {
-        modal.classList.add('modal-wide');
-    }
-}
-
-function printInboundOrder() {
-    // 走 CSS @media print 隐藏非打印区域
-    window.print();
-}
-
-/* ---------- 出库(多货) ---------- */
-function addOutboundRow() {
-    const tbody = document.getElementById('ob-rows');
-    if (!tbody) return;
-    const first = tbody.querySelector('tr.ob-row');
-    const clone = first.cloneNode(true);
-    clone.querySelector('.ob-qty').value = '';
-    clone.querySelector('.ob-row-remark').value = '';
-    tbody.appendChild(clone);
-    renumberOutboundRows();
-}
-function removeOutboundRow(btn) {
-    const tbody = document.getElementById('ob-rows');
-    if (!tbody) return;
-    const tr = btn.closest('tr');
-    if (!tr) return;
-    if (tbody.querySelectorAll('tr.ob-row').length <= 1) {
-        tr.querySelector('.ob-qty').value = '';
-        tr.querySelector('.ob-row-remark').value = '';
-        return;
-    }
-    tr.remove();
-    renumberOutboundRows();
-}
-function renumberOutboundRows() {
-    const rows = document.querySelectorAll('#ob-rows tr.ob-row');
-    rows.forEach((r, i) => {
-        const idx = r.querySelector('.row-idx');
-        if (idx) idx.textContent = (i + 1);
-    });
-}
-
-function readOutboundItems() {
-    const rows = document.querySelectorAll('#ob-rows tr.ob-row');
-    const items = [];
-    let hasError = false;
-    rows.forEach((tr) => {
-        const productId = Number(tr.querySelector('.ob-product').value);
-        const qtyRaw    = tr.querySelector('.ob-qty').value;
-        const quantity  = Number(qtyRaw);
-        const rowRemark = tr.querySelector('.ob-row-remark').value.trim();
-        if (!productId && !qtyRaw) return; // 跳过空行
-        if (!productId) { toast('存在未选择商品的行', 'error'); hasError = true; return; }
-        if (!Number.isFinite(quantity) || quantity <= 0) {
-            toast('出库数量必须大于 0', 'error'); hasError = true; return;
-        }
-        items.push({ productId, quantity, rowRemark });
-    });
-    return hasError ? null : items;
-}
-
-async function submitOutbound() {
-    const items = readOutboundItems();
-    if (items == null) return;
-    if (items.length === 0) { toast('请至少填写一条出库明细', 'error'); return; }
-
-    // 前端预校验:用 state.products 的缓存逐项检查当前库存(同商品合并后再校验)
-    const need = new Map();
-    for (const it of items) {
-        need.set(it.productId, (need.get(it.productId) || 0) + it.quantity);
-    }
-    for (const [pid, qty] of need) {
-        const p = state.products.find(x => x.id === pid);
-        if (!p) { toast('商品不存在 id=' + pid, 'error'); return; }
-        if (p.quantity < qty) {
-            toast(`库存不足:SKU ${p.sku} 当前库存 ${p.quantity},需要出库 ${qty}`, 'error');
-            return;
-        }
-    }
-
-    const body = {
-        customer:   document.getElementById('ob-customer').value.trim(),
-        externalNo: document.getElementById('ob-external-no').value.trim(),
-        remark:     document.getElementById('ob-remark').value.trim(),
-        items
-    };
-
-    try {
-        const order = await api.post('/api/outbound/batch', body);
-        toast(`出库成功,共 ${order.itemCount} 种 / ${order.totalQuantity} 件`, 'success');
-        state.products = await api.get('/api/products');
-        openOutboundOrderModal(order);
-        // 重置表单
-        document.getElementById('ob-customer').value = '';
-        document.getElementById('ob-external-no').value = '';
-        document.getElementById('ob-remark').value = '';
-        const tbody = document.getElementById('ob-rows');
-        if (tbody) {
-            tbody.innerHTML = '';
-            for (let i = 0; i < 3; i++) addOutboundRow();
-        }
-    } catch (e) { toast(e.message, 'error'); }
+    if (modal) modal.classList.add('modal-wide');
 }
 
 function openOutboundOrderModal(order) {
@@ -445,9 +477,8 @@ function openOutboundOrderModal(order) {
     if (modal) modal.classList.add('modal-wide');
 }
 
-function printOutboundOrder() {
-    window.print();
-}
+function printInboundOrder() { window.print(); }
+function printOutboundOrder() { window.print(); }
 
 /* ---------- 启动 ---------- */
 window.addEventListener('DOMContentLoaded', async () => {

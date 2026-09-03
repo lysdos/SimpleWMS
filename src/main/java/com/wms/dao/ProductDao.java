@@ -1,6 +1,8 @@
 package com.wms.dao;
 
 import com.wms.model.Product;
+import com.wms.model.ProductSupplier;
+import com.wms.model.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +22,8 @@ import java.util.Optional;
 public class ProductDao {
 
     private final JdbcTemplate jdbc;
+    private final SupplierDao supplierDao;
+
     private static final RowMapper<Product> ROW = (rs, n) -> {
         Product p = new Product();
         p.setId(rs.getInt("id"));
@@ -39,8 +44,24 @@ public class ProductDao {
     };
 
     @Autowired
-    public ProductDao(JdbcTemplate jdbc) {
+    public ProductDao(JdbcTemplate jdbc, SupplierDao supplierDao) {
         this.jdbc = jdbc;
+        this.supplierDao = supplierDao;
+    }
+
+    private void attachSuppliers(Product p) {
+        if (p == null) return;
+        List<ProductSupplier> suppliers = supplierDao.findSuppliersByProduct(p.getId());
+        if (suppliers == null || suppliers.isEmpty()) return;
+        List<Product.SupplierRef> refs = new ArrayList<>();
+        for (ProductSupplier ps : suppliers) {
+            refs.add(new Product.SupplierRef(ps.getSupplierId(), ps.getSupplierName(), ps.getIsDefault()));
+            if (Boolean.TRUE.equals(ps.getIsDefault())) {
+                p.setDefaultSupplierId(ps.getSupplierId());
+                p.setDefaultSupplier(ps.getSupplierName());
+            }
+        }
+        p.setSuppliers(refs);
     }
 
     public List<Product> findAll(String keyword) {
@@ -54,13 +75,17 @@ public class ProductDao {
             args = new Object[]{};
         }
         sql += " ORDER BY id DESC";
-        return jdbc.query(sql, ROW, args);
+        List<Product> list = jdbc.query(sql, ROW, args);
+        for (Product p : list) attachSuppliers(p);
+        return list;
     }
 
     public Optional<Product> findById(int id) {
         try {
-            return Optional.ofNullable(jdbc.queryForObject(
-                    "SELECT * FROM product WHERE id = ?", ROW, id));
+            Product p = jdbc.queryForObject(
+                    "SELECT * FROM product WHERE id = ?", ROW, id);
+            if (p != null) attachSuppliers(p);
+            return Optional.ofNullable(p);
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
@@ -68,8 +93,10 @@ public class ProductDao {
 
     public Optional<Product> findBySku(String sku) {
         try {
-            return Optional.ofNullable(jdbc.queryForObject(
-                    "SELECT * FROM product WHERE sku = ?", ROW, sku));
+            Product p = jdbc.queryForObject(
+                    "SELECT * FROM product WHERE sku = ?", ROW, sku);
+            if (p != null) attachSuppliers(p);
+            return Optional.ofNullable(p);
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }

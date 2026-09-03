@@ -1,12 +1,16 @@
 package com.wms.service;
 
 import com.wms.dao.ProductDao;
+import com.wms.dao.SupplierDao;
 import com.wms.model.Product;
+import com.wms.model.ProductSupplier;
+import com.wms.model.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -14,10 +18,12 @@ import java.util.Optional;
 public class ProductService {
 
     private final ProductDao productDao;
+    private final SupplierDao supplierDao;
 
     @Autowired
-    public ProductService(ProductDao productDao) {
+    public ProductService(ProductDao productDao, SupplierDao supplierDao) {
         this.productDao = productDao;
+        this.supplierDao = supplierDao;
     }
 
     public List<Product> list(String keyword) {
@@ -38,7 +44,11 @@ public class ProductService {
         try {
             int id = productDao.insert(p);
             p.setId(id);
-            return p;
+            // 关联供应商
+            if (p.getSuppliersAsList() != null) {
+                supplierDao.replaceProductSuppliers(id, p.getSuppliersAsList());
+            }
+            return productDao.findById(id).orElseThrow();
         } catch (DuplicateKeyException e) {
             throw new IllegalArgumentException("SKU 已存在: " + p.getSku());
         }
@@ -53,7 +63,6 @@ public class ProductService {
         Product exist = productDao.findById(p.getId())
                 .orElseThrow(() -> new IllegalArgumentException("商品不存在, id=" + p.getId()));
 
-        // SKU 唯一性校验
         if (!exist.getSku().equals(p.getSku())) {
             productDao.findBySku(p.getSku()).ifPresent(other -> {
                 if (!other.getId().equals(p.getId())) {
@@ -62,6 +71,10 @@ public class ProductService {
             });
         }
         productDao.update(p);
+        // 关联供应商(全量替换)
+        if (p.getSuppliersAsList() != null) {
+            supplierDao.replaceProductSuppliers(p.getId(), p.getSuppliersAsList());
+        }
         return productDao.findById(p.getId()).orElseThrow();
     }
 

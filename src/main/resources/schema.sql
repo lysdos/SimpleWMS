@@ -115,3 +115,38 @@ CREATE TABLE IF NOT EXISTS app_user (
     updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_app_user_username ON app_user(username);
+
+-- ============================================================
+-- 供应商主数据
+-- ============================================================
+CREATE TABLE IF NOT EXISTS supplier (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(128) NOT NULL,
+    contact     VARCHAR(64)  DEFAULT NULL,
+    phone       VARCHAR(32)  DEFAULT NULL,
+    email       VARCHAR(128) DEFAULT NULL,
+    address     VARCHAR(255) DEFAULT NULL,
+    remark      VARCHAR(255) DEFAULT NULL,
+    enabled     BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_supplier_name ON supplier(name);
+CREATE INDEX IF NOT EXISTS idx_supplier_enabled ON supplier(enabled);
+
+-- ============================================================
+-- 商品-供应商多对多关联(可选默认)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_supplier (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    product_id   INT          NOT NULL,
+    supplier_id  INT          NOT NULL,
+    is_default   BOOLEAN      NOT NULL DEFAULT FALSE,
+    unit_price   DECIMAL(12,2) DEFAULT NULL,
+    remark       VARCHAR(255) DEFAULT NULL,
+    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_product_supplier UNIQUE (product_id, supplier_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ps_product  ON product_supplier(product_id);
+CREATE INDEX IF NOT EXISTS idx_ps_supplier ON product_supplier(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_ps_default  ON product_supplier(product_id, is_default);

@@ -52,6 +52,9 @@ const Views = {
             : products.map(p => {
                 const lowBadge = p.quantity <= p.lowStock
                     ? `<span class="badge low">低库存</span>` : '';
+                const supp = p.defaultSupplier
+                    ? escapeHtml(p.defaultSupplier)
+                    : '<span style="color:#aab2bd;">未设</span>';
                 return `
                 <tr>
                     <td>${p.id}</td>
@@ -59,7 +62,7 @@ const Views = {
                     <td>${escapeHtml(p.name)} ${lowBadge}</td>
                     <td>${escapeHtml(p.category || '')}</td>
                     <td>${escapeHtml(p.unit || '')}</td>
-                    <td>${escapeHtml(p.location || '')}</td>
+                    <td>${supp}</td>
                     <td class="num">${p.quantity}</td>
                     <td class="num">¥${formatMoney(p.unitPrice)}</td>
                     <td class="num">¥${formatMoney((p.unitPrice||0)*p.quantity)}</td>
@@ -73,7 +76,7 @@ const Views = {
         <div class="page-head">
             <div>
                 <h2>商品管理</h2>
-                <div class="desc">维护商品基础信息(SKU、名称、分类、单位、库位、数量、单价)</div>
+                <div class="desc">维护商品基础信息(SKU、名称、分类、单位、默认供应商、库位、数量、单价)</div>
             </div>
             <div class="right">
                 <button class="btn btn-primary" onclick="newProduct()">+ 新增商品</button>
@@ -93,7 +96,7 @@ const Views = {
                         <th>名称</th>
                         <th>分类</th>
                         <th>单位</th>
-                        <th>库位</th>
+                        <th>默认供应商</th>
                         <th class="num">数量</th>
                         <th class="num">单价</th>
                         <th class="num">库存金额</th>
@@ -105,154 +108,148 @@ const Views = {
         </div>`;
     },
 
-    /* ================== 3. 入库登记(多货,行级供应商) ================== */
-    inbound(products) {
-        const opts = products.map(p =>
-            `<option value="${p.id}" data-stock="${p.quantity}" data-unit="${escapeHtml(p.unit||'')}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (现库存 ${p.quantity}${escapeHtml(p.unit||'')})</option>`
-        ).join('');
-        const blankRow = () => `
-            <tr class="ib-row">
-                <td class="num row-idx">1</td>
-                <td>
-                    <select class="select ib-product" style="width:100%;">${opts || '<option value="">暂无商品</option>'}</select>
-                </td>
-                <td><input type="number" min="1" class="input ib-qty" placeholder="数量"></td>
-                <td><input class="input ib-supplier" placeholder="供应商(可选)"></td>
-                <td><input class="input ib-row-remark" placeholder="行备注(可选)"></td>
-                <td class="actions"><button class="btn-link danger" onclick="removeInboundRow(this)">删除</button></td>
-            </tr>`;
+    /* ================== 3. 入库登记(列表 + 新增按钮) ================== */
+    inbound(products, recentOrders) {
+        recentOrders = recentOrders || [];
+        const recentRows = recentOrders.length === 0
+            ? `<tr><td colspan="5" class="empty">暂无入库单,点上方「新增入库单」开始</td></tr>`
+            : recentOrders.map(o => `
+                <tr>
+                    <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                    <td>${escapeHtml(o.externalNo || '-')}</td>
+                    <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
+                    <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                    <td class="actions">
+                        <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
+                    </td>
+                </tr>`).join('');
         return `
         <div class="page-head">
             <div>
                 <h2>入库登记</h2>
-                <div class="desc">一次开一张入库单 → 多个商品可来自不同供应商 → 确认入库 → 弹出入库单(可打印/导出 CSV)</div>
+                <div class="desc">点「新增入库单」开一张单 → 选商品(自动预填默认供应商)→ 确认入库</div>
             </div>
             <div class="right">
-                <button class="btn btn-sm" onclick="addInboundRow()">+ 添加一行</button>
+                <button class="btn btn-primary" onclick="openNewOrderModal('IN')">+ 新增入库单</button>
             </div>
         </div>
         <div class="card">
-            <div class="form-row">
-                <div class="form-field" style="flex:1;">
-                    <label>外部单号</label>
-                    <input id="ib-external-no" class="input" placeholder="采购单号 / 快递单号(可选)">
-                </div>
-                <div class="form-field" style="flex:2;">
-                    <label>整单备注</label>
-                    <input id="ib-remark" class="input" placeholder="例如:2026-09 集中到货">
-                </div>
-            </div>
-        </div>
-        <div class="card" style="margin-top:16px;">
-            <div class="card-title">入库明细(同商品+同供应商会自动合并)</div>
+            <div class="card-title">最近入库单(最近 10 条)</div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
-                        <th style="width:50px;">#</th>
-                        <th>商品<span class="req">*</span></th>
-                        <th style="width:120px;">数量<span class="req">*</span></th>
-                        <th style="width:180px;">供应商</th>
-                        <th>行备注</th>
-                        <th style="width:80px;">操作</th>
+                        <th>单号</th>
+                        <th>外部单号</th>
+                        <th class="num">明细 / 数量</th>
+                        <th>操作员 · 时间</th>
+                        <th style="width:100px;">操作</th>
                     </tr></thead>
-                    <tbody id="ib-rows">${blankRow() + blankRow() + blankRow()}</tbody>
+                    <tbody>${recentRows}</tbody>
                 </table>
-            </div>
-            <div style="margin-top:12px;text-align:right;">
-                <button class="btn btn-sm" onclick="addInboundRow()">+ 添加一行</button>
-                <button class="btn btn-success" onclick="submitInbound()" style="margin-left:8px;">确认入库</button>
             </div>
         </div>`;
     },
 
-    /* ================== 4. 出库登记(多货) ================== */
-    outbound(products) {
-        const opts = products.map(p => {
-            const low = p.quantity <= p.lowStock ? ' [低库存]' : '';
-            return `<option value="${p.id}" data-stock="${p.quantity}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (库存 ${p.quantity}${escapeHtml(p.unit||'')})${low}</option>`;
-        }).join('');
-        const blankRow = () => `
-            <tr class="ob-row">
-                <td class="num row-idx">1</td>
-                <td>
-                    <select class="select ob-product" style="width:100%;">${opts || '<option value="">暂无商品</option>'}</select>
-                </td>
-                <td><input type="number" min="1" class="input ob-qty" placeholder="数量"></td>
-                <td><input class="input ob-row-remark" placeholder="行备注(可选)"></td>
-                <td class="actions"><button class="btn-link danger" onclick="removeOutboundRow(this)">删除</button></td>
-            </tr>`;
+    /* ================== 4. 出库登记(列表 + 新增按钮) ================== */
+    outbound(products, recentOrders) {
+        recentOrders = recentOrders || [];
+        const recentRows = recentOrders.length === 0
+            ? `<tr><td colspan="5" class="empty">暂无出库单,点上方「新增出库单」开始</td></tr>`
+            : recentOrders.map(o => `
+                <tr>
+                    <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                    <td>${escapeHtml(o.customer || '-')}</td>
+                    <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
+                    <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                    <td class="actions">
+                        <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
+                    </td>
+                </tr>`).join('');
         return `
         <div class="page-head">
             <div>
                 <h2>出库登记</h2>
-                <div class="desc">一次性添加多个商品 → 库存预校验 → 确认出库 → 弹出出库单(可打印/导出 CSV)</div>
+                <div class="desc">点「新增出库单」开一张单 → 选商品(库存预校验)→ 确认出库</div>
             </div>
             <div class="right">
-                <button class="btn btn-sm" onclick="addOutboundRow()">+ 添加一行</button>
+                <button class="btn btn-primary" onclick="openNewOrderModal('OUT')">+ 新增出库单</button>
             </div>
         </div>
         <div class="card">
-            <div class="form-row">
-                <div class="form-field" style="flex:1;">
-                    <label>领用方 / 客户</label>
-                    <input id="ob-customer" class="input" placeholder="例如:行政部 / XX 销售单">
-                </div>
-                <div class="form-field" style="flex:1;">
-                    <label>外部单号</label>
-                    <input id="ob-external-no" class="input" placeholder="销售单号 / 领用单号(可选)">
-                </div>
-                <div class="form-field" style="flex:2;">
-                    <label>整单备注</label>
-                    <input id="ob-remark" class="input" placeholder="例如:9月各部门领用汇总">
-                </div>
-            </div>
-        </div>
-        <div class="card" style="margin-top:16px;">
-            <div class="card-title">出库明细(同商品会自动合并数量,库存不足会整体拒绝)</div>
+            <div class="card-title">最近出库单(最近 10 条)</div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
-                        <th style="width:50px;">#</th>
-                        <th>商品<span class="req">*</span></th>
-                        <th style="width:140px;">数量<span class="req">*</span></th>
-                        <th>行备注</th>
-                        <th style="width:80px;">操作</th>
+                        <th>单号</th>
+                        <th>领用方</th>
+                        <th class="num">明细 / 数量</th>
+                        <th>操作员 · 时间</th>
+                        <th style="width:100px;">操作</th>
                     </tr></thead>
-                    <tbody id="ob-rows">${blankRow() + blankRow() + blankRow()}</tbody>
-                </table>
-            </div>
-            <div style="margin-top:12px;text-align:right;">
-                <button class="btn btn-sm" onclick="addOutboundRow()">+ 添加一行</button>
-                <button class="btn btn-warn" onclick="submitOutbound()" style="margin-left:8px;">确认出库</button>
-            </div>
-        </div>
-        <div class="card" style="margin-top:16px;">
-            <div class="card-title">当前库存 (低于预警值的已标红)</div>
-            <div class="table-wrap">
-                <table class="table">
-                    <thead><tr>
-                        <th>SKU</th><th>名称</th><th>分类</th>
-                        <th class="num">库存</th><th class="num">预警</th>
-                        <th class="num">库存金额</th>
-                    </tr></thead>
-                    <tbody>
-                    ${products.length === 0
-                        ? `<tr><td colspan="6" class="empty">暂无商品</td></tr>`
-                        : products.map(p => {
-                            const cls = p.quantity <= p.lowStock ? 'style="color:#e74c3c;font-weight:600;"' : '';
-                            return `<tr>
-                                <td><strong>${escapeHtml(p.sku)}</strong></td>
-                                <td>${escapeHtml(p.name)}</td>
-                                <td>${escapeHtml(p.category || '')}</td>
-                                <td class="num" ${cls}>${p.quantity} ${escapeHtml(p.unit||'')}</td>
-                                <td class="num">${p.lowStock}</td>
-                                <td class="num">¥${formatMoney((p.unitPrice||0)*p.quantity)}</td>
-                            </tr>`;
-                        }).join('')}
-                    </tbody>
+                    <tbody>${recentRows}</tbody>
                 </table>
             </div>
         </div>`;
+    },
+
+    /* ================== 新增入库/出库单 弹窗 ================== */
+    newOrderModal(type, products) {
+        products = products || [];
+        const opts = products.map(p => {
+            const low = p.quantity <= p.lowStock ? ' [低库存]' : '';
+            const dflt = p.defaultSupplier ? ` (默认:${escapeHtml(p.defaultSupplier)})` : '';
+            return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (现库存 ${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
+        }).join('');
+        const blankRow = () => `
+            <tr class="nw-row">
+                <td class="num row-idx">1</td>
+                <td>
+                    <select class="select nw-product" style="width:100%;">${opts || '<option value="">暂无商品</option>'}</select>
+                </td>
+                <td><input type="number" min="1" class="input nw-qty" placeholder="数量"></td>
+                <td><input class="input nw-supplier" placeholder="供应商(预填默认,可改)"></td>
+                <td><input class="input nw-row-remark" placeholder="行备注(可选)"></td>
+                <td class="actions"><button class="btn-link danger" onclick="removeNewOrderRow(this)">删除</button></td>
+            </tr>`;
+        const isIn = type === 'IN';
+        const headFields = isIn ? `
+            <div class="form-field" style="flex:1;">
+                <label>外部单号</label>
+                <input id="nw-external-no" class="input" placeholder="采购单号 / 快递单号(可选)">
+            </div>
+        ` : `
+            <div class="form-field" style="flex:1;">
+                <label>领用方 / 客户</label>
+                <input id="nw-customer" class="input" placeholder="例如:行政部 / XX 销售单">
+            </div>
+            <div class="form-field" style="flex:1;">
+                <label>外部单号</label>
+                <input id="nw-external-no" class="input" placeholder="销售单号 / 领用单号(可选)">
+            </div>
+        `;
+        return `
+        <div class="form-row">
+            ${headFields}
+            <div class="form-field" style="flex:2;">
+                <label>整单备注</label>
+                <input id="nw-remark" class="input" placeholder="可选">
+            </div>
+        </div>
+        <div class="card-title" style="margin-top:8px;">${isIn ? '入库明细' : '出库明细'}(同 ${isIn ? '商品+供应商' : '商品'}会自动合并)</div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr>
+                    <th style="width:50px;">#</th>
+                    <th>商品<span class="req">*</span></th>
+                    <th style="width:120px;">数量<span class="req">*</span></th>
+                    <th style="width:200px;">${isIn ? '供应商' : '备注'}</th>
+                    <th>行备注</th>
+                    <th style="width:80px;">操作</th>
+                </tr></thead>
+                <tbody id="nw-rows">${blankRow() + blankRow() + blankRow()}</tbody>
+            </table>
+        </div>
+        <input type="hidden" id="nw-type" value="${type}">`;
     },
 
     /* ================== 出库单详情 Modal(可打印/导出) ================== */
@@ -516,8 +513,20 @@ const Views = {
     }
 
     /* ================== 商品表单 Modal 内容 ================== */
-    productForm(p) {
+    productForm(p, suppliers) {
         p = p || {};
+        suppliers = suppliers || [];
+        const selected = (p.suppliers || []).map(s => s.id);
+        const defaultId = (p.suppliers || []).find(s => s.isDefault)?.id
+                       || p.defaultSupplierId
+                       || (selected[0] || '');
+        const supplierOptions = suppliers.map(s =>
+            `<option value="${s.id}">${escapeHtml(s.name)}</option>`
+        ).join('');
+        const defaultOptions = suppliers.map(s =>
+            `<option value="${s.id}" ${s.id===defaultId?'selected':''}>${escapeHtml(s.name)}</option>`
+        ).join('');
+
         return `
         <div class="form-row">
             <div class="form-field">
@@ -558,11 +567,124 @@ const Views = {
             </div>
         </div>
         <div class="form-row">
+            <div class="form-field" style="flex:2;">
+                <label>供应商(可多选)</label>
+                <select id="pf-suppliers" class="select" multiple size="4" style="min-height:80px;">
+                    ${supplierOptions || '<option value="" disabled>暂无可选供应商,请先到「供应商」菜单添加</option>'}
+                </select>
+            </div>
+            <div class="form-field">
+                <label>默认供应商</label>
+                <select id="pf-default-supplier" class="select">
+                    <option value="">—</option>
+                    ${defaultOptions}
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
             <div class="form-field" style="flex:1;">
                 <label>备注</label>
                 <input id="pf-remark" class="input" value="${escapeHtml(p.remark||'')}" placeholder="可选">
             </div>
         </div>
-        <input type="hidden" id="pf-id" value="${p.id || ''}">`;
+        <input type="hidden" id="pf-id" value="${p.id || ''}">
+        <input type="hidden" id="pf-selected-suppliers" value="${escapeHtml(JSON.stringify(selected))}">
+        <input type="hidden" id="pf-default-supplier-id" value="${defaultId}">`;
+    },
+
+    /* ================== 供应商管理列表 ================== */
+    suppliers(suppliers) {
+        const rows = suppliers.length === 0
+            ? `<tr><td colspan="6" class="empty">暂无供应商,点击右上角「新增」开始</td></tr>`
+            : suppliers.map(s => `
+                <tr>
+                    <td>${s.id}</td>
+                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${escapeHtml(s.contact || '')}</td>
+                    <td>${escapeHtml(s.phone || '')}</td>
+                    <td>${escapeHtml(s.email || '')}</td>
+                    <td>${s.enabled === false ? '<span class="badge low">已停用</span>' : '<span class="badge ok">启用</span>'}</td>
+                    <td class="actions">
+                        <button class="btn-link" onclick="editSupplier(${s.id})">编辑</button>
+                        <button class="btn-link danger" onclick="delSupplier(${s.id}, '${escapeHtml(s.name)}')">删除</button>
+                    </td>
+                </tr>`).join('');
+        return `
+        <div class="page-head">
+            <div>
+                <h2>供应商管理</h2>
+                <div class="desc">维护供应商主数据,商品管理中可绑定多个供应商并指定默认</div>
+            </div>
+            <div class="right">
+                <button class="btn btn-primary" onclick="newSupplier()">+ 新增供应商</button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="toolbar">
+                <input id="sup-kw" class="input input-sm" placeholder="搜索 名称 / 联系人 / 电话" style="width:280px;">
+                <button class="btn btn-sm" onclick="searchSuppliers()">搜索</button>
+                <button class="btn btn-sm" onclick="document.getElementById('sup-kw').value='';searchSuppliers()">清空</button>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr>
+                        <th style="width:60px;">ID</th>
+                        <th>名称</th>
+                        <th>联系人</th>
+                        <th>电话</th>
+                        <th>邮箱</th>
+                        <th style="width:90px;">状态</th>
+                        <th style="width:140px;">操作</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+    },
+
+    supplierForm(s) {
+        s = s || {};
+        return `
+        <div class="form-row">
+            <div class="form-field" style="flex:2;">
+                <label>名称<span class="req">*</span></label>
+                <input id="sf-name" class="input" value="${escapeHtml(s.name||'')}" placeholder="供应商名称">
+            </div>
+            <div class="form-field">
+                <label>联系人</label>
+                <input id="sf-contact" class="input" value="${escapeHtml(s.contact||'')}" placeholder="王经理">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label>电话</label>
+                <input id="sf-phone" class="input" value="${escapeHtml(s.phone||'')}" placeholder="021-xxxxxxxx">
+            </div>
+            <div class="form-field">
+                <label>邮箱</label>
+                <input id="sf-email" class="input" value="${escapeHtml(s.email||'')}" placeholder="sales@example.com">
+            </div>
+            <div class="form-field">
+                <label>状态</label>
+                <select id="sf-enabled" class="select">
+                    <option value="true"  ${s.enabled===false?'':'selected'}>启用</option>
+                    <option value="false" ${s.enabled===false?'selected':''}>停用</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field" style="flex:1;">
+                <label>地址</label>
+                <input id="sf-address" class="input" value="${escapeHtml(s.address||'')}" placeholder="可选">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field" style="flex:1;">
+                <label>备注</label>
+                <input id="sf-remark" class="input" value="${escapeHtml(s.remark||'')}" placeholder="可选">
+            </div>
+        </div>
+        <input type="hidden" id="sf-id" value="${s.id || ''}">`;
+    }
     }
 };
