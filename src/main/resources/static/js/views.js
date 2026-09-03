@@ -510,7 +510,7 @@ const Views = {
             <button class="btn btn-sm" onclick="printInboundOrder()">🖨 打印</button>
             <a class="btn btn-sm" href="/api/inbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ 导出 CSV</a>
         </div>`;
-    }
+    },
 
     /* ================== 商品表单 Modal 内容 ================== */
     productForm(p, suppliers) {
@@ -685,6 +685,5 @@ const Views = {
             </div>
         </div>
         <input type="hidden" id="sf-id" value="${s.id || ''}">`;
-    }
     }
 };
