@@ -1,51 +1,52 @@
 package com.wms.pda.scan;
 
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.util.Log;
 
+import com.rscja.barcode.BarcodeDecoder;
+import com.rscja.barcode.BarcodeFactory;
+
 /**
- * 光学条码实现 - 监听厂家扫码广播。
- * 厂家广播 action 通常为 "com.example.uhf.action.BARCODE"(参考 uhf-uart-demo)。
+ * 光学条码实现 - 走东集 iData 真实 SDK(BarcodeFactory / BarcodeDecoder)。
+ * decoder.open() 打开摄像头扫码模组;按扫描键或 startScan() 后由 DecodeCallback 回调结果。
  */
 public class BarcodeScannerImpl implements ScannerService {
 
     private static final String TAG = "BarcodeScannerImpl";
-    private static final String ACTION_BARCODE = "com.example.uhf.action.BARCODE";
-    private static final String EXTRA_BARCODE = "BARCODE";
-
-    private Context appCtx;
+    private BarcodeDecoder decoder;
     private ScannerCallback cb;
-    private BroadcastReceiver receiver;
+    private Context appCtx;
     private boolean ready;
 
     @Override
     public void init(Context ctx) {
         appCtx = ctx.getApplicationContext();
-        receiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context c, Intent intent) {
-                if (intent == null) return;
-                String code = intent.getStringExtra(EXTRA_BARCODE);
-                if (code != null && !code.isEmpty() && cb != null) {
-                    cb.onScanResult(new ScanResult(
-                        code, ScanType.BARCODE, null, System.currentTimeMillis()));
-                }
+        try {
+            decoder = BarcodeFactory.getInstance().getBarcodeDecoder();
+            if (decoder == null || !decoder.open(appCtx)) {
+                throw new IllegalStateException("扫码模块打开失败");
             }
-        };
-        IntentFilter filter = new IntentFilter(ACTION_BARCODE);
-        appCtx.registerReceiver(receiver, filter);
-        ready = true;
-        Log.i(TAG, "Barcode listener registered");
+            decoder.setDecodeCallback(result -> {
+                String data = (result == null) ? null : result.getBarcodeData();
+                if (data != null && !data.isEmpty() && cb != null) {
+                    cb.onScanResult(new ScanResult(data, ScanType.BARCODE, null,
+                        System.currentTimeMillis()));
+                }
+            });
+            ready = true;
+            Log.i(TAG, "Barcode decoder opened");
+        } catch (Throwable e) {
+            ready = false;
+            Log.e(TAG, "Barcode init failed", e);
+        }
     }
 
     @Override
     public void release() {
-        if (receiver != null) {
-            try { appCtx.unregisterReceiver(receiver); } catch (Exception e) { Log.w(TAG, e); }
-            receiver = null;
+        if (decoder != null) {
+            try { decoder.stopScan(); } catch (Exception ignored) {}
+            try { decoder.close(); } catch (Exception ignored) {}
+            decoder = null;
         }
         ready = false;
     }
@@ -53,22 +54,25 @@ public class BarcodeScannerImpl implements ScannerService {
     @Override
     public void startScan(ScanType type) {
         if (type != ScanType.BARCODE) return;
-        if (!ready) {
+        if (!ready || decoder == null) {
             if (cb != null) cb.onError(-100, "扫码设备未就绪");
             return;
         }
-        // 光学扫码是「按扫描键」触发,无需主动 startScan
-        // 这里仅做超时提示
-        new Thread(() -> {
-            try { Thread.sleep(5_000); }
-            catch (InterruptedException ignored) {}
-            if (cb != null) cb.onTimeout();
-        }, "BarcodeTimeout").start();
+        boolean ok;
+        try {
+            ok = decoder.startScan();
+        } catch (Exception e) {
+            ok = false;
+        }
+        if (!ok) {
+            if (cb != null) cb.onError(-1, "启动扫码失败");
+        }
+        // 光学扫码是硬件按键/startScan 触发,回调里出结果;无后台超时线程
     }
 
-    @Override
-    public void stopScan() { /* 光学扫码无后台线程 */ }
-
+    @Override public void stopScan() {
+        if (decoder != null) { try { decoder.stopScan(); } catch (Exception ignored) {} }
+    }
     @Override public boolean isReady() { return ready; }
     @Override public void setCallback(ScannerCallback cb) { this.cb = cb; }
 }

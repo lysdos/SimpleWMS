@@ -3,22 +3,17 @@ package com.wms.pda.scan;
 import android.content.Context;
 import android.util.Log;
 
-import com.example.uhf.UhfInfo;
-import com.example.uhf.Reader;
-
-import java.util.HashMap;
-import java.util.List;
+import com.rscja.deviceapi.RFIDWithUHFUART;
+import com.rscja.deviceapi.entity.UHFTAGInfo;
 
 /**
- * UHF RFID 实现 - 走厂商 SDK。
- * 厂商 SDK 参考 uhf-uart-demo/ (com.example.uhf.UhfInfo + Reader)。
- * 若厂商 SDK 类不存在(普通 Android 设备),init() 抛异常,UI 层降级。
+ * UHF RFID 实现 - 走东集 iData 真实 SDK(DeviceAPI,包 com.rscja.*)。
+ * 单例 RFIDWithUHFUART:init() 打开串口模组,inventorySingleTag() 单步读卡。
  */
 public class UhfScannerImpl implements ScannerService {
 
     private static final String TAG = "UhfScannerImpl";
-    private UhfInfo uhfInfo;
-    private Reader mReader;
+    private RFIDWithUHFUART reader;   // 真实 SDK 单例
     private ScannerCallback cb;
     private boolean ready;
     private volatile boolean scanning;
@@ -26,10 +21,10 @@ public class UhfScannerImpl implements ScannerService {
 
     @Override
     public void init(Context ctx) throws Exception {
-        uhfInfo = new UhfInfo();
-        mReader = uhfInfo.getReader();
-        if (mReader == null) {
-            throw new IllegalStateException("UHF 模组初始化失败:Reader 为 null");
+        reader = RFIDWithUHFUART.getInstance();   // 可能抛 ConfigurationException
+        if (reader == null || !reader.init()) {
+            ready = false;
+            throw new IllegalStateException("UHF 模组初始化失败(无 RFID 硬件或 init 返回 false)");
         }
         ready = true;
         Log.i(TAG, "UHF initialized");
@@ -38,9 +33,9 @@ public class UhfScannerImpl implements ScannerService {
     @Override
     public void release() {
         stopScan();
-        if (mReader != null) {
-            try { mReader.free(); } catch (Exception e) { Log.w(TAG, "free failed", e); }
-            mReader = null;
+        if (reader != null) {
+            try { reader.free(); } catch (Exception e) { Log.w(TAG, "free failed", e); }
+            reader = null;
         }
         ready = false;
     }
@@ -48,7 +43,7 @@ public class UhfScannerImpl implements ScannerService {
     @Override
     public void startScan(ScanType type) {
         if (type != ScanType.RFID_EPC) return;
-        if (!ready || mReader == null) {
+        if (!ready || reader == null) {
             if (cb != null) cb.onError(-100, "UHF 未就绪");
             return;
         }
@@ -57,22 +52,20 @@ public class UhfScannerImpl implements ScannerService {
         scanThread = new Thread(() -> {
             long deadline = System.currentTimeMillis() + 5_000;
             try {
+                // 单步盘点轮询:读到 1 个有效 EPC 即返回;5 秒超时 onTimeout
                 while (scanning && System.currentTimeMillis() < deadline) {
-                    List<HashMap<String, String>> tags = mReader.inventoryRealTime();
-                    if (tags != null) {
-                        for (HashMap<String, String> tag : tags) {
-                            String epc = tag.get("EPC");
-                            if (epc == null || epc.isEmpty()) continue;
-                            String rssi = tag.get("RSSI");
-                            if (cb != null) {
-                                cb.onScanResult(new ScanResult(
-                                    epc, ScanType.RFID_EPC, rssi, System.currentTimeMillis()));
-                            }
+                    UHFTAGInfo tag = reader.inventorySingleTag();
+                    if (tag != null) {
+                        String epc = tag.getEPC();
+                        if (epc != null && !epc.isEmpty()) {
+                            String rssi = tag.getRssi();
+                            if (cb != null) cb.onScanResult(new ScanResult(
+                                epc, ScanType.RFID_EPC, rssi, System.currentTimeMillis()));
                             stopScan();
                             return;
                         }
                     }
-                    Thread.sleep(150);
+                    Thread.sleep(100);
                 }
                 if (scanning && cb != null) cb.onTimeout();
             } catch (Exception e) {
@@ -90,6 +83,8 @@ public class UhfScannerImpl implements ScannerService {
             scanThread.interrupt();
             scanThread = null;
         }
+        // 保险:停止连续盘点(如残留)
+        try { if (reader != null) reader.stopInventory(); } catch (Exception ignored) {}
     }
 
     @Override public boolean isReady() { return ready; }
