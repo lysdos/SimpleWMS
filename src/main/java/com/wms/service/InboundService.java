@@ -365,6 +365,15 @@ public class InboundService {
         it.setLocation(blankToNull(p.getLocation()));
         it.setRowRemark(b.rowRemark);
         orderDao.insertItem(it);
+        // 回填 inventory_item.inbound_item_id(每件实物→它所属的明细行)
+        // 这样 getOrderWithCodes 可按 inbound_item_id 精确分配码,不再"按 quantity 均分"
+        if (it.getId() != null && generated != null) {
+            for (InventoryItem ii : generated) {
+                if (ii != null && ii.getId() != null) {
+                    itemDao.updateInboundItemId(ii.getId(), it.getId());
+                }
+            }
+        }
         // 填 codes 列表(供 commit 后展示)
         List<String> codes = new ArrayList<>();
         for (InventoryItem ii : generated) codes.add(ii.getCode());
@@ -394,19 +403,15 @@ public class InboundService {
         InboundOrder o = orderDao.findOrderById(orderId);
         if (o == null) return null;
         List<InboundOrderItem> items = orderDao.findItemsByOrderId(orderId);
-        List<InventoryItem> invItems = itemDao.findByInboundOrder(orderId);
-        // 简易分配:每个 itemEntity 按 quantity 顺序从 allCodes 取码(只读 commit 展示场景够用)
-        List<String> allCodes = new ArrayList<>();
-        for (InventoryItem ii : invItems) allCodes.add(ii.getCode());
+        // 按 inbound_item_id 精确查每行对应码(依赖 processItemBatch → persistOrderItem
+        // 已回填 inventory_item.inbound_item_id)。跨 SKU 多次 addItem 也能一一对应。
         if (items != null) {
-            int cursor = 0;
             for (InboundOrderItem it : items) {
-                int q = it.getQuantity() == null ? 0 : it.getQuantity();
-                List<String> sub = new ArrayList<>();
-                for (int i = 0; i < q && cursor < allCodes.size(); i++) {
-                    sub.add(allCodes.get(cursor++));
-                }
-                it.setCodes(sub);
+                if (it.getId() == null) { it.setCodes(new ArrayList<>()); continue; }
+                List<InventoryItem> rowUnits = itemDao.findByInboundItem(it.getId());
+                List<String> codes = new ArrayList<>();
+                for (InventoryItem ii : rowUnits) codes.add(ii.getCode());
+                it.setCodes(codes);
             }
         }
         o.setItems(items);
