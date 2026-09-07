@@ -8,4 +8,11 @@
     <string name="outbound">出库扫码</string>
     <string name="stock_check">库存盘点</string>
     <string name="lookup">扫码查询</string>
+    <string name="login_btn">登录</string>
+    <string name="logout">退出</string>
+    <string name="rfid_ready">📶 RFID 就绪</string>
+    <string name="rfid_offline">⚠ RFID 未就绪</string>
+    <string name="login_failed">登录失败</string>
+    <string name="username_required">请输入用户名</string>
+    <string name="password_required">请输入密码</string>
 </resources>
