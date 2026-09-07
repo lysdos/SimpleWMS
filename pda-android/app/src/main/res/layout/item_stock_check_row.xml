@@ -26,10 +26,11 @@
         android:layout_height="wrap_content"
         android:text="系统 0" />
 
-    <com.google.android.material.textfield.TextInputEditText
-        android:id="@+id/etCounted"
-        android:layout_width="60dp"
+    <TextView
+        android:id="@+id/tvCounted"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:inputType="number"
-        android:textSize="13sp" />
+        android:layout_marginStart="8dp"
+        android:text="实盘 0"
+        android:textStyle="bold" />
 </LinearLayout>

@@ -1,6 +1,9 @@
 package com.wms.pda.ui.outbound;
 
+import android.app.AlertDialog;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -8,8 +11,9 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AlertDialog;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.view.PreviewView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -20,6 +24,10 @@ import com.wms.pda.model.ApiResponse;
 import com.wms.pda.model.OutboundOrderDto;
 import com.wms.pda.net.ApiClient;
 import com.wms.pda.net.ApiException;
+import com.wms.pda.scan.ScanManager;
+import com.wms.pda.scan.ScanResult;
+import com.wms.pda.scan.ScanType;
+import com.wms.pda.scan.ScannerCallback;
 import com.wms.pda.util.BeepUtil;
 
 import java.util.ArrayList;
@@ -28,57 +36,188 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 出库扫码:
+ * 出库扫码(P6 重写):
  * 1. 进入页 → 弹"选择/创建出库单"对话框(选 DRAFT 单或新建空草稿)
- * 2. 选/建后进入扫码页:扫到的码调 /api/outbound/orders/{id}/scan 加入单
- * 3. 提交时调 /api/outbound/orders/{id}/commit
- * 4. 顶栏显示单号 + 状态徽章
+ * 2. 选/建后进入扫码页:全屏摄像头预览 + 顶单号栏 + 底"已扫 X 件"列表
+ * 3. ML Kit 抓到 1 个码 → 调 /api/outbound/orders/{id}/scan 加入单
+ * 4. 列表从后端响应 items 重建
+ * 5. 提交时调 /api/outbound/orders/{id}/commit
+ * 6. 取消时调 /api/outbound/orders/{id}/cancel
+ *
+ * 摄像头由 ScanManager.attachBarcodeCamera 在 onResume 绑定,
+ * ScanManager.detachBarcodeCamera 在 onPause 释放。
  */
-public class OutboundScanActivity extends AppCompatActivity {
+public class OutboundScanActivity extends AppCompatActivity implements ScannerCallback {
 
-    private TextView tvOrderLabel, tvStatus;
-    private TextInputEditText etCode;
-    private Button btnSubmit, btnCancel;
-    private TextView tvCount;
-    private RecyclerView rv;
-    private ScanAdapter adapter;
-    private final java.util.Map<Integer, ScanRow> rows = new java.util.LinkedHashMap<>();
+    private static final long RESUME_RESCAN_DELAY_MS = 600L;
 
     private ApiClient api;
-    private Integer orderId;          // 当前选中的草稿单 id(null 表示尚未选)
-    private String orderNo;           // 当前单号(显示用)
-    private String orderStatus;       // DRAFT / COMMITTED
+    private SessionStore session;
+    private ScanManager scanManager;
+
+    /** 当前 DRAFT 订单 ID(从选/建单得到)。 */
+    private Integer orderId;
+    /** 当前订单详情(每次扫到后刷新)。 */
+    private OutboundOrderDto currentOrder;
+
+    // ====== 扫码页视图 ======
+    private TextView tvOrderNo, tvStatus, tvCount;
+    private Button btnSubmit, btnCancel;
+    private RecyclerView rvItems;
+    private PreviewView previewView;
+    private ScanAdapter scanAdapter;
+
+    /** 已扫的明细列表(从后端响应 items 重建,key = productId)。 */
+    private final Map<Integer, ScanRow> rows = new HashMap<>();
+    private final List<ScanRow> rowList = new ArrayList<>();
+
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    /** 用于 onResume 后延迟重启扫描(等摄像头 ready)。 */
+    private final Runnable resumeRescanRunnable = this::startScanning;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_outbound_scan);
-
-        api = new ApiClient(new SessionStore(this));
+        session = new SessionStore(this);
+        api = new ApiClient(session);
+        scanManager = ScanManager.get(this);
         BeepUtil.init(this);
 
-        tvOrderLabel = findViewById(R.id.tvOrderLabel);
-        tvStatus = findViewById(R.id.tvStatus);
-        etCode = findViewById(R.id.etCode);
-        btnSubmit = findViewById(R.id.btnSubmit);
-        btnCancel = findViewById(R.id.btnCancel);
-        tvCount = findViewById(R.id.tvCount);
-        rv = findViewById(R.id.rvItems);
-        rv.setLayoutManager(new LinearLayoutManager(this));
-        adapter = new ScanAdapter();
-        rv.setAdapter(adapter);
-
-        findViewById(R.id.btnScan).setOnClickListener(v -> doScan());
-        etCode.setOnEditorActionListener((v, id, e) -> { doScan(); return true; });
-        btnSubmit.setOnClickListener(v -> doCommit());
-        btnCancel.setOnClickListener(v -> doCancelOrder());
-
-        updateHeader();
-        // 进入页:弹选/建单对话框
+        showScanPage();
         showOrderPicker();
     }
 
-    /** 弹"选/建单"对话框。选完 / 建完 setContentView 已是扫码页(本方法 onCreate 已设),只需更新状态 */
+    // ============================================================
+    // 生命周期 — 摄像头绑定/释放
+    // ============================================================
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (previewView != null) {
+            scanManager.attachBarcodeCamera(this, previewView);
+            mainHandler.postDelayed(resumeRescanRunnable, RESUME_RESCAN_DELAY_MS);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mainHandler.removeCallbacks(resumeRescanRunnable);
+        scanManager.stopScan();
+        scanManager.detachBarcodeCamera();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        scanManager.stopScan();
+        scanManager.detachBarcodeCamera();
+    }
+
+    private void startScanning() {
+        scanManager.startScan(ScanType.BARCODE, this);
+    }
+
+    // ============================================================
+    // 扫码页初始化
+    // ============================================================
+
+    private void showScanPage() {
+        setContentView(R.layout.activity_outbound_scan);
+        tvOrderNo = findViewById(R.id.tvOrderNo);
+        tvStatus = findViewById(R.id.tvStatus);
+        tvCount = findViewById(R.id.tvCount);
+        btnSubmit = findViewById(R.id.btnSubmit);
+        btnCancel = findViewById(R.id.btnCancel);
+        rvItems = findViewById(R.id.rvItems);
+        previewView = findViewById(R.id.previewView);
+        rvItems.setLayoutManager(new LinearLayoutManager(this));
+        scanAdapter = new ScanAdapter();
+        rvItems.setAdapter(scanAdapter);
+
+        btnSubmit.setOnClickListener(v -> doCommit());
+        btnCancel.setOnClickListener(v -> doCancelOrder());
+
+        boolean hasOrder = orderId != null && currentOrder != null;
+        btnSubmit.setEnabled(hasOrder && isDraft(currentOrder) && !rows.isEmpty());
+        btnCancel.setEnabled(hasOrder && isDraft(currentOrder));
+        renderOrderHeader();
+        refreshLines();
+    }
+
+    // ============================================================
+    // ScannerCallback
+    // ============================================================
+
+    @Override
+    public void onScanResult(@NonNull ScanResult result) {
+        if (result.getType() != ScanType.BARCODE) return;
+        String code = result.getCode();
+        if (code == null || code.isEmpty()) return;
+        if (orderId == null) {
+            mainHandler.post(() -> Toast.makeText(this, "请先选/建出库单", Toast.LENGTH_SHORT).show());
+            resumeScanning();
+            return;
+        }
+        handleScannedCode(code);
+    }
+
+    @Override
+    public void onError(int code, String msg) {
+        mainHandler.post(() -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show());
+    }
+
+    @Override
+    public void onTimeout() {
+        resumeScanning();
+    }
+
+    /** ML Kit 抓到一码后自动停;处理完后手动重启扫描。 */
+    private void resumeScanning() {
+        mainHandler.postDelayed(this::startScanning, 500L);
+    }
+
+    private void handleScannedCode(String code) {
+        new Thread(() -> {
+            try {
+                Map<String, Object> body = new HashMap<>();
+                body.put("code", code);
+                ApiResponse<OutboundOrderDto> resp = api.post(
+                        "/api/outbound/orders/" + orderId + "/scan", body, OutboundOrderDto.class);
+                final OutboundOrderDto o = resp == null ? null : resp.data;
+                mainHandler.post(() -> {
+                    if (o == null) {
+                        BeepUtil.error();
+                        return;
+                    }
+                    currentOrder = o;
+                    refreshLines();
+                    BeepUtil.success();
+                });
+            } catch (ApiException e) {
+                final int httpCode = e.getCode();
+                final String msg = e.getMessage();
+                mainHandler.post(() -> {
+                    BeepUtil.error();
+                    // 404 = 码不在系统,409 = 码已出库/报废
+                    if (httpCode == 404) {
+                        Toast.makeText(this, R.string.outbound_code_not_in_check, Toast.LENGTH_LONG).show();
+                    } else if (httpCode == 409) {
+                        Toast.makeText(this, R.string.code_already_out, Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                    }
+                    resumeScanning();
+                });
+            }
+        }).start();
+    }
+
+    // ============================================================
+    // 选/建单对话框
+    // ============================================================
+
     private void showOrderPicker() {
         View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_outbound_order_picker, null);
         RecyclerView rvOrders = dialogView.findViewById(R.id.rvOrders);
@@ -96,17 +235,13 @@ public class OutboundScanActivity extends AppCompatActivity {
                 .create();
         PickerAdapter pickerAdapter = new PickerAdapter(drafts, order -> {
             this.orderId = order.id;
-            this.orderNo = order.orderNo;
-            this.orderStatus = order.status;
+            loadOrder(order.id);
             dialogHolder[0].dismiss();
-            updateHeader();
         });
         rvOrders.setLayoutManager(new LinearLayoutManager(this));
         rvOrders.setAdapter(pickerAdapter);
-        // 共享的 dialog 句柄(lambda 闭包要求 effectively final,所以用 1-length 数组)
         final AlertDialog dialog = dialogHolder[0];
 
-        // 加载草稿单
         new Thread(() -> {
             try {
                 ApiResponse<java.util.Map<String, Object>> resp = api.get(
@@ -136,7 +271,7 @@ public class OutboundScanActivity extends AppCompatActivity {
             } catch (ApiException e) {
                 // 忽略,显示空
             }
-            runOnUiThread(() -> {
+            mainHandler.post(() -> {
                 tvEmpty.setVisibility(drafts.isEmpty() ? View.VISIBLE : View.GONE);
                 pickerAdapter.notifyDataSetChanged();
             });
@@ -155,21 +290,18 @@ public class OutboundScanActivity extends AppCompatActivity {
                 try {
                     ApiResponse<OutboundOrderDto> resp = api.post(
                             "/api/outbound/orders", body, OutboundOrderDto.class);
-                    runOnUiThread(() -> {
-                        if (resp != null && resp.data != null) {
-                            this.orderId = resp.data.id;
-                            this.orderNo = resp.data.orderNo;
-                            this.orderStatus = resp.data.status;
-                            Toast.makeText(this, "已创建草稿单", Toast.LENGTH_SHORT).show();
+                    final OutboundOrderDto created = (resp == null) ? null : resp.data;
+                    mainHandler.post(() -> {
+                        if (created != null) {
+                            loadOrder(created.id);
                             dialog.dismiss();
-                            updateHeader();
                         } else {
                             btnCreate.setEnabled(true);
                             Toast.makeText(this, "创建失败", Toast.LENGTH_LONG).show();
                         }
                     });
                 } catch (ApiException e) {
-                    runOnUiThread(() -> {
+                    mainHandler.post(() -> {
                         btnCreate.setEnabled(true);
                         Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
                     });
@@ -180,92 +312,54 @@ public class OutboundScanActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void updateHeader() {
-        if (orderNo != null) {
-            tvOrderLabel.setText(getString(R.string.outbound_order_label) + ": " + orderNo);
-            tvStatus.setText(orderStatus);
-            tvStatus.setVisibility(View.VISIBLE);
-        } else {
-            tvOrderLabel.setText(R.string.outbound_order_label);
-            tvStatus.setVisibility(View.GONE);
-        }
-    }
-
-    private void doScan() {
-        if (orderId == null) {
-            Toast.makeText(this, "请先选/建出库单", Toast.LENGTH_SHORT).show();
-            showOrderPicker();
-            return;
-        }
-        String code = etCode.getText() == null ? "" : etCode.getText().toString().trim();
-        if (code.isEmpty()) return;
-        etCode.setText("");
+    private void loadOrder(Integer id) {
+        this.orderId = id;
         new Thread(() -> {
             try {
-                Map<String, Object> body = new HashMap<>();
-                body.put("code", code);
-                // 调 /api/outbound/orders/{id}/scan 校验 + 累加
-                ApiResponse<OutboundOrderDto> resp = api.post(
-                        "/api/outbound/orders/" + orderId + "/scan", body, OutboundOrderDto.class);
-                runOnUiThread(() -> {
-                    if (resp == null || resp.data == null) {
-                        BeepUtil.error();
-                        return;
-                    }
-                    // 后端返回的 items 列表里有 productId/quantity,我们用之重建本地 rows
-                    rows.clear();
-                    if (resp.data.items != null) {
-                        for (OutboundOrderDto.OutboundOrderItemDto it : resp.data.items) {
-                            ScanRow row = new ScanRow();
-                            row.productId = it.productId;
-                            row.sku = it.sku;
-                            row.name = it.productName;
-                            row.qty = it.quantity == null ? 0 : it.quantity;
-                            rows.put(row.productId, row);
-                        }
-                    }
-                    orderStatus = resp.data.status;
-                    updateHeader();
-                    adapter.notifyDataSetChanged();
-                    updateCount();
-                    BeepUtil.success();
+                ApiResponse<OutboundOrderDto> resp = api.get(
+                        "/api/outbound/orders/" + id, OutboundOrderDto.class);
+                final OutboundOrderDto o = (resp == null) ? null : resp.data;
+                mainHandler.post(() -> {
+                    currentOrder = o;
+                    refreshLines();
+                    renderOrderHeader();
+                    boolean hasOrder = orderId != null && currentOrder != null;
+                    btnSubmit.setEnabled(hasOrder && isDraft(currentOrder) && !rows.isEmpty());
+                    btnCancel.setEnabled(hasOrder && isDraft(currentOrder));
                 });
             } catch (ApiException e) {
-                runOnUiThread(() -> {
-                    BeepUtil.error();
-                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
-                });
+                mainHandler.post(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }).start();
     }
 
+    // ============================================================
+    // 提交 + 取消
+    // ============================================================
+
     private void doCommit() {
-        if (orderId == null) {
-            Toast.makeText(this, "请先选/建出库单", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (orderId == null || currentOrder == null) return;
         btnSubmit.setEnabled(false);
         new Thread(() -> {
             try {
                 ApiResponse<OutboundOrderDto> resp = api.post(
                         "/api/outbound/orders/" + orderId + "/commit", null, OutboundOrderDto.class);
-                runOnUiThread(() -> {
+                final OutboundOrderDto o = (resp == null) ? null : resp.data;
+                mainHandler.post(() -> {
                     BeepUtil.success();
+                    currentOrder = o;
                     Toast.makeText(this, R.string.outbound_commit_success, Toast.LENGTH_LONG).show();
-                    orderStatus = "COMMITTED";
-                    updateHeader();
                     rows.clear();
-                    adapter.notifyDataSetChanged();
-                    updateCount();
-                    btnSubmit.setEnabled(true);
-                    // 提交完退出,回 Home
+                    rowList.clear();
+                    scanAdapter.notifyDataSetChanged();
+                    refreshLines();
                     finish();
                 });
             } catch (ApiException e) {
-                runOnUiThread(() -> {
+                mainHandler.post(() -> {
                     BeepUtil.error();
-                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
                     btnSubmit.setEnabled(true);
+                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
                 });
             }
         }).start();
@@ -279,12 +373,9 @@ public class OutboundScanActivity extends AppCompatActivity {
                     new Thread(() -> {
                         try {
                             api.post("/api/outbound/orders/" + orderId + "/cancel", null, Object.class);
-                            runOnUiThread(() -> {
-                                Toast.makeText(this, "已取消", Toast.LENGTH_SHORT).show();
-                                finish();
-                            });
+                            mainHandler.post(this::finish);
                         } catch (ApiException e) {
-                            runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
+                            mainHandler.post(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
                         }
                     }).start();
                 })
@@ -292,11 +383,63 @@ public class OutboundScanActivity extends AppCompatActivity {
                 .show();
     }
 
+    // ============================================================
+    // 渲染 + 工具
+    // ============================================================
+
+    private void refreshLines() {
+        rows.clear();
+        rowList.clear();
+        if (currentOrder != null && currentOrder.items != null) {
+            for (OutboundOrderDto.OutboundOrderItemDto it : currentOrder.items) {
+                ScanRow row = new ScanRow();
+                row.productId = it.productId;
+                row.sku = it.sku;
+                row.name = it.productName;
+                row.qty = it.quantity == null ? 0 : it.quantity;
+                rows.put(row.productId, row);
+            }
+        }
+        rowList.addAll(rows.values());
+        if (scanAdapter != null) scanAdapter.notifyDataSetChanged();
+        updateCount();
+    }
+
     private void updateCount() {
         int total = 0;
-        for (ScanRow r : rows.values()) total += r.qty;
-        tvCount.setText(getString(R.string.scanned_count, total));
+        for (ScanRow r : rowList) total += r.qty;
+        if (tvCount != null) {
+            tvCount.setText(getString(R.string.scanned_count, total));
+        }
     }
+
+    private void renderOrderHeader() {
+        if (tvOrderNo == null || tvStatus == null) return;
+        if (currentOrder == null) {
+            tvOrderNo.setText("");
+            tvStatus.setText("");
+            return;
+        }
+        tvOrderNo.setText(currentOrder.orderNo == null ? "" : currentOrder.orderNo);
+        if ("COMMITTED".equals(currentOrder.status)) {
+            tvStatus.setText(R.string.inbound_status_committed);
+            tvStatus.setBackgroundColor(0xFF4CAF50);
+        } else if ("CANCELLED".equals(currentOrder.status)) {
+            tvStatus.setText(R.string.inbound_status_cancelled);
+            tvStatus.setBackgroundColor(0xFFF44336);
+        } else {
+            tvStatus.setText(R.string.inbound_status_draft);
+            tvStatus.setBackgroundColor(0xFFFFA000);
+        }
+    }
+
+    private static boolean isDraft(OutboundOrderDto o) {
+        return o != null && "DRAFT".equals(o.status);
+    }
+
+    // ============================================================
+    // Adapter
+    // ============================================================
 
     private static class ScanRow {
         Integer productId;
@@ -313,12 +456,12 @@ public class OutboundScanActivity extends AppCompatActivity {
         }
         @Override
         public void onBindViewHolder(VH h, int pos) {
-            ScanRow r = (ScanRow) rows.values().toArray()[pos];
-            h.sku.setText(r.sku);
-            h.name.setText(r.name);
+            ScanRow r = rowList.get(pos);
+            h.sku.setText(r.sku == null ? "" : r.sku);
+            h.name.setText(r.name == null ? "" : r.name);
             h.qty.setText("×" + r.qty);
         }
-        @Override public int getItemCount() { return rows.size(); }
+        @Override public int getItemCount() { return rowList.size(); }
 
         class VH extends RecyclerView.ViewHolder {
             TextView sku, name, qty;
@@ -344,7 +487,8 @@ public class OutboundScanActivity extends AppCompatActivity {
                     .inflate(R.layout.item_outbound_picker_row, p, false);
             return new VH(v);
         }
-        @Override public void onBindViewHolder(VH h, int pos) {
+        @Override
+        public void onBindViewHolder(VH h, int pos) {
             OutboundOrderDto o = data.get(pos);
             h.orderNo.setText(o.orderNo == null ? "(无单号)" : o.orderNo);
             String customer = (o.customer == null || o.customer.isEmpty()) ? "" : o.customer + " · ";
@@ -360,6 +504,4 @@ public class OutboundScanActivity extends AppCompatActivity {
             VH(View v) { super(v); orderNo = v.findViewById(R.id.tvOrderNo); meta = v.findViewById(R.id.tvMeta); }
         }
     }
-
-    // LinkedHashMap 引用 — 不需要单独嵌套类
 }
