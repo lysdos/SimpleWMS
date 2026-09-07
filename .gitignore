@@ -9,8 +9,8 @@ target/
 *.war
 *.ear
 
-# 2) 运行时数据 / H2 文件
-data/
+# 2) 运行时数据 / H2 文件(仅仓库根,避免误匹配 pda-android/app/src/main/java/com/wms/pda/data/)
+/data/
 *.mv.db
 *.trace.db
 
