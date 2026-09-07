@@ -31,6 +31,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(409, e.getMessage()));
     }
 
+    /** 业务上语义合法但拒绝(例如盘点单中无此码) → 422 */
+    @ExceptionHandler(UnprocessableException.class)
+    public ResponseEntity<ApiResponse<Void>> unprocessable(UnprocessableException e) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.fail(422, e.getMessage()));
+    }
+
     /** 数据库约束冲突(SKU 重复等) */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> dataIntegrity(DataIntegrityViolationException e) {
