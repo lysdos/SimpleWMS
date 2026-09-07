@@ -233,3 +233,39 @@ ports:
   - "8080:8080"        # 后端保持
   - "3307:3306"        # MySQL 改到 3307
 ```
+## 📱 PDA Android 手持机 App
+
+仓库管理员用 Android 工业 PDA(PDA/UHF 模组)扫码出入库。
+
+### 构建
+
+```bash
+cd pda-android
+./gradlew assembleDebug       # 调试 APK
+./gradlew assembleRelease     # 发布 APK(签名)
+```
+
+### 部署到 PDA
+
+```bash
+# USB 连接 PDA(开启 USB 调试)
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+
+### 配置后端地址
+
+`pda-android/app/build.gradle`:
+```gradle
+buildConfigField "String", "API_BASE_URL", "\"http://192.168.1.100:8080\""
+```
+
+模拟器用 `http://10.0.2.2:8080`,真机改成后端实际 IP。
+
+### 业务流程
+
+- **入库扫码**:扫 code → 查 Product → 累加数量 → 批量入库
+- **出库扫码**:扫 code → 查 inventory_item → IN_STOCK 加入 → 批量出库
+- **库存盘点**:选范围 → 创建盘点单 → 填实盘数 → 提交
+- **扫码查询**:输码或扫码 → 显示库存单元完整信息
+
+EPC = 24 位 code,后端 `inventory_item.code` UNIQUE 索引已支持。
