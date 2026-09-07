@@ -1,21 +1,24 @@
 package com.wms.pda.ui.inbound;
 
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.view.PreviewView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -28,10 +31,6 @@ import com.wms.pda.model.InboundOrderItemDto;
 import com.wms.pda.model.ProductDto;
 import com.wms.pda.net.ApiClient;
 import com.wms.pda.net.ApiException;
-import com.wms.pda.scan.ScanManager;
-import com.wms.pda.scan.ScanResult;
-import com.wms.pda.scan.ScanType;
-import com.wms.pda.scan.ScannerCallback;
 import com.wms.pda.util.BeepUtil;
 
 import java.io.File;
@@ -46,29 +45,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 入库扫码登记页(P5 重写):
+ * 入库登记页(替换原扫码页):
+ * 选/建草稿单 → 选商品 + 数量 + 库位 + 备注 → 逐行 POST /items → 提交 → 显示 24 位码。
  *
- * 流程:
- *   1. 进入页 → 弹"选/建草稿单"对话框(已有)
- *   2. 选/建后进入扫码页:全屏摄像头预览 + 顶单号栏 + 底"已扫 X 件"列表
- *   3. ML Kit 抓到 1 个码 → 调 GET /api/inventory/items/by-code/{code}/product
- *      - 200 (已存在 product) → Toast 该码已在系统中,跳过
- *      - 404 (新码,无 product) → 弹"加几件?"小窗 → POST /items
- *   4. 累加 N 件到已扫列表(显示数量)
- *   5. 提交:POST /commit → 切到码打印页
- *   6. 取消:POST /cancel → finish
- *
- * 摄像头由 ScanManager.attachBarcodeCamera 在 onResume 绑定,
- * ScanManager.detachBarcodeCamera 在 onPause 释放。
+ * 本 Activity 用 setContentView 在两个 layout 之间切换:
+ * - R.layout.activity_inbound_scan       — 登记页(加商品/提交/取消)
+ * - R.layout.activity_inbound_code_print — 提交后码打印页(打印全部/下载 CSV/返回)
  */
-public class InboundScanActivity extends AppCompatActivity implements ScannerCallback {
+public class InboundScanActivity extends AppCompatActivity {
 
     private static final long SEARCH_DEBOUNCE_MS = 300L;
-    private static final long RESUME_RESCAN_DELAY_MS = 600L;
 
     private ApiClient api;
     private SessionStore session;
-    private ScanManager scanManager;
 
     /** 当前 DRAFT 订单 ID(从选/建单得到)。 */
     private Integer orderId;
@@ -77,9 +66,8 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
 
     // ====== 登记页视图(register mode) ======
     private TextView tvOrderNo, tvStatus, tvCount;
-    private Button btnSubmit, btnCancel;
+    private Button btnAddItem, btnSubmit, btnCancel;
     private RecyclerView rvItems;
-    private PreviewView previewView;
     private LineAdapter lineAdapter;
 
     // ====== 码打印页视图(print mode) ======
@@ -89,231 +77,19 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
 
     private final List<InboundOrderItemDto> lines = new ArrayList<>();
     private final List<String> committedCodes = new ArrayList<>();
-
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    /** 用于 onResume 后延迟重启扫描(等摄像头 ready)。 */
-    private final Runnable resumeRescanRunnable = () -> startScanning();
-
-    /** 当前待处理扫码 code(弹"加几件"前暂存)。 */
-    private String pendingCode;
+    private final Handler searchHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingSearch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         session = new SessionStore(this);
         api = new ApiClient(session);
-        scanManager = ScanManager.get(this);
         BeepUtil.init(this);
 
         showRegisterPage();
         showOrderPickerDialog();
-    }
-
-    // ============================================================
-    // 生命周期 — 摄像头绑定/释放
-    // ============================================================
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        if (previewView != null) {
-            scanManager.attachBarcodeCamera(this, previewView);
-            // 启动 BARCODE 扫描(自动停 + 回调):ScanManager.startScan 会调 svc.setCallback(this)
-            mainHandler.postDelayed(resumeRescanRunnable, RESUME_RESCAN_DELAY_MS);
-        }
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        mainHandler.removeCallbacks(resumeRescanRunnable);
-        scanManager.stopScan();
-        scanManager.detachBarcodeCamera();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        scanManager.stopScan();
-        scanManager.detachBarcodeCamera();
-    }
-
-    private void startScanning() {
-        scanManager.startScan(ScanType.BARCODE, this);
-    }
-
-    // ============================================================
-    // ScannerCallback
-    // ============================================================
-
-    @Override
-    public void onScanResult(@NonNull ScanResult result) {
-        if (result.getType() != ScanType.BARCODE) return;
-        String code = result.getCode();
-        if (code == null || code.isEmpty()) return;
-        if (orderId == null) {
-            // 还没选单:忽略,提示用户
-            mainHandler.post(() -> Toast.makeText(this, "请先选/建草稿单", Toast.LENGTH_SHORT).show());
-            resumeScanning();
-            return;
-        }
-        handleScannedCode(code);
-    }
-
-    @Override
-    public void onError(int code, String msg) {
-        mainHandler.post(() -> Toast.makeText(this, msg, Toast.LENGTH_SHORT).show());
-    }
-
-    @Override
-    public void onTimeout() {
-        // 自动重启扫描
-        resumeScanning();
-    }
-
-    /** ML Kit 抓到一码后自动停;处理完后手动重启扫描。 */
-    private void resumeScanning() {
-        mainHandler.postDelayed(this::startScanning, 500L);
-    }
-
-    private void handleScannedCode(String code) {
-        // 调 by-code/{code}/product 找 product
-        new Thread(() -> {
-            try {
-                ApiResponse<ProductDto> resp = api.get(
-                        "/api/inventory/items/by-code/" + code + "/product",
-                        ProductDto.class);
-                final ProductDto p = resp == null ? null : resp.data;
-                mainHandler.post(() -> {
-                    if (p != null && p.id != null) {
-                        // 已有 product → 该码在系统中,跳过
-                        BeepUtil.error();
-                        Toast.makeText(this, R.string.inbound_scan_already_in, Toast.LENGTH_SHORT).show();
-                        resumeScanning();
-                    }
-                });
-            } catch (ApiException e) {
-                // 404 = 码不在系统中 → 这是新码,弹"加几件"小窗
-                if (e.getCode() == 404) {
-                    pendingCode = code;
-                    mainHandler.post(this::showScanQtyDialog);
-                } else {
-                    mainHandler.post(() -> {
-                        BeepUtil.error();
-                        Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
-                        resumeScanning();
-                    });
-                }
-            }
-        }).start();
-    }
-
-    /** 弹"加几件"小窗 — 但 by-code/product 404 时没有 product 信息;
-     *  按 brief:用户已扫到一个不在系统中的码,后端将为之生成 product + inventory_item 码。
-     *  当前实现:复用最后一次 refreshLines 的最后一个 item 的 productId 作为目标;
-     *  若订单为空,提示用户先扫"产品已入库"的码不可行 — 让"找不到 product" 走默认行为:
-     *  后端 addItemToDraft 需要 productId,所以我们这里兜底:
-     *  如果 lines 非空,使用最后一个 item.productId;
-     *  如果 lines 为空,提示"请先在系统中录入商品"。
-     *
-     *  说明:后端 /api/inventory/items/by-code/{code}/product 端点的实际语义是
-     *  "根据一个 24 位码反查它对应的 product"。对于一个新码,没有 product 关联。
-     *  此时 PDA 端无法知道 productId —— 真正的入库流程必须是:
-     *  (a) 录入商品时生成 product,系统产生空 24 位码 prefix
-     *  (b) 或者由后端提供"扫新码自动创建 product"的逻辑
-     *
-     *  本期 P5 保留弹窗但用 fallback:让后端接收 productId=null 兜底
-     *  (实际后端必填 productId)。为保持 UI 不阻塞,我们直接弹"加几件"小窗,
-     *  用户确认后调 addItemToDraft,后端校验失败时回 Toast。 */
-    private void showScanQtyDialog() {
-        if (pendingCode == null) {
-            resumeScanning();
-            return;
-        }
-        View view = LayoutInflater.from(this).inflate(R.layout.dialog_scan_qty, null, false);
-        TextView tvProduct = view.findViewById(R.id.tvScanQtyProduct);
-        TextInputEditText etQty = view.findViewById(R.id.etScanQty);
-        tvProduct.setText("扫到新码:\n" + pendingCode
-                + (currentOrder != null && !lines.isEmpty() && lines.get(lines.size() - 1).productName != null
-                    ? "\n(默认归属: " + lines.get(lines.size() - 1).productName + ")"
-                    : "\n(请在系统中先建立商品)"));
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.inbound_scan_qty_title)
-                .setView(view)
-                .setPositiveButton(R.string.inbound_add, null)
-                .setNegativeButton(R.string.inbound_cancel, null)
-                .create();
-        dialog.setOnShowListener(d -> {
-            Button ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
-            ok.setOnClickListener(v -> {
-                String qtyStr = etQty.getText() == null ? "" : etQty.getText().toString().trim();
-                int qty;
-                if (qtyStr.isEmpty()) qty = 1;
-                else {
-                    try { qty = Integer.parseInt(qtyStr); }
-                    catch (NumberFormatException e) {
-                        Toast.makeText(this, R.string.inbound_quantity, Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                }
-                if (qty <= 0) {
-                    Toast.makeText(this, R.string.inbound_quantity, Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                pendingQty = qty;
-                dialog.dismiss();
-                doAddItemFromScan();
-            });
-        });
-        dialog.setOnDismissListener(d -> {
-            pendingCode = null;
-            pendingQty = 0;
-            resumeScanning();
-        });
-        dialog.show();
-    }
-
-    /** "加几件"确认后暂存数量。 */
-    private int pendingQty;
-
-    private void doAddItemFromScan() {
-        if (orderId == null || pendingCode == null) return;
-        // 新码 → 没有 product 关联,只能 attach 到已知的某个 product。
-        // 这里用 lines 最后一行 productId 作 fallback;若 lines 为空则直接跳过。
-        if (currentOrder == null || currentOrder.items == null || currentOrder.items.isEmpty()) {
-            Toast.makeText(this, "请先在系统中建立商品并加一行,再用扫码补量", Toast.LENGTH_LONG).show();
-            return;
-        }
-        InboundOrderItemDto last = currentOrder.items.get(currentOrder.items.size() - 1);
-        Integer productId = last.productId;
-        if (productId == null) {
-            Toast.makeText(this, "未关联商品,跳过", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Map<String, Object> body = new HashMap<>();
-        body.put("productId", productId);
-        body.put("quantity", pendingQty);
-        // 携带原始 24 位码作可追溯性(后端 /items 接口支持任意字段,Gson 会忽略未知)
-        body.put("sourceCode", pendingCode);
-        new Thread(() -> {
-            try {
-                ApiResponse<InboundOrderDto> resp = api.post(
-                        "/api/inbound/orders/" + orderId + "/items", body, InboundOrderDto.class);
-                final InboundOrderDto o = resp == null ? null : resp.data;
-                mainHandler.post(() -> {
-                    currentOrder = o;
-                    refreshLines();
-                    BeepUtil.success();
-                    Toast.makeText(this, R.string.inbound_scan_add_success, Toast.LENGTH_SHORT).show();
-                });
-            } catch (ApiException e) {
-                mainHandler.post(() -> {
-                    BeepUtil.error();
-                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
-                });
-            }
-        }).start();
     }
 
     // ============================================================
@@ -325,19 +101,21 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         tvOrderNo = findViewById(R.id.tvOrderNo);
         tvStatus = findViewById(R.id.tvStatus);
         tvCount = findViewById(R.id.tvCount);
+        btnAddItem = findViewById(R.id.btnAddItem);
         btnSubmit = findViewById(R.id.btnSubmit);
         btnCancel = findViewById(R.id.btnCancel);
         rvItems = findViewById(R.id.rvItems);
-        previewView = findViewById(R.id.previewView);
         rvItems.setLayoutManager(new LinearLayoutManager(this));
         lineAdapter = new LineAdapter();
         rvItems.setAdapter(lineAdapter);
 
+        btnAddItem.setOnClickListener(v -> showAddItemDialog());
         btnSubmit.setOnClickListener(v -> doSubmit());
         btnCancel.setOnClickListener(v -> doCancel());
 
-        // 没选单子时禁用提交
+        // 没选单子时禁用按钮
         boolean hasOrder = orderId != null && currentOrder != null;
+        btnAddItem.setEnabled(hasOrder && isDraft(currentOrder));
         btnSubmit.setEnabled(hasOrder && isDraft(currentOrder) && !lines.isEmpty());
         btnCancel.setEnabled(hasOrder && isDraft(currentOrder));
         renderOrderHeader();
@@ -388,10 +166,12 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         b.setView(view);
         b.setCancelable(true);
         b.setNegativeButton(R.string.inbound_cancel, (d, w) -> {
+            // 取消选单 → 回 Home
             d.dismiss();
             if (orderId == null) finish();
         });
         b.setPositiveButton(R.string.inbound_picker_create_btn, (d, w) -> {
+            // 创建新草稿单
             String ext = etExternalNo.getText() == null ? null : etExternalNo.getText().toString().trim();
             String rmk = etRemark.getText() == null ? null : etRemark.getText().toString().trim();
             if (ext != null && ext.isEmpty()) ext = null;
@@ -400,7 +180,10 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         });
         AlertDialog dialog = b.create();
         dialogRef[0] = dialog;
-        dialog.setOnShowListener(d -> loadDrafts(drafts, pickerAdapter, tvPickerEmpty));
+        dialog.setOnShowListener(d -> {
+            // dialog 已显示,加载草稿单列表
+            loadDrafts(drafts, pickerAdapter, tvPickerEmpty);
+        });
         dialog.show();
     }
 
@@ -413,6 +196,7 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         final String url = sb.toString();
         new Thread(() -> {
             try {
+                // 返回 Map { list, total, page, pageSize }
                 ApiResponse<java.util.Map> resp = api.get(url, java.util.Map.class);
                 @SuppressWarnings("unchecked")
                 List<java.util.Map<String, Object>> rawList =
@@ -423,12 +207,12 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
                         drafts.add(toInboundOrderDto(m));
                     }
                 }
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     adapter.notifyDataSetChanged();
                     tvEmpty.setVisibility(drafts.isEmpty() ? View.VISIBLE : View.GONE);
                 });
             } catch (ApiException e) {
-                mainHandler.post(() -> Toast.makeText(this,
+                runOnUiThread(() -> Toast.makeText(this,
                         getString(R.string.network_unavailable) + ": " + e.getMessage(),
                         Toast.LENGTH_LONG).show());
             }
@@ -443,12 +227,12 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
             try {
                 ApiResponse<InboundOrderDto> resp = api.post("/api/inbound/orders", body, InboundOrderDto.class);
                 final InboundOrderDto created = resp == null ? null : resp.data;
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     if (created != null) loadOrder(created.id);
                 });
             } catch (ApiException e) {
-                mainHandler.post(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }).start();
     }
@@ -459,13 +243,145 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
             try {
                 ApiResponse<InboundOrderDto> resp = api.get("/api/inbound/orders/" + id, InboundOrderDto.class);
                 final InboundOrderDto o = resp == null ? null : resp.data;
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     currentOrder = o;
                     refreshLines();
                     showRegisterPage();
                 });
             } catch (ApiException e) {
-                mainHandler.post(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
+                runOnUiThread(() -> Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    // ============================================================
+    // 加商品对话框
+    // ============================================================
+
+    private void showAddItemDialog() {
+        if (orderId == null) return;
+        View view = LayoutInflater.from(this).inflate(R.layout.dialog_add_item, null, false);
+        AutoCompleteTextView actvProduct = view.findViewById(R.id.actvProduct);
+        TextInputEditText etQty = view.findViewById(R.id.etAddQty);
+        TextInputEditText etLocation = view.findViewById(R.id.etAddLocation);
+        TextInputEditText etSupplier = view.findViewById(R.id.etAddSupplier);
+        TextInputEditText etRemark = view.findViewById(R.id.etAddRemark);
+
+        final Integer[] selectedProductId = new Integer[1];
+        final List<ProductDto> productResults = new ArrayList<>();
+        final ArrayAdapter<String> productAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_dropdown_item_1line, new ArrayList<>());
+        actvProduct.setAdapter(productAdapter);
+        actvProduct.setThreshold(1);
+
+        actvProduct.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) {
+                String kw = s == null ? "" : s.toString().trim();
+                selectedProductId[0] = null;
+                if (kw.isEmpty()) return;
+                if (pendingSearch != null) searchHandler.removeCallbacks(pendingSearch);
+                pendingSearch = () -> searchProducts(kw, productResults, productAdapter);
+                searchHandler.postDelayed(pendingSearch, SEARCH_DEBOUNCE_MS);
+            }
+        });
+        actvProduct.setOnItemClickListener((parent, v, position, id) -> {
+            if (position >= 0 && position < productResults.size()) {
+                ProductDto p = productResults.get(position);
+                selectedProductId[0] = p.id;
+                actvProduct.setText(p.sku + " " + p.name);
+                actvProduct.setSelection(actvProduct.getText().length());
+            }
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(view)
+                .setPositiveButton(R.string.inbound_add, null) // 在 onShow 里接管
+                .setNegativeButton(R.string.inbound_cancel, null)
+                .create();
+        dialog.setOnShowListener(d -> {
+            Button ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            ok.setOnClickListener(v -> {
+                Integer productId = selectedProductId[0];
+                String qtyStr = etQty.getText() == null ? "" : etQty.getText().toString().trim();
+                String location = etLocation.getText() == null ? "" : etLocation.getText().toString().trim();
+                String supplier = etSupplier.getText() == null ? "" : etSupplier.getText().toString().trim();
+                String rowRemark = etRemark.getText() == null ? "" : etRemark.getText().toString().trim();
+                if (productId == null) {
+                    Toast.makeText(this, R.string.inbound_product_hint, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                int qty;
+                try { qty = Integer.parseInt(qtyStr); }
+                catch (NumberFormatException e) {
+                    Toast.makeText(this, R.string.inbound_quantity, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (qty <= 0) {
+                    Toast.makeText(this, R.string.inbound_quantity, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                addItem(productId, qty, location, supplier, rowRemark, dialog);
+            });
+        });
+        dialog.show();
+    }
+
+    private void searchProducts(String keyword, List<ProductDto> results,
+                                ArrayAdapter<String> adapter) {
+        new Thread(() -> {
+            try {
+                String url = "/api/products?keyword=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
+                ApiResponse<java.util.Map> resp = api.get(url, java.util.Map.class);
+                @SuppressWarnings("unchecked")
+                List<java.util.Map<String, Object>> rawList =
+                        resp == null || resp.data == null ? null : (List<java.util.Map<String, Object>>) resp.data.get("list");
+                results.clear();
+                List<String> labels = new ArrayList<>();
+                if (rawList != null) {
+                    for (java.util.Map<String, Object> m : rawList) {
+                        ProductDto p = toProductDto(m);
+                        results.add(p);
+                        labels.add(p.sku + "  " + p.name);
+                    }
+                }
+                runOnUiThread(() -> {
+                    adapter.clear();
+                    adapter.addAll(labels);
+                    adapter.notifyDataSetChanged();
+                });
+            } catch (ApiException e) {
+                // 商品搜索失败不阻塞,静默
+            }
+        }).start();
+    }
+
+    private void addItem(Integer productId, int qty, String location, String supplier,
+                         String rowRemark, AlertDialog dialog) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("productId", productId);
+        body.put("quantity", qty);
+        if (location != null && !location.isEmpty()) body.put("location", location);
+        if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
+        if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        new Thread(() -> {
+            try {
+                ApiResponse<InboundOrderDto> resp = api.post(
+                        "/api/inbound/orders/" + orderId + "/items", body, InboundOrderDto.class);
+                final InboundOrderDto o = resp == null ? null : resp.data;
+                runOnUiThread(() -> {
+                    currentOrder = o;
+                    refreshLines();
+                    BeepUtil.success();
+                    Toast.makeText(this, R.string.inbound_add_success, Toast.LENGTH_SHORT).show();
+                    if (dialog != null && dialog.isShowing()) dialog.dismiss();
+                });
+            } catch (ApiException e) {
+                runOnUiThread(() -> {
+                    BeepUtil.error();
+                    Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+                });
             }
         }).start();
     }
@@ -486,18 +402,15 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
                 ApiResponse<InboundOrderDto> resp = api.post(
                         "/api/inbound/orders/" + orderId + "/commit", null, InboundOrderDto.class);
                 final InboundOrderDto o = resp == null ? null : resp.data;
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     BeepUtil.success();
                     currentOrder = o;
                     collectCommittedCodes(o);
                     btnSubmit.setEnabled(true);
-                    // 释放摄像头再切页
-                    scanManager.stopScan();
-                    scanManager.detachBarcodeCamera();
                     showPrintPage();
                 });
             } catch (ApiException e) {
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     BeepUtil.error();
                     btnSubmit.setEnabled(true);
                     Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
@@ -532,9 +445,9 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         new Thread(() -> {
             try {
                 api.post("/api/inbound/orders/" + orderId + "/cancel", null, Void.class);
-                mainHandler.post(this::finish);
+                runOnUiThread(this::finish);
             } catch (ApiException e) {
-                mainHandler.post(() -> {
+                runOnUiThread(() -> {
                     BeepUtil.error();
                     btnCancel.setEnabled(true);
                     Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
@@ -557,11 +470,11 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         sb.append(getString(R.string.inbound_codes_generated, committedCodes.size())).append("\n\n");
         for (String c : committedCodes) sb.append(c).append('\n');
 
-        android.content.Intent send = new android.content.Intent(android.content.Intent.ACTION_SEND);
+        Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
-        send.putExtra(android.content.Intent.EXTRA_SUBJECT, getString(R.string.inbound_share_chooser));
-        send.putExtra(android.content.Intent.EXTRA_TEXT, sb.toString());
-        startActivity(android.content.Intent.createChooser(send, getString(R.string.inbound_share_chooser)));
+        send.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.inbound_share_chooser));
+        send.putExtra(Intent.EXTRA_TEXT, sb.toString());
+        startActivity(Intent.createChooser(send, getString(R.string.inbound_share_chooser)));
     }
 
     private void downloadCsv() {
@@ -574,21 +487,21 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         }
         File out = new File(dir, orderNo + ".csv");
         new Thread(() -> {
-            try (Writer wr = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
-                wr.write('﻿');
-                wr.write("入库单号," + csvField(currentOrder.orderNo) + "\n");
-                wr.write("外部单号," + csvField(currentOrder.externalNo) + "\n");
-                wr.write("操作员," + csvField(currentOrder.operator) + "\n");
-                wr.write("整单备注," + csvField(currentOrder.remark) + "\n");
-                wr.write("总数量," + (currentOrder.totalQuantity == null ? 0 : currentOrder.totalQuantity) + "\n");
-                wr.write("明细数," + (currentOrder.itemCount == null ? 0 : currentOrder.itemCount) + "\n\n");
-                wr.write("序号,供应商,SKU,商品名称,库位,数量,行备注,24位码\n");
+            try (Writer w = new OutputStreamWriter(new FileOutputStream(out), StandardCharsets.UTF_8)) {
+                w.write('﻿');
+                w.write("入库单号," + csvField(currentOrder.orderNo) + "\n");
+                w.write("外部单号," + csvField(currentOrder.externalNo) + "\n");
+                w.write("操作员," + csvField(currentOrder.operator) + "\n");
+                w.write("整单备注," + csvField(currentOrder.remark) + "\n");
+                w.write("总数量," + (currentOrder.totalQuantity == null ? 0 : currentOrder.totalQuantity) + "\n");
+                w.write("明细数," + (currentOrder.itemCount == null ? 0 : currentOrder.itemCount) + "\n\n");
+                w.write("序号,供应商,SKU,商品名称,库位,数量,行备注,24位码\n");
                 int idx = 1;
                 if (currentOrder.items != null) {
                     for (InboundOrderItemDto it : currentOrder.items) {
                         String codesStr = (it.codes == null || it.codes.isEmpty())
                                 ? "" : android.text.TextUtils.join("|", it.codes);
-                        wr.write((idx++) + ","
+                        w.write((idx++) + ","
                                 + csvField(it.supplier) + ","
                                 + csvField(it.sku) + ","
                                 + csvField(it.productName) + ","
@@ -598,11 +511,11 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
                                 + csvField(codesStr) + "\n");
                     }
                 }
-                mainHandler.post(() -> Toast.makeText(this,
+                runOnUiThread(() -> Toast.makeText(this,
                         getString(R.string.inbound_codes_saved, out.getAbsolutePath()),
                         Toast.LENGTH_LONG).show());
             } catch (Exception e) {
-                mainHandler.post(() -> Toast.makeText(this,
+                runOnUiThread(() -> Toast.makeText(this,
                         "CSV 写入失败: " + e.getMessage(), Toast.LENGTH_LONG).show());
             }
         }).start();
@@ -630,12 +543,15 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         if (tvCount != null) {
             int total = 0;
             for (InboundOrderItemDto it : lines) total += (it.quantity == null ? 0 : it.quantity);
-            tvCount.setText(getString(R.string.inbound_scan_total, total, lines.size()));
+            tvCount.setText(getString(R.string.inbound_order_meta,
+                    currentOrder == null ? "" : currentOrder.orderNo,
+                    total, lines.size()));
         }
-        if (btnSubmit != null) {
-            boolean canSubmit = isDraft(currentOrder) && !lines.isEmpty();
-            btnSubmit.setEnabled(canSubmit);
-            btnCancel.setEnabled(isDraft(currentOrder));
+        if (btnAddItem != null) {
+            boolean canEdit = isDraft(currentOrder);
+            btnAddItem.setEnabled(canEdit);
+            btnSubmit.setEnabled(canEdit && !lines.isEmpty());
+            btnCancel.setEnabled(canEdit);
         }
         renderOrderHeader();
     }
@@ -680,6 +596,21 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
         return o;
     }
 
+    @SuppressWarnings("unchecked")
+    private static ProductDto toProductDto(java.util.Map<String, Object> m) {
+        ProductDto p = new ProductDto();
+        p.id = asInt(m.get("id"));
+        p.sku = asStr(m.get("sku"));
+        p.name = asStr(m.get("name"));
+        p.category = asStr(m.get("category"));
+        p.unit = asStr(m.get("unit"));
+        p.location = asStr(m.get("location"));
+        p.quantity = asInt(m.get("quantity"));
+        p.lowStock = asInt(m.get("lowStock"));
+        p.remark = asStr(m.get("remark"));
+        return p;
+    }
+
     private static Integer asInt(Object o) {
         if (o == null) return null;
         if (o instanceof Number) return ((Number) o).intValue();
@@ -710,6 +641,7 @@ public class InboundScanActivity extends AppCompatActivity implements ScannerCal
             h.location.setText(it.location == null ? "" : it.location);
             h.btnDelete.setEnabled(isDraft(currentOrder));
             h.btnDelete.setOnClickListener(v -> {
+                // PDA 不实现删除单行接口(后端没暴露)。只是提示。
                 Toast.makeText(InboundScanActivity.this,
                         "请使用提交/取消操作管理单据", Toast.LENGTH_SHORT).show();
             });
