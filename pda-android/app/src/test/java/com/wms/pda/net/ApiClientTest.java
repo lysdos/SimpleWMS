@@ -1,6 +1,7 @@
 package com.wms.pda.net;
 
 import com.wms.pda.data.SessionStore;
+import com.wms.pda.model.ApiResponse;
 
 import org.junit.After;
 import org.junit.Before;
@@ -42,10 +43,12 @@ public class ApiClientTest {
                 "{\"code\":0,\"msg\":\"\",\"data\":{\"id\":1,\"sku\":\"SP-001\"}}"));
 
         ApiClient client = new ApiClient(store);
-        TestProduct p = client.get("/api/products/1", TestProduct.class);
-        assertNotNull(p);
-        assertEquals(1, p.id);
-        assertEquals("SP-001", p.sku);
+        ApiResponse<TestProduct> resp = client.get("/api/products/1", TestProduct.class);
+        assertNotNull(resp);
+        assertEquals(0, resp.code);
+        assertNotNull(resp.data);
+        assertEquals(1, resp.data.id);
+        assertEquals("SP-001", resp.data.sku);
 
         RecordedRequest req = server.takeRequest();
         assertEquals("GET", req.getMethod());

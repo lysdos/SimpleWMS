@@ -58,15 +58,15 @@ public class ApiClient {
         };
     }
 
-    public <T> T get(String path, Class<T> type) throws ApiException {
+    public <T> ApiResponse<T> get(String path, Class<T> type) throws ApiException {
         return execute(buildRequest(path, null, "GET"), type);
     }
 
-    public <T> T post(String path, Object body, Class<T> type) throws ApiException {
+    public <T> ApiResponse<T> post(String path, Object body, Class<T> type) throws ApiException {
         return execute(buildRequest(path, body, "POST"), type);
     }
 
-    public <T> T put(String path, Object body, Class<T> type) throws ApiException {
+    public <T> ApiResponse<T> put(String path, Object body, Class<T> type) throws ApiException {
         return execute(buildRequest(path, body, "PUT"), type);
     }
 
@@ -81,7 +81,7 @@ public class ApiClient {
         return b.build();
     }
 
-    private <T> T execute(Request req, Class<T> type) throws ApiException {
+    private <T> ApiResponse<T> execute(Request req, Class<T> type) throws ApiException {
         try (Response resp = http.newCall(req).execute()) {
             ResponseBody rb = resp.body();
             String bodyStr = rb == null ? "" : rb.string();
@@ -89,7 +89,7 @@ public class ApiClient {
                 throw new ApiException(ApiException.ERR_HTTP,
                         "HTTP " + resp.code() + ": " + bodyStr);
             }
-            ApiResponse<?> ar;
+            ApiResponse<T> ar;
             try {
                 ar = gson.fromJson(bodyStr, ApiResponse.class);
             } catch (Exception e) {
@@ -103,9 +103,10 @@ public class ApiClient {
             if (ar.code != 0) {
                 throw new ApiException(ar.code, ar.msg);
             }
-            if (type == Void.class || ar.data == null) return null;
+            if (type == Void.class || ar.data == null) return ar;
             JsonObject dataJson = gson.toJsonTree(ar.data).getAsJsonObject();
-            return gson.fromJson(dataJson, type);
+            ar.data = gson.fromJson(dataJson, type);
+            return ar;
         } catch (IOException e) {
             throw new ApiException(ApiException.ERR_NETWORK, "网络不可达: " + e.getMessage());
         }
