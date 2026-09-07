@@ -1,52 +1,64 @@
 package com.wms.pda.scan;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.util.Log;
 
-import com.rscja.barcode.BarcodeDecoder;
-import com.rscja.barcode.BarcodeFactory;
-
 /**
- * 光学条码实现 - 走东集 iData 真实 SDK(BarcodeFactory / BarcodeDecoder)。
- * decoder.open() 打开摄像头扫码模组;按扫描键或 startScan() 后由 DecodeCallback 回调结果。
+ * 光学条码实现 - 监听厂家扫码广播的兼容层。
+ *
+ * 当前 PDA(优博讯 UROVO)暂无独立 barcode SDK,本实现仅尝试注册通用扫码广播
+ * ({@code com.ubx.action.BARCODE_SCAN} / 行业通用 {@code com.android.barcode.action.SCAN_DATA})。
+ * 真实光学扫码需要参考 UROVO 文档接入对应 SDK;本版本 RFID 是主扫码路径。
  */
 public class BarcodeScannerImpl implements ScannerService {
 
     private static final String TAG = "BarcodeScannerImpl";
-    private BarcodeDecoder decoder;
-    private ScannerCallback cb;
+    private static final String[] SCAN_ACTIONS = {
+            "com.ubx.action.BARCODE_SCAN",   // UROVO PDA 通用扫码广播
+            "com.android.barcode.action.SCAN_DATA"  // 行业兼容
+    };
+
     private Context appCtx;
-    private boolean ready;
+    private ScannerCallback cb;
+    private BroadcastReceiver receiver;
+    private volatile boolean ready;
 
     @Override
     public void init(Context ctx) {
         appCtx = ctx.getApplicationContext();
         try {
-            decoder = BarcodeFactory.getInstance().getBarcodeDecoder();
-            if (decoder == null || !decoder.open(appCtx)) {
-                throw new IllegalStateException("扫码模块打开失败");
-            }
-            decoder.setDecodeCallback(result -> {
-                String data = (result == null) ? null : result.getBarcodeData();
-                if (data != null && !data.isEmpty() && cb != null) {
-                    cb.onScanResult(new ScanResult(data, ScanType.BARCODE, null,
-                        System.currentTimeMillis()));
+            receiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent intent) {
+                    if (intent == null) return;
+                    String code = intent.getStringExtra("data")
+                            != null ? intent.getStringExtra("data")
+                            : intent.getStringExtra("BARCODE");
+                    if (code != null && !code.isEmpty() && cb != null) {
+                        cb.onScanResult(new ScanResult(
+                                code, ScanType.BARCODE, null, System.currentTimeMillis()));
+                    }
                 }
-            });
+            };
+            IntentFilter filter = new IntentFilter();
+            for (String action : SCAN_ACTIONS) filter.addAction(action);
+            appCtx.registerReceiver(receiver, filter);
             ready = true;
-            Log.i(TAG, "Barcode decoder opened");
-        } catch (Throwable e) {
+            Log.i(TAG, "Barcode broadcast listener registered (UROVO compatible)");
+        } catch (Throwable t) {
+            Log.w(TAG, "Barcode init 失败,光学扫码不可用", t);
             ready = false;
-            Log.e(TAG, "Barcode init failed", e);
         }
     }
 
     @Override
     public void release() {
-        if (decoder != null) {
-            try { decoder.stopScan(); } catch (Exception ignored) {}
-            try { decoder.close(); } catch (Exception ignored) {}
-            decoder = null;
+        if (receiver != null) {
+            try { appCtx.unregisterReceiver(receiver); } catch (Exception ignored) {}
+            receiver = null;
         }
         ready = false;
     }
@@ -54,25 +66,18 @@ public class BarcodeScannerImpl implements ScannerService {
     @Override
     public void startScan(ScanType type) {
         if (type != ScanType.BARCODE) return;
-        if (!ready || decoder == null) {
-            if (cb != null) cb.onError(-100, "扫码设备未就绪");
+        if (!ready) {
+            if (cb != null) cb.onError(-100, "光学扫码未就绪(本 PDA 未配 Barcode SDK,仅 RFID 可用)");
             return;
         }
-        boolean ok;
-        try {
-            ok = decoder.startScan();
-        } catch (Exception e) {
-            ok = false;
-        }
-        if (!ok) {
-            if (cb != null) cb.onError(-1, "启动扫码失败");
-        }
-        // 光学扫码是硬件按键/startScan 触发,回调里出结果;无后台超时线程
+        // 广播是按键触发的,startScan 不必真起线程;超时只是兜底
+        new Thread(() -> {
+            try { Thread.sleep(5_000); } catch (InterruptedException ignored) {}
+            if (cb != null) cb.onTimeout();
+        }, "BarcodeTimeout").start();
     }
 
-    @Override public void stopScan() {
-        if (decoder != null) { try { decoder.stopScan(); } catch (Exception ignored) {} }
-    }
+    @Override public void stopScan() { /* 广播无后台线程 */ }
     @Override public boolean isReady() { return ready; }
     @Override public void setCallback(ScannerCallback cb) { this.cb = cb; }
 }

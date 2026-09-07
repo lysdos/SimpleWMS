@@ -53,8 +53,9 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
     implementation 'com.squareup.okhttp3:okhttp:3.12.0'
     implementation 'com.google.code.gson:gson:2.10.1'
-    // 东集 iData 硬件 SDK(DeviceAPI)。UHF + 光学条码统一打在这个 aar 里。
-    implementation files('libs/DeviceAPI_ver20230301_release.aar')
+    // 优博讯 UROVO RFID SDK(URFIDLibrary v2.4.1226)
+    // 仿照 E:\Code\huaxiaapp 项目使用,适配同款 PDA
+    implementation files('libs/URFIDLibrary-v2.4.1226.aar')
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.0.0'
     testImplementation 'com.squareup.okhttp3:mockwebserver:3.12.0'

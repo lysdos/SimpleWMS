@@ -333,10 +333,11 @@ public class InboundScanActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 String url = "/api/products?keyword=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
-                ApiResponse<java.util.Map> resp = api.get(url, java.util.Map.class);
+                // 后端 ApiResponse<List<Product>>.data 是 List<Map>,不是 Map — 拿到 List 让 ApiClient 帮我们反序列化
+                ApiResponse<java.util.List> resp = api.get(url, java.util.List.class);
                 @SuppressWarnings("unchecked")
                 List<java.util.Map<String, Object>> rawList =
-                        resp == null || resp.data == null ? null : (List<java.util.Map<String, Object>>) resp.data.get("list");
+                        resp == null || resp.data == null ? null : resp.data;
                 results.clear();
                 List<String> labels = new ArrayList<>();
                 if (rawList != null) {
@@ -352,7 +353,12 @@ public class InboundScanActivity extends AppCompatActivity {
                     adapter.notifyDataSetChanged();
                 });
             } catch (ApiException e) {
-                // 商品搜索失败不阻塞,静默
+                runOnUiThread(() -> Toast.makeText(this,
+                        "搜索失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+            } catch (Throwable t) {
+                // 防御:任何其他异常(比如 Gson 类型不匹配)不让 App 崩
+                runOnUiThread(() -> Toast.makeText(this,
+                        "搜索异常: " + t.getClass().getSimpleName(), Toast.LENGTH_SHORT).show());
             }
         }).start();
     }
