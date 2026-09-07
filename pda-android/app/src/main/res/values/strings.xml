@@ -80,4 +80,12 @@
     <string name="outbound_cancel">取消单子</string>
     <string name="outbound_cancel_confirm">确认取消此单?已扫的码会丢失</string>
     <string name="outbound_commit_success">出库单已提交</string>
+
+    <!-- P5 入库扫码模式 -->
+    <string name="inbound_scan_hint">将条码/二维码对准取景框自动识别</string>
+    <string name="inbound_scan_qty_title">该商品加几件?</string>
+    <string name="inbound_scan_qty_hint">数量(默认1)</string>
+    <string name="inbound_scan_already_in">该码已在系统中,跳过</string>
+    <string name="inbound_scan_add_success">已加入</string>
+    <string name="inbound_scan_total">已扫 %1$d 件(%2$d 个商品)</string>
 </resources>
