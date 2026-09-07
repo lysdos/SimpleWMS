@@ -42,7 +42,7 @@ public class HomeActivity extends AppCompatActivity {
             startActivity(new Intent(this, LookupActivity.class)));
 
         findViewById(R.id.btnLogout).setOnClickListener(v -> {
-            session.clear();
+            session.clearAuth();
             startActivity(new Intent(this, com.wms.pda.ui.login.LoginActivity.class));
             finish();
         });

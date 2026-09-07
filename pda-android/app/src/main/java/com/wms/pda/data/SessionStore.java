@@ -41,6 +41,16 @@ public class SessionStore {
         sp.edit().putString(K_BASE_URL, url).apply();
     }
 
+    /** 清空登录态(退出登录),保留服务器地址便于下次直接登录。 */
+    public void clearAuth() {
+        sp.edit()
+            .remove(K_TOKEN)
+            .remove(K_USERNAME)
+            .remove(K_ROLE)
+            .apply();
+    }
+
+    /** 全部清空(含服务器地址)。 */
     public void clear() {
         sp.edit().clear().apply();
     }

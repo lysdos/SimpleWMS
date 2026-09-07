@@ -31,7 +31,7 @@ public class ApiClient {
 
     public ApiClient(SessionStore session) {
         this.session = session;
-        this.baseUrl = resolveBaseUrl(session);
+        this.baseUrl = trimTrailingSlash(resolveBaseUrl(session));
         this.http = new OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
@@ -43,6 +43,16 @@ public class ApiClient {
         String override = session.getBaseUrl();
         if (override != null && !override.isEmpty()) return override;
         return com.wms.pda.BuildConfig.API_BASE_URL;
+    }
+
+    /** 去掉末尾斜杠,保证 baseUrl + "/api/..." 拼接不会出现双斜杠。 */
+    private static String trimTrailingSlash(String url) {
+        if (url == null) return url;
+        String s = url.trim();
+        while (s.endsWith("/")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
     }
 
     private Interceptor authInterceptor() {
