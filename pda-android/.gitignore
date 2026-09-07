@@ -5,3 +5,7 @@ local.properties
 *.iml
 captures/
 .cxx/
+
+# Release keystore(由 gradle 生成,不入库)
+*.jks
+*.keystore

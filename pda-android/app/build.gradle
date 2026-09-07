@@ -21,10 +21,10 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("../../uhf-uart-demo/app/uhf-serial_release.jks")
-            storePassword "123456"
-            keyAlias "uhf-serial-key"
-            keyPassword "123456"
+            storeFile file("../pda-release.jks")
+            storePassword "change-me-now"
+            keyAlias "pda-release"
+            keyPassword "change-me-now"
         }
     }
 
