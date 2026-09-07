@@ -34,6 +34,13 @@ public class InboundOrderDao {
         o.setItemCount(rs.getInt("item_count"));
         java.sql.Timestamp ts = rs.getTimestamp("created_at");
         o.setCreatedAt(ts == null ? null : ts.toLocalDateTime());
+        // status 字段为兼容老数据(可能不存在)做 wasNull 处理
+        try {
+            String s = rs.getString("status");
+            o.setStatus(rs.wasNull() ? InboundOrder.STATUS_DRAFT : s);
+        } catch (java.sql.SQLException ignored) {
+            o.setStatus(InboundOrder.STATUS_DRAFT);
+        }
         return o;
     };
 
@@ -50,6 +57,7 @@ public class InboundOrderDao {
         it.setUnitPrice(price);
         it.setBeforeQty(rs.getInt("before_qty"));
         it.setAfterQty(rs.getInt("after_qty"));
+        it.setLocation(rs.getString("location"));
         it.setRowRemark(rs.getString("row_remark"));
         java.sql.Timestamp ts = rs.getTimestamp("created_at");
         it.setCreatedAt(ts == null ? null : ts.toLocalDateTime());
@@ -81,8 +89,8 @@ public class InboundOrderDao {
 
     public void insertItem(InboundOrderItem it) {
         String sql = "INSERT INTO inbound_order_item (order_id, product_id, sku, product_name, " +
-                "supplier, quantity, unit_price, before_qty, after_qty, row_remark) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?)";
+                "supplier, quantity, unit_price, before_qty, after_qty, location, row_remark) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
         jdbc.update(sql,
                 it.getOrderId(),
                 it.getProductId(),
@@ -93,7 +101,30 @@ public class InboundOrderDao {
                 it.getUnitPrice(),
                 it.getBeforeQty(),
                 it.getAfterQty(),
+                it.getLocation(),
                 it.getRowRemark());
+    }
+
+    /** 更新入库单状态(DRAFT / COMMITTED / CANCELLED) */
+    public int updateStatus(int orderId, String status) {
+        return jdbc.update(
+                "UPDATE inbound_order SET status = ? WHERE id = ?",
+                status, orderId);
+    }
+
+    /** 重算 total_quantity 和 item_count(明细增删后调用) */
+    public void refreshAggregates(int orderId) {
+        jdbc.update(
+                "UPDATE inbound_order o SET " +
+                "  total_quantity = COALESCE((SELECT SUM(quantity) FROM inbound_order_item WHERE order_id = o.id), 0), " +
+                "  item_count    = COALESCE((SELECT COUNT(*) FROM inbound_order_item WHERE order_id = o.id), 0) " +
+                "WHERE o.id = ?",
+                orderId);
+    }
+
+    /** 删除指定单的全部明细(rollback 时用) */
+    public int deleteItemsByOrderId(int orderId) {
+        return jdbc.update("DELETE FROM inbound_order_item WHERE order_id = ?", orderId);
     }
 
     public InboundOrder findOrderById(int id) {
@@ -112,10 +143,11 @@ public class InboundOrderDao {
      * 列表查询(单库通用)。
      * 必传: beginDate, endDate (yyyy-MM-dd 或 'all')
      * 选传: keyword (单号/供应商/外部单号/备注 模糊), operator
+     *      status (DRAFT / COMMITTED / CANCELLED,空=全部)
      * 分页: page, pageSize
      */
     public List<InboundOrder> findOrders(String beginDate, String endDate,
-                                        String keyword, String operator,
+                                        String keyword, String operator, String status,
                                         int page, int pageSize) {
         StringBuilder sb = new StringBuilder("SELECT * FROM inbound_order WHERE 1=1");
         List<Object> args = new ArrayList<>();
@@ -136,6 +168,10 @@ public class InboundOrderDao {
             sb.append(" AND operator = ?");
             args.add(operator);
         }
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+            sb.append(" AND status = ?");
+            args.add(status);
+        }
         sb.append(" ORDER BY id DESC");
         int lim = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
         int offset = page <= 0 ? 0 : (page - 1) * lim;
@@ -144,7 +180,7 @@ public class InboundOrderDao {
     }
 
     public long countOrders(String beginDate, String endDate,
-                            String keyword, String operator) {
+                            String keyword, String operator, String status) {
         StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM inbound_order WHERE 1=1");
         List<Object> args = new ArrayList<>();
         if (beginDate != null && !beginDate.isBlank() && !"all".equalsIgnoreCase(beginDate)) {
@@ -163,6 +199,10 @@ public class InboundOrderDao {
         if (operator != null && !operator.isBlank()) {
             sb.append(" AND operator = ?");
             args.add(operator);
+        }
+        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
+            sb.append(" AND status = ?");
+            args.add(status);
         }
         Long c = jdbc.queryForObject(sb.toString(), Long.class, args.toArray());
         return c == null ? 0L : c;

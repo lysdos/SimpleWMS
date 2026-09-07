@@ -6,6 +6,11 @@ import java.util.List;
 
 public class InboundOrder {
 
+    /** 状态机常量:DRAFT=草稿 / COMMITTED=已提交 / CANCELLED=已取消 */
+    public static final String STATUS_DRAFT = "DRAFT";
+    public static final String STATUS_COMMITTED = "COMMITTED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
+
     private Integer id;
     private String orderNo;
     private String externalNo;
@@ -14,6 +19,7 @@ public class InboundOrder {
     private Integer totalQuantity;
     private Integer itemCount;
     private LocalDateTime createdAt;
+    private String status;
     private List<InboundOrderItem> items;
 
     public Integer getId() { return id; }
@@ -32,6 +38,8 @@ public class InboundOrder {
     public void setItemCount(Integer itemCount) { this.itemCount = itemCount; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public List<InboundOrderItem> getItems() { return items; }
     public void setItems(List<InboundOrderItem> items) { this.items = items; }
 

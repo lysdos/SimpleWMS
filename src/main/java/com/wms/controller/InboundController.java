@@ -70,7 +70,7 @@ public class InboundController {
             it.rowRemark  = asString(r.get("rowRemark"));
             items.add(it);
         }
-        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, operator);
+        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, operator, null);
         return ApiResponse.ok(order);
     }
 
@@ -89,18 +89,78 @@ public class InboundController {
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String operator,
+            @RequestParam(required = false, defaultValue = "DRAFT") String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         int ps = (pageSize <= 0 || pageSize > 200) ? 20 : pageSize;
         int p  = page <= 0 ? 1 : page;
-        var list = inboundService.listOrders(beginDate, endDate, keyword, operator, p, ps);
-        long total = inboundService.countOrders(beginDate, endDate, keyword, operator);
+        var list = inboundService.listOrders(beginDate, endDate, keyword, operator, status, p, ps);
+        long total = inboundService.countOrders(beginDate, endDate, keyword, operator, status);
         return ApiResponse.ok(Map.of(
                 "list", list,
                 "total", total,
                 "page", p,
                 "pageSize", ps
         ));
+    }
+
+    // ============================================================
+    // PDA 入库登记(DRAFT / COMMITTED / CANCELLED)流程
+    // ============================================================
+
+    /**
+     * 创建空草稿入库单。
+     * body: { externalNo?, remark? }
+     * 返回:完整 InboundOrder(status=DRAFT,total_quantity=0,item_count=0)
+     */
+    @PostMapping("/orders")
+    public ApiResponse<InboundOrder> createDraft(@RequestBody Map<String, Object> body,
+                                                  HttpServletRequest req) {
+        String operator = currentOperator(req);
+        String externalNo = asString(body == null ? null : body.get("externalNo"));
+        String remark = asString(body == null ? null : body.get("remark"));
+        InboundOrder o = inboundService.createDraft(externalNo, remark, operator);
+        return ApiResponse.ok(o);
+    }
+
+    /**
+     * 往草稿单追加一个明细行(关键:生成 N 个 inventory_item 24 位码)。
+     * body: { productId, quantity, supplier?, rowRemark? }
+     * 返回:更新后的 InboundOrder(含明细 + codes)
+     */
+    @PostMapping("/orders/{id}/items")
+    public ApiResponse<InboundOrder> addItem(@PathVariable int id,
+                                              @RequestBody Map<String, Object> body) {
+        if (body == null) throw new IllegalArgumentException("请求体不能为空");
+        Integer productId = asInt(body.get("productId"));
+        Integer quantity = asInt(body.get("quantity"));
+        if (productId == null) throw new IllegalArgumentException("请选择商品");
+        if (quantity == null || quantity <= 0) throw new IllegalArgumentException("入库数量必须大于 0");
+
+        InboundService.BatchItem it = new InboundService.BatchItem();
+        it.productId = productId;
+        it.quantity = quantity;
+        it.supplier = asString(body.get("supplier"));
+        it.rowRemark = asString(body.get("rowRemark"));
+        return ApiResponse.ok(inboundService.addItemToDraft(id, it));
+    }
+
+    /**
+     * 提交草稿单(DRAFT → COMMITTED)。返回完整单 + 每行 inventory_item.code 列表。
+     */
+    @PostMapping("/orders/{id}/commit")
+    public ApiResponse<InboundOrder> commit(@PathVariable int id) {
+        return ApiResponse.ok(inboundService.commitDraft(id));
+    }
+
+    /**
+     * 取消草稿单(DRAFT → CANCELLED)。
+     * 回滚:删该单的 inventory_item + 商品 quantity 减回去 + 删 inbound_order_item + 删相关 inventory_log。
+     */
+    @PostMapping("/orders/{id}/cancel")
+    public ApiResponse<Void> cancel(@PathVariable int id) {
+        inboundService.cancelDraft(id);
+        return ApiResponse.ok();
     }
 
     /** 入库单导出 CSV(明细) */
@@ -119,7 +179,7 @@ public class InboundController {
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
         sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
         sb.append('\n');
-        sb.append("序号,供应商,SKU,商品名称,数量,单价,操作前库存,操作后库存,行备注\n");
+        sb.append("序号,供应商,SKU,商品名称,库位,数量,单价,行备注\n");
         int idx = 1;
         if (o.getItems() != null) {
             for (InboundOrderItem it : o.getItems()) {
@@ -127,10 +187,9 @@ public class InboundController {
                   .append(csv(it.getSupplier())).append(',')
                   .append(csv(it.getSku())).append(',')
                   .append(csv(it.getProductName())).append(',')
+                  .append(csv(it.getLocation())).append(',')
                   .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
                   .append(it.getUnitPrice() == null ? "0.00" : it.getUnitPrice().toPlainString()).append(',')
-                  .append(it.getBeforeQty() == null ? 0 : it.getBeforeQty()).append(',')
-                  .append(it.getAfterQty() == null ? 0 : it.getAfterQty()).append(',')
                   .append(csv(it.getRowRemark())).append('\n');
             }
         }
