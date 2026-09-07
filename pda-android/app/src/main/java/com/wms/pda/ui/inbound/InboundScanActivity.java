@@ -88,7 +88,7 @@ public class InboundScanActivity extends AppCompatActivity {
                 }
                 // 2) 查 Product
                 ApiResponse<ProductDto> prodResp =
-                    api.get("/api/products/by-code/" + code, ProductDto.class);
+                    api.get("/api/inventory/items/by-code/" + code + "/product", ProductDto.class);
                 if (prodResp == null || prodResp.data == null) {
                     throw new ApiException(404, "商品未找到");
                 }
