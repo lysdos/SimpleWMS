@@ -1,6 +1,10 @@
-# 厂商 SDK
--keep class com.example.uhf.** { *; }
--keep class com.uhf.** { *; }
+# 厂商 SDK(东集 iData DeviceAPI)
+-keep class com.rscja.** { *; }
+-keep class com.rscja.team.** { *; }
+-dontwarn com.rscja.team.**
+-dontwarn vendor.**
+-dontwarn com.mediatek.**
+-dontwarn android.hardware.**
 
 # DTO
 -keep class com.wms.pda.model.** { *; }
