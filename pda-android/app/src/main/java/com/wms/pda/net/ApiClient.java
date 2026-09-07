@@ -75,8 +75,11 @@ public class ApiClient {
         if (body != null) {
             String json = gson.toJson(body);
             b.method(method, RequestBody.create(JSON, json));
+        } else if ("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method)) {
+            b.method(method, null);
         } else {
-            b.method(method, body == null && "GET".equals(method) ? null : null);
+            // POST/PUT/DELETE with null body: 显式发送空 JSON 体
+            b.method(method, RequestBody.create(JSON, "{}"));
         }
         return b.build();
     }
