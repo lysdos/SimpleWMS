@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.wms.pda.R;
 import com.wms.pda.data.SessionStore;
 import com.wms.pda.scan.ScanManager;
+import com.wms.pda.scan.ScanType;
 import com.wms.pda.ui.check.StockCheckActivity;
 import com.wms.pda.ui.inbound.InboundScanActivity;
 import com.wms.pda.ui.lookup.LookupActivity;
@@ -30,6 +31,20 @@ public class HomeActivity extends AppCompatActivity {
         tvUser.setText("👤 " + (session.getUsername() == null ? "?" : session.getUsername()));
 
         ScanManager mgr = ScanManager.get(this);
+        // 主动探测硬件:进主页就触发 init,失败显示真实原因
+        // (而不是一直显示"未就绪"让人误以为设备坏了)
+        try {
+            mgr.ensureReady(ScanType.RFID_EPC);
+        } catch (Throwable e) {
+            android.util.Log.w("HomeActivity", "UHF init failed", e);
+            Toast.makeText(this, "RFID 初始化失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+        try {
+            mgr.ensureReady(ScanType.BARCODE);
+        } catch (Throwable e) {
+            android.util.Log.w("HomeActivity", "Barcode init failed", e);
+            Toast.makeText(this, "扫码器初始化失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
         tvRfid.setText(mgr.isUhfReady() ? R.string.rfid_ready : R.string.rfid_offline);
 
         findViewById(R.id.btnInbound).setOnClickListener(v ->

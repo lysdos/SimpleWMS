@@ -51,6 +51,21 @@ public class ScanManager {
         if (barcode.isReady()) barcode.stopScan();
     }
 
+    /**
+     * 主动初始化硬件(不启动扫描)。失败抛 RuntimeException,UI 层捕获并 toast。
+     * 用于 HomeActivity 进入时主动探测,而不是等第一次扫码才暴露问题。
+     */
+    public void ensureReady(ScanType type) {
+        ScannerService svc = (type == ScanType.RFID_EPC) ? uhf : barcode;
+        if (!svc.isReady()) {
+            try {
+                svc.init(appCtx);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     /** 释放(应用退出时调用)。 */
     public void release() {
         uhf.release();
