@@ -14,8 +14,14 @@ public class GlobalExceptionHandler {
     /** 参数错误 */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> badArg(IllegalArgumentException e) {
+        // 业务约定:消息以 "码不存在" 或 "出库单不存在, id" 开头 → 资源不存在 → 404
+        String msg = e.getMessage() == null ? "" : e.getMessage();
+        if (msg.startsWith("码不存在") || msg.startsWith("出库单不存在, id=") || msg.startsWith("入库单不存在, id=")) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, msg));
+        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(400, e.getMessage()));
+                .body(ApiResponse.fail(400, msg));
     }
 
     /** 业务规则冲突(库存不足等) */

@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS outbound_order (
 );
 CREATE INDEX IF NOT EXISTS idx_outbound_order_created ON outbound_order(created_at);
 
+-- 出库单状态 (DRAFT=草稿 / COMMITTED=已提交 / CANCELLED=已取消)
+ALTER TABLE outbound_order ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'DRAFT';
+CREATE INDEX IF NOT EXISTS idx_outbound_order_status ON outbound_order(status);
+
 CREATE TABLE IF NOT EXISTS outbound_order_item (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     order_id        INT          NOT NULL,
