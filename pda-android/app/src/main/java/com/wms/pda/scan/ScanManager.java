@@ -52,6 +52,24 @@ public class ScanManager {
     }
 
     /**
+     * 由 Activity 在摄像头页(出库/盘点/扫码查询)调,绑定 CameraX 预览 + ML Kit 识别。
+     * 仅在 BarcodeScannerImpl 上有意义;RFID 不需要。
+     */
+    public void attachBarcodeCamera(androidx.lifecycle.LifecycleOwner owner,
+                                    androidx.camera.view.PreviewView previewView) {
+        if (barcode instanceof BarcodeScannerImpl) {
+            ((BarcodeScannerImpl) barcode).attachCamera(owner, previewView);
+        }
+    }
+
+    /** 释放摄像头,Activity onPause 时调。 */
+    public void detachBarcodeCamera() {
+        if (barcode instanceof BarcodeScannerImpl) {
+            ((BarcodeScannerImpl) barcode).detachCamera();
+        }
+    }
+
+    /**
      * 主动初始化硬件(不启动扫描)。失败抛 RuntimeException,UI 层捕获并 toast。
      * 用于 HomeActivity 进入时主动探测,而不是等第一次扫码才暴露问题。
      */
