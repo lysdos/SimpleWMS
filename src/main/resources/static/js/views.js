@@ -506,7 +506,7 @@ const Views = {
         </div>
         <div class="card">
             <div class="toolbar">
-                <select id="od-type" class="select" style="width:120px;">
+                <select id="od-type" class="select" style="width:120px;" onchange="searchOrders()">
                     <option value="IN"  ${type==='IN' ?'selected':''}>入库单</option>
                     <option value="OUT" ${type==='OUT'?'selected':''}>出库单</option>
                 </select>
@@ -517,7 +517,7 @@ const Views = {
                 <input id="od-kw" class="input input-sm" placeholder="单号 / 供应商 / 客户 / 外部单号 / 备注" value="${escapeHtml(kwVal)}" style="width:280px;">
                 <input id="od-op" class="input input-sm" placeholder="操作员(精确)" value="${escapeHtml(opVal)}" style="width:140px;">
                 <label style="font-size:13px;color:#5d6d7e;">状态</label>
-                <select id="od-status" class="select" style="width:110px;">
+                <select id="od-status" class="select" style="width:110px;" onchange="searchOrders()">
                     <option value=""           ${statusVal===''           ?'selected':''}>全部</option>
                     <option value="DRAFT"      ${statusVal==='DRAFT'      ?'selected':''}>草稿</option>
                     <option value="COMMITTED"  ${statusVal==='COMMITTED'  ?'selected':''}>已提交</option>
