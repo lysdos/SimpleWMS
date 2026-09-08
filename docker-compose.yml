@@ -37,6 +37,9 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-authentication-plugin=caching_sha2_password
+      # 关键:每个 client 连接时自动 SET NAMES utf8mb4,否则 docker MySQL 镜像默认
+      # character_set_client=latin1,导致中文 INSERT/SELECT 出现 mojibake
+      - --init-connect=SET NAMES utf8mb4
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
       interval: 10s
@@ -61,7 +64,7 @@ services:
       TZ: Asia/Shanghai
       # 关键:切到 mysql profile,DB host 用 docker 服务名
       SPRING_PROFILES_ACTIVE: mysql
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: wms
       SPRING_DATASOURCE_PASSWORD: wmspass
       SPRING_SQL_INIT_MODE: always

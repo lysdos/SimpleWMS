@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>盘点单详情 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+    <style>
+        .stk-row { padding:10px 0; border-bottom:1px solid var(--divider); }
+        .stk-row:last-child { border-bottom:none; }
+        .stk-row .head { display:flex; justify-content:space-between; align-items:center; }
+        .stk-row .id { font-weight:600; }
+        .stk-row .bar { font-size:11px; color:var(--text-hint); margin-top:2px; }
+        .stk-row .nums {
+            display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;
+            margin-top:8px; align-items:center;
+        }
+        .stk-row .nums .lbl { font-size:10px; color:var(--text-hint); }
+        .stk-row .nums .v   { font-size:14px; font-weight:600; }
+        .stk-row .nums input { height:32px; font-size:13px; }
+        .stk-row .diff-pos { color:var(--success); }
+        .stk-row .diff-neg { color:var(--danger); }
+    </style>
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right"><span>📶</span><span>🔋 86%</span></span>
+        </div>
+
+        <div class="appbar">
+            <button class="icon-btn back" onclick="history.back()">‹</button>
+            <div class="title">盘点单详情</div>
+        </div>
+
+        <div class="content">
+            <div class="card">
+                <div class="row between">
+                    <div class="title">PD3001</div>
+                    <span class="pill warn">待执行</span>
+                </div>
+                <div class="kv mt-8"><span class="k">盘点仓库</span><span class="v">主仓</span></div>
+                <div class="kv"><span class="k">盘点方式</span><span class="v">全盘</span></div>
+                <div class="kv"><span class="k">创建时间</span><span class="v">2026-09-08 07:30</span></div>
+                <div class="kv"><span class="k">进度</span><span class="v" id="progress">已盘 0 / 3 行</span></div>
+            </div>
+
+            <div class="scan-box">
+                <div class="ico">▣</div>
+                <div class="caption">扫码定位盘点行,或在下方表格中直接手填实盘数量。</div>
+                <button class="btn full lg mt-12" onclick="App.showScanDialog(onScan)">📷 扫码定位</button>
+            </div>
+
+            <div class="row between mt-16 mb-8">
+                <div class="subtitle">盘点明细</div>
+                <span class="caption">点击实盘数量框可编辑</span>
+            </div>
+
+            <div class="card" id="lines">
+                <div class="stk-row" data-sku="SKU-1001">
+                    <div class="head">
+                        <div>
+                            <div class="id">SKU-1001</div>
+                            <div class="bar">蓝牙条码扫描枪 · 6901234567001 · A-01-03</div>
+                        </div>
+                        <span class="pill draft">未盘</span>
+                    </div>
+                    <div class="nums">
+                        <div><div class="lbl">账面</div><div class="v">48</div></div>
+                        <div><div class="lbl">实盘</div><input class="input" type="number" data-actual placeholder="-" /></div>
+                        <div><div class="lbl">差异</div><div class="v" data-diff>—</div></div>
+                    </div>
+                </div>
+
+                <div class="stk-row" data-sku="SKU-1002">
+                    <div class="head">
+                        <div>
+                            <div class="id">SKU-1002</div>
+                            <div class="bar">热敏标签打印机 · 6901234567002 · A-01-04</div>
+                        </div>
+                        <span class="pill draft">未盘</span>
+                    </div>
+                    <div class="nums">
+                        <div><div class="lbl">账面</div><div class="v">12</div></div>
+                        <div><div class="lbl">实盘</div><input class="input" type="number" data-actual placeholder="-" /></div>
+                        <div><div class="lbl">差异</div><div class="v" data-diff>—</div></div>
+                    </div>
+                </div>
+
+                <div class="stk-row" data-sku="SKU-1003">
+                    <div class="head">
+                        <div>
+                            <div class="id">SKU-1003</div>
+                            <div class="bar">工业 PDA 终端 · 6901234567003 · A-02-01</div>
+                        </div>
+                        <span class="pill draft">未盘</span>
+                    </div>
+                    <div class="nums">
+                        <div><div class="lbl">账面</div><div class="v">6</div></div>
+                        <div><div class="lbl">实盘</div><input class="input" type="number" data-actual placeholder="-" /></div>
+                        <div><div class="lbl">差异</div><div class="v" data-diff>—</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding:10px 12px; background:#fff; border-top:1px solid var(--divider); flex-shrink:0;">
+            <button class="btn full lg" onclick="submitAll()">提交盘点</button>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+    const map = {
+        '6901234567001': 'SKU-1001',
+        '6901234567002': 'SKU-1002',
+        '6901234567003': 'SKU-1003',
+        '6901234567004': 'SKU-1004',
+        '6901234567005': 'SKU-1005',
+        '6901234567006': 'SKU-1006',
+        '6901234567007': 'SKU-1007',
+    };
+
+    function onScan(barcode) {
+        const sku = map[barcode];
+        if (!sku) { App.toast('未找到此条码: ' + barcode); return; }
+        const row = document.querySelector(`.stk-row[data-sku="${sku}"]`);
+        if (!row) { App.toast('此 SKU 不在本盘点单中'); return; }
+        const input = row.querySelector('input[data-actual]');
+        input.focus();
+        input.scrollIntoView({ block: 'center' });
+        row.style.background = 'rgba(30, 107, 255, 0.08)';
+        setTimeout(() => row.style.background = '', 1200);
+        App.toast('已定位: ' + sku);
+    }
+
+    // 实盘输入联动差异
+    document.querySelectorAll('input[data-actual]').forEach(inp => {
+        inp.addEventListener('input', () => {
+            const row = inp.closest('.stk-row');
+            const book = parseInt(row.querySelector('.nums .v').textContent);
+            const v = inp.value.trim() === '' ? null : parseInt(inp.value);
+            const diffEl = row.querySelector('[data-diff]');
+            const pill = row.querySelector('.pill');
+            if (v === null || isNaN(v)) {
+                diffEl.textContent = '—';
+                diffEl.className = 'v';
+                pill.className = 'pill draft';
+                pill.textContent = '未盘';
+            } else {
+                const d = v - book;
+                diffEl.textContent = (d > 0 ? '+' : '') + d;
+                diffEl.className = 'v ' + (d > 0 ? 'diff-pos' : (d < 0 ? 'diff-neg' : ''));
+                pill.className = 'pill ' + (d === 0 ? 'ok' : 'warn');
+                pill.textContent = d === 0 ? '一致' : (d > 0 ? '盘盈' : '盘亏');
+            }
+            updateProgress();
+        });
+    });
+
+    function updateProgress() {
+        const total = document.querySelectorAll('.stk-row').length;
+        const done = document.querySelectorAll('.stk-row input[data-actual]').length;
+        let counted = 0;
+        document.querySelectorAll('.stk-row input[data-actual]').forEach(i => {
+            if (i.value.trim() !== '') counted++;
+        });
+        document.getElementById('progress').textContent = `已盘 ${counted} / ${total} 行`;
+    }
+
+    function submitAll() {
+        const rows = document.querySelectorAll('.stk-row');
+        let miss = 0;
+        rows.forEach(r => {
+            const inp = r.querySelector('input[data-actual]');
+            if (inp.value.trim() === '') miss++;
+        });
+        if (miss > 0) {
+            App.confirm('提交盘点', `还有 ${miss} 行未盘,仍要提交吗?未盘的将按账面无差异处理。`, () => {
+                App.toast('盘点已提交,库存已校正');
+                setTimeout(() => history.back(), 800);
+            });
+            return;
+        }
+        App.confirm('提交盘点', '确认提交盘点结果?提交后将按差异校正库存。', () => {
+            App.toast('盘点已提交,库存已校正');
+            setTimeout(() => history.back(), 800);
+        });
+    }
+</script>
+</body>
+</html>

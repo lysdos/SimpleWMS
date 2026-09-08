@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>登录 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <!-- 状态栏 -->
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right">
+                <span>📶</span><span>🔋 86%</span>
+            </span>
+        </div>
+
+        <!-- 顶栏:Logo + 标题 + 设置入口 -->
+        <div class="appbar" style="background: var(--primary);">
+            <div style="flex:1; padding-left: 4px;">
+                <div style="font-size:17px; font-weight:600;">SimpleWMS PDA</div>
+                <div style="font-size:11px; opacity:0.85; margin-top:2px;">仓储作业终端</div>
+            </div>
+            <button class="icon-btn" title="设置" onclick="App.go('settings.html')">⚙</button>
+        </div>
+
+        <!-- 内容 -->
+        <div class="content">
+            <!-- 大 Logo 占位 -->
+            <div style="display:flex; flex-direction:column; align-items:center; margin:24px 0 12px;">
+                <div style="width:84px; height:84px; border-radius:18px; background:#E8F0FF;
+                            display:flex; align-items:center; justify-content:center;
+                            font-size:36px; color:var(--primary); font-weight:700;">W</div>
+                <div style="margin-top:10px; font-size:28px; color:var(--primary); font-weight:700; letter-spacing:2px;">WMS</div>
+            </div>
+
+            <!-- 服务器提示卡 -->
+            <div class="card">
+                <div class="caption">当前服务器</div>
+                <div class="body mt-4" style="font-weight:600; word-break:break-all;">
+                    http://10.0.2.2:8080
+                </div>
+                <div class="hint mt-4">点击右上角齿轮可更换服务器地址</div>
+            </div>
+
+            <!-- 账号 -->
+            <div class="field mt-16">
+                <label>账号</label>
+                <input class="input" placeholder="操作员账号" value="admin" />
+            </div>
+            <div class="field mt-12">
+                <label>密码</label>
+                <input class="input" type="password" value="123456" />
+            </div>
+
+            <div class="row mt-12 gap-6">
+                <input type="checkbox" id="remember" checked />
+                <label for="remember" class="caption">记住账号</label>
+            </div>
+
+            <button class="btn full lg mt-16" onclick="App.go('dashboard.html')">登录</button>
+
+            <div class="muted mt-16" style="text-align:center;">原型版本 · 数据为模拟</div>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+</body>
+</html>

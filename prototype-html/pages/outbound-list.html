@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>出库登记 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right"><span>📶</span><span>🔋 86%</span></span>
+        </div>
+
+        <div class="appbar">
+            <div class="title">出库登记</div>
+            <button class="icon-btn" onclick="App.toast('原型:已打开新建出库单')">＋</button>
+        </div>
+
+        <div class="subtabs" data-target="outbound">
+            <div class="tab active">待出库 (2)</div>
+            <div class="tab">已出库 (0)</div>
+        </div>
+
+        <div class="content">
+            <div data-pane-group="outbound" data-pane-index="0">
+                <div class="list-item" onclick="App.go('outbound-detail.html?id=CK2001')">
+                    <div class="head">
+                        <div class="id">CK2001</div>
+                        <span class="pill warn">待执行</span>
+                    </div>
+                    <div class="meta">客户/部门 · 生产线 A</div>
+                    <div class="meta">出库仓库 · 主仓</div>
+                    <div class="footer">
+                        <span>2 行</span><span>08:30</span>
+                    </div>
+                </div>
+                <div class="list-item" onclick="App.go('outbound-detail.html?id=CK2002')">
+                    <div class="head">
+                        <div class="id">CK2002</div>
+                        <span class="pill warn">待执行</span>
+                    </div>
+                    <div class="meta">客户/部门 · 工程部</div>
+                    <div class="meta">出库仓库 · 主仓</div>
+                    <div class="footer">
+                        <span>1 行</span><span>11:00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div data-pane-group="outbound" data-pane-index="1" style="display:none;">
+                <div class="card" style="text-align:center; padding:32px 16px; color:var(--text-hint);">
+                    暂无已完成的出库单
+                </div>
+            </div>
+        </div>
+
+        <div class="tabbar">
+            <div class="tab" data-tab="dashboard" onclick="App.go('dashboard.html')">
+                <div class="ico">⊞</div><div>仪表盘</div>
+            </div>
+            <div class="tab" data-tab="inbound" onclick="App.go('inbound-list.html')">
+                <div class="ico">⤓</div><div>入库</div>
+            </div>
+            <div class="tab active" data-tab="outbound">
+                <div class="ico">⤒</div><div>出库</div>
+            </div>
+            <div class="tab" data-tab="inventory" onclick="App.go('inventory.html')">
+                <div class="ico">▦</div><div>库存</div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+<script>App.bindBottomNav('outbound');</script>
+</body>
+</html>

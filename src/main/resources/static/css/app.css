@@ -7,7 +7,7 @@ html, body { margin: 0; padding: 0; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC",
                  "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
-    background: #f4f6f9;
+    background: #ffffff;
     color: #2c3e50;
     font-size: 14px;
     line-height: 1.5;
@@ -44,29 +44,68 @@ body {
 .app-header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 24px; height: 60px;
-    background: linear-gradient(135deg, #2c3e50, #4a6580);
-    color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+    color: #1a3a5c; box-shadow: 0 2px 8px rgba(33,150,243,0.10);
     position: sticky; top: 0; z-index: 50;
 }
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand .logo { font-size: 26px; }
-.brand .title { font-size: 20px; font-weight: 600; letter-spacing: 1px; }
-.brand .subtitle { font-size: 12px; opacity: 0.7; margin-left: 6px; }
+.brand .title { font-size: 20px; font-weight: 600; letter-spacing: 1px; color: #1a3a5c; }
+.brand .subtitle { font-size: 12px; opacity: 0.65; margin-left: 6px; color: #5d6d7e; }
 
-.nav { display: flex; gap: 4px; }
+.nav { display: flex; gap: 4px; align-items: center; }
 .nav-item {
-    color: #cfd9e2; text-decoration: none;
+    color: #2c3e50; text-decoration: none;
     padding: 8px 16px; border-radius: 6px;
     transition: all 0.18s;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
-.nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.nav-item .nav-icon {
+    font-size: 15px;
+    line-height: 1;
+    opacity: 0.95;
+}
+.nav-item:hover { background: rgba(33,150,243,0.10); color: #1565c0; }
 .nav-item.active {
-    background: rgba(255,255,255,0.18); color: #fff; font-weight: 500;
+    background: rgba(33,150,243,0.18); color: #0d47a1; font-weight: 600;
+}
+
+/* ---------- 二级下拉 ---------- */
+.nav-group { position: relative; }
+.nav-group .nav-parent { display: inline-flex; align-items: center; gap: 4px; }
+.nav-group .nav-parent .caret { font-size: 10px; opacity: 0.8; transition: transform 0.18s; }
+.nav-group.open .nav-parent .caret { transform: rotate(180deg); }
+.nav-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px); left: 0;
+    min-width: 180px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+    padding: 6px 0;
+    z-index: 200;
+}
+.nav-group:hover .nav-dropdown,
+.nav-group.open .nav-dropdown { display: block; }
+.nav-dropdown .nav-item {
+    display: flex;
+    align-items: center;
+    color: #2c3e50;
+    padding: 8px 18px;
+    border-radius: 0;
+}
+.nav-dropdown .nav-item:hover { background: #f4f6f9; color: #1f2d3d; }
+.nav-dropdown .nav-item.active {
+    background: #2c3e50; color: #fff; font-weight: 500;
 }
 
 .user-area .user {
-    padding: 4px 10px; background: rgba(255,255,255,0.1);
-    border-radius: 16px; font-size: 13px;
+    padding: 4px 10px; background: rgba(33,150,243,0.10);
+    border-radius: 16px; font-size: 13px; color: #1565c0;
 }
 
 /* ---------- 视图容器 ---------- */
@@ -87,7 +126,8 @@ body {
     background: #fff;
     border-radius: 8px;
     padding: 18px 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #eef2f6;
     margin-bottom: 18px;
 }
 .card-title {
@@ -269,20 +309,24 @@ body {
     background: #fff;
     color: #2c3e50;
     padding: 4px 6px;
+    /* 小五号字体(9pt) ≈ 12px;0.75rem */
+    font-size: 0.75rem;
 }
 .order-print h2 {
     text-align: center;
     letter-spacing: 4px;
     color: #2c3e50;
+    font-size: 1rem;  /* 小四号 15px,标题稍大 */
+    margin: 0 0 6px 0;
 }
 .order-print .order-meta {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px 24px;
+    gap: 4px 24px;
     background: #f8f9fa;
     border-radius: 6px;
-    padding: 12px 16px;
-    font-size: 13px;
+    padding: 8px 14px;
+    font-size: 0.75rem;  /* 小五号字体 */
     margin-top: 6px;
 }
 .order-print .order-meta label {
@@ -294,11 +338,44 @@ body {
 .order-print .order-meta span { color: #2c3e50; font-weight: 500; }
 .order-print .order-sign {
     color: #5d6d7e;
-    font-size: 13px;
+    font-size: 0.75rem;  /* 小五号字体 */
+}
+.order-print .table {
+    font-size: 0.75rem;  /* 小五号字体 - 入库单/出库单表体 */
+}
+.order-print .table th,
+.order-print .table td {
+    padding: 4px 8px;
 }
 .order-print .table tfoot td {
     background: #fafbfc;
     border-top: 2px solid #dde2e7;
+}
+
+/* ---------- 入/出库单内联 24 位编码(行下挂载,纯文字) ---------- */
+.order-print .barcode-row td {
+    border-bottom: 1px solid #eef0f3;
+}
+.codes-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 2px 0;
+}
+.code-chip {
+    display: inline-block;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    color: #2c3e50;
+    background: #fff;
+    border: 1px solid #dde2e7;
+    border-radius: 3px;
+    padding: 2px 8px;
+    word-break: break-all;
+    line-height: 1.3;
 }
 
 /* 打印:只保留入库单区域,其它全部隐藏 */
@@ -319,5 +396,26 @@ body {
     .modal-body { padding: 0 !important; overflow: visible !important; }
     .modal-body > :not(#order-print-area) { display: none !important; }
     .order-print .order-meta { background: #fff !important; border: 1px solid #ddd; }
+    .order-print {
+        /* 打印时强制小五号字体(9pt),无视浏览器默认缩放 */
+        font-size: 9pt !important;
+    }
+    .order-print h2 { font-size: 13pt !important; }
+    .order-print .table { font-size: 9pt !important; }
+    .order-print .order-meta,
+    .order-print .order-sign { font-size: 9pt !important; }
     .table th { background: #f0f0f0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    /* 编码区:打印样式紧凑,黑色单色 */
+    .order-print .barcode-row { page-break-inside: avoid; }
+    .order-print .codes-list {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    .order-print .code-chip {
+        border: 1px dashed #ccc !important;
+        background: transparent !important;
+        font-size: 8pt !important;
+        color: #000 !important;
+    }
 }

@@ -14,6 +14,7 @@ public class OutboundOrderItem {
     private BigDecimal unitPrice;
     private Integer beforeQty;
     private Integer afterQty;
+    private String location;
     private String rowRemark;
     private LocalDateTime createdAt;
 
@@ -35,6 +36,8 @@ public class OutboundOrderItem {
     public void setBeforeQty(Integer beforeQty) { this.beforeQty = beforeQty; }
     public Integer getAfterQty() { return afterQty; }
     public void setAfterQty(Integer afterQty) { this.afterQty = afterQty; }
+    public String getLocation() { return location; }
+    public void setLocation(String location) { this.location = location; }
     public String getRowRemark() { return rowRemark; }
     public void setRowRemark(String rowRemark) { this.rowRemark = rowRemark; }
     public LocalDateTime getCreatedAt() { return createdAt; }

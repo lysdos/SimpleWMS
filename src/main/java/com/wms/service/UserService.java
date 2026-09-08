@@ -115,4 +115,30 @@ public class UserService {
         if (userDao.findById(id).isEmpty()) throw new IllegalArgumentException("用户不存在");
         userDao.setEnabled(id, enabled);
     }
+
+    /**
+     * 删除用户:
+     *   1) 不删除用户所产生的业务记录(inventory_log / inbound_order / outbound_order
+     *      中的 operator 都是 VARCHAR,不是外键,天然不级联)
+     *   2) 不能删除自己
+     *   3) 不能删除最后一名 ADMIN(防止系统锁死)
+     *   4) 目标用户不存在 → 报错
+     */
+    @Transactional
+    public void delete(int id, int currentUserId) {
+        if (id == currentUserId) {
+            throw new IllegalArgumentException("不能删除当前登录的用户");
+        }
+        AppUser target = userDao.findById(id).orElseThrow(() ->
+                new IllegalArgumentException("用户不存在, id=" + id));
+        if ("ADMIN".equals(target.getRole())) {
+            long adminCount = userDao.listAll().stream()
+                    .filter(u -> "ADMIN".equals(u.getRole()))
+                    .count();
+            if (adminCount <= 1) {
+                throw new IllegalArgumentException("系统至少保留一名管理员,无法删除");
+            }
+        }
+        userDao.delete(id);
+    }
 }

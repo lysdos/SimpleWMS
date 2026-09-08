@@ -15,14 +15,23 @@
         <span class="subtitle">简单仓库管理系统</span>
     </div>
     <nav class="nav" id="nav">
-        <a class="nav-item" data-route="dashboard" data-roles="ADMIN,OPERATOR" href="#/dashboard">仪表盘</a>
-        <a class="nav-item" data-route="products"  data-roles="ADMIN"           href="#/products">商品管理</a>
-        <a class="nav-item" data-route="suppliers" data-roles="ADMIN"           href="#/suppliers">供应商</a>
-        <a class="nav-item" data-route="inbound"   data-roles="ADMIN,OPERATOR" href="#/inbound">入库登记</a>
-        <a class="nav-item" data-route="outbound"  data-roles="ADMIN,OPERATOR" href="#/outbound">出库登记</a>
-        <a class="nav-item" data-route="orders"    data-roles="ADMIN,OPERATOR" href="#/orders">出入库单</a>
-        <a class="nav-item" data-route="ledger"    data-roles="ADMIN"           href="#/ledger">库存流水</a>
-        <a class="nav-item" data-route="users"     data-roles="ADMIN"           href="#/users">用户管理</a>
+        <a class="nav-item" data-route="dashboard" data-roles="ADMIN,OPERATOR" href="#/dashboard"><span class="nav-icon">📊</span>仪表盘</a>
+        <a class="nav-item" data-route="inbound"   data-roles="ADMIN,OPERATOR" href="#/inbound"><span class="nav-icon">📥</span>入库登记</a>
+        <a class="nav-item" data-route="outbound"  data-roles="ADMIN,OPERATOR" href="#/outbound"><span class="nav-icon">📤</span>出库登记</a>
+        <a class="nav-item" data-route="orders"    data-roles="ADMIN,OPERATOR" href="#/orders"><span class="nav-icon">📋</span>出入库单</a>
+        <a class="nav-item" data-route="inventory" data-roles="ADMIN,OPERATOR" href="#/inventory"><span class="nav-icon">📦</span>库存管理</a>
+        <a class="nav-item" data-route="stock-checks" data-roles="ADMIN"             href="#/stock-checks"><span class="nav-icon">🔍</span>库存盘点</a>
+
+        <!-- 基础管理(下拉) -->
+        <div class="nav-group" data-roles="ADMIN">
+            <a class="nav-item nav-parent" href="javascript:void(0)" id="nav-basic"><span class="nav-icon">⚙</span>基础管理 <span class="caret">▾</span></a>
+            <div class="nav-dropdown" id="nav-basic-dropdown">
+                <a class="nav-item" data-route="products"  data-roles="ADMIN" href="#/products"><span class="nav-icon">🏷</span>商品管理</a>
+                <a class="nav-item" data-route="suppliers" data-roles="ADMIN" href="#/suppliers"><span class="nav-icon">🤝</span>供应商管理</a>
+                <a class="nav-item" data-route="locations" data-roles="ADMIN" href="#/locations"><span class="nav-icon">🗂</span>库位管理</a>
+                <a class="nav-item" data-route="users"     data-roles="ADMIN" href="#/users"><span class="nav-icon">👥</span>用户管理</a>
+            </div>
+        </div>
     </nav>
     <div class="user-area">
         <span id="me-name" class="user"></span>

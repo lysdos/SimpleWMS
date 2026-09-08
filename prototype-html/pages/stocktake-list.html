@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>库存盘点 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right"><span>📶</span><span>🔋 86%</span></span>
+        </div>
+
+        <div class="appbar">
+            <button class="icon-btn back" onclick="App.go('inventory.html')">‹</button>
+            <div class="title">库存盘点</div>
+            <button class="icon-btn" onclick="openCreate()">＋</button>
+        </div>
+
+        <div class="content">
+            <div class="caption mb-8">所有盘点单 · 点击进入详情</div>
+
+            <div class="list-item" onclick="App.go('stocktake-detail.html?id=PD3001')">
+                <div class="head">
+                    <div class="id">PD3001</div>
+                    <span class="pill warn">待执行</span>
+                </div>
+                <div class="meta">盘点仓库 · 主仓</div>
+                <div class="meta">盘点方式 · 全盘</div>
+                <div class="footer">
+                    <span>3 行 · 已盘 0 行</span>
+                    <span>2026-09-08 07:30</span>
+                </div>
+            </div>
+
+            <div class="list-item" onclick="App.go('stocktake-detail.html?id=PD3000')">
+                <div class="head">
+                    <div class="id">PD3000</div>
+                    <span class="pill ok">已完成</span>
+                </div>
+                <div class="meta">盘点仓库 · 分仓</div>
+                <div class="meta">盘点方式 · 动碰盘</div>
+                <div class="footer">
+                    <span>2 行 · 差异 -1</span>
+                    <span>2026-09-07 18:00</span>
+                </div>
+            </div>
+
+            <div class="list-item" onclick="App.go('stocktake-detail.html?id=PD2999')">
+                <div class="head">
+                    <div class="id">PD2999</div>
+                    <span class="pill ok">已完成</span>
+                </div>
+                <div class="meta">盘点仓库 · 主仓</div>
+                <div class="meta">盘点方式 · 抽样盘</div>
+                <div class="footer">
+                    <span>5 行 · 无差异</span>
+                    <span>2026-09-05 16:20</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+function openCreate() {
+    const screen = document.querySelector('.pda-screen');
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+        <div class="modal" style="max-width:300px;">
+            <div class="head">创建盘点单</div>
+            <div class="body">
+                <div class="field">
+                    <label>盘点仓库</label>
+                    <select class="input"><option>主仓</option><option>分仓</option></select>
+                </div>
+                <div class="field mt-12">
+                    <label>盘点方式</label>
+                    <select class="input">
+                        <option>全盘</option>
+                        <option>动碰盘</option>
+                        <option>抽样盘</option>
+                    </select>
+                </div>
+                <div class="caption mt-12" style="line-height:1.6;">
+                    创建后系统会按仓库 + 方式生成盘点行,等待逐项扫码/手填实盘数量。
+                </div>
+            </div>
+            <div class="actions">
+                <button data-act="cancel">取消</button>
+                <button class="primary" data-act="ok">创建</button>
+            </div>
+        </div>
+    `;
+    screen.appendChild(mask);
+    mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+    mask.querySelector('[data-act="cancel"]').onclick = () => mask.remove();
+    mask.querySelector('[data-act="ok"]').onclick = () => {
+        mask.remove();
+        App.toast('已创建盘点单 PD3002');
+        setTimeout(() => App.go('stocktake-detail.html?id=PD3002'), 600);
+    };
+}
+</script>
+</body>
+</html>

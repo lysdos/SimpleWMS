@@ -1,24 +1,28 @@
 window.UserAdminView = {
     async render() {
         const users = await api.get('/api/users');
-        const rows = users.map(u => `
+        const meId = state.currentUser ? (await api.get('/api/auth/me')).userId : null;
+        const rows = users.map(u => {
+            const isSelf = meId === u.id;
+            return `
             <tr>
                 <td>${u.id}</td>
-                <td>${escapeHtml(u.username)}</td>
+                <td>${escapeHtml(u.username)}${isSelf ? ' <span class="badge ok">我</span>' : ''}</td>
                 <td>${u.role}</td>
                 <td>${u.enabled ? '✅' : '❌'}</td>
                 <td>${u.mustChangePw ? '⚠️' : ''}</td>
                 <td>
                     <button class="btn-link" onclick="UserAdminView.resetPw(${u.id}, '${escapeHtml(u.username)}')">重置密码</button>
                     <button class="btn-link" onclick="UserAdminView.toggleEnabled(${u.id}, ${!u.enabled})">${u.enabled ? '禁用' : '启用'}</button>
+                    <button class="btn-link danger" ${isSelf ? 'disabled title="不能删除当前登录的用户"' : ''} onclick="UserAdminView.deleteUser(${u.id}, '${escapeHtml(u.username)}')">删除</button>
                 </td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
         return `
             <div class="page-head">
                 <div>
                     <h2>用户管理</h2>
-                    <div class="desc">维护系统账号与角色</div>
+                    <div class="desc">维护系统账号与角色。删除用户不会删除其业务记录(库存流水 / 出入库单保留原操作员字段)</div>
                 </div>
                 <button class="btn btn-primary" onclick="UserAdminView.newUser()">+ 新建用户</button>
             </div>
@@ -64,5 +68,17 @@ window.UserAdminView = {
             toast(enable ? '已启用' : '已禁用', 'success');
             loadUsers();
         } catch (e) { toast(e.message, 'error'); }
+    },
+    async deleteUser(id, name) {
+        confirmModal(
+            `确认删除用户「${name}」?\n\n该用户的库存流水 / 出入库单等业务记录将保留(operator 字段保留原用户名)。`,
+            async () => {
+                try {
+                    await api.del('/api/users/' + id);
+                    toast('已删除', 'success');
+                    loadUsers();
+                } catch (e) { toast(e.message, 'error'); }
+            }
+        );
     }
 };

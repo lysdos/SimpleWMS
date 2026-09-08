@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>库存管理 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right"><span>📶</span><span>🔋 86%</span></span>
+        </div>
+
+        <div class="appbar">
+            <div class="title">库存管理</div>
+            <button class="icon-btn" onclick="App.toast('已刷新')">↻</button>
+        </div>
+
+        <div class="content" style="padding-top:8px;">
+            <!-- 子入口:盘点 -->
+            <div class="row gap-8">
+                <button class="btn outline full" onclick="App.go('stocktake-list.html')">📋 库存盘点</button>
+            </div>
+
+            <!-- 搜索 -->
+            <div class="row gap-6 mt-12">
+                <input class="input" placeholder="按 SKU / 名称 / 条码搜索" style="flex:1;" />
+                <button class="btn" onclick="App.toast('已搜索')">搜索</button>
+            </div>
+
+            <!-- 库存列表 -->
+            <div class="mt-12">
+                <div class="card inv-item">
+                    <div class="row between">
+                        <div class="title">SKU-1001</div>
+                        <span class="pill warn">预警</span>
+                    </div>
+                    <div class="body mt-4">蓝牙条码扫描枪</div>
+                    <div class="caption">条码 6901234567001</div>
+                    <div class="caption">主仓 · A-01-03</div>
+                    <div class="row gap-12 mt-8">
+                        <div class="caption">在库 <span style="color:var(--primary); font-weight:700; font-size:18px; margin-left:4px;">48</span> 台</div>
+                        <div class="caption">可用 <span style="font-weight:500; margin-left:4px;">42</span></div>
+                        <div class="caption">锁定 <span style="font-weight:500; margin-left:4px;">6</span></div>
+                    </div>
+                    <div class="ops">
+                        <button class="btn outline" onclick="App.toast('已生成条码:SKU-1001')">打印条码</button>
+                        <button class="btn outline accent" onclick="openTransfer('SKU-1001','主仓',42)">调拨</button>
+                        <button class="btn outline danger" onclick="openScrap('SKU-1001','主仓',48)">报废</button>
+                    </div>
+                </div>
+
+                <div class="card inv-item">
+                    <div class="row between">
+                        <div class="title">SKU-1002</div>
+                        <span class="pill warn">预警</span>
+                    </div>
+                    <div class="body mt-4">热敏标签打印机</div>
+                    <div class="caption">条码 6901234567002</div>
+                    <div class="caption">主仓 · A-01-04</div>
+                    <div class="row gap-12 mt-8">
+                        <div class="caption">在库 <span style="color:var(--primary); font-weight:700; font-size:18px; margin-left:4px;">12</span> 台</div>
+                        <div class="caption">可用 <span style="font-weight:500; margin-left:4px;">10</span></div>
+                        <div class="caption">锁定 <span style="font-weight:500; margin-left:4px;">2</span></div>
+                    </div>
+                    <div class="ops">
+                        <button class="btn outline" onclick="App.toast('已生成条码:SKU-1002')">打印条码</button>
+                        <button class="btn outline accent" onclick="openTransfer('SKU-1002','主仓',10)">调拨</button>
+                        <button class="btn outline danger" onclick="openScrap('SKU-1002','主仓',12)">报废</button>
+                    </div>
+                </div>
+
+                <div class="card inv-item">
+                    <div class="row between">
+                        <div class="title">SKU-1004</div>
+                    </div>
+                    <div class="body mt-4">不干胶标签 50x30</div>
+                    <div class="caption">条码 6901234567004</div>
+                    <div class="caption">主仓 · B-03-02</div>
+                    <div class="row gap-12 mt-8">
+                        <div class="caption">在库 <span style="color:var(--primary); font-weight:700; font-size:18px; margin-left:4px;">320</span> 卷</div>
+                        <div class="caption">可用 <span style="font-weight:500; margin-left:4px;">320</span></div>
+                        <div class="caption">锁定 <span style="font-weight:500; margin-left:4px;">0</span></div>
+                    </div>
+                    <div class="ops">
+                        <button class="btn outline" onclick="App.toast('已生成条码:SKU-1004')">打印条码</button>
+                        <button class="btn outline accent" onclick="openTransfer('SKU-1004','主仓',320)">调拨</button>
+                        <button class="btn outline danger" onclick="openScrap('SKU-1004','主仓',320)">报废</button>
+                    </div>
+                </div>
+
+                <div class="card inv-item">
+                    <div class="row between">
+                        <div class="title">SKU-1006</div>
+                    </div>
+                    <div class="body mt-4">周转箱 600x400</div>
+                    <div class="caption">条码 6901234567006</div>
+                    <div class="caption">分仓 · C-01-01</div>
+                    <div class="row gap-12 mt-8">
+                        <div class="caption">在库 <span style="color:var(--primary); font-weight:700; font-size:18px; margin-left:4px;">75</span> 个</div>
+                        <div class="caption">可用 <span style="font-weight:500; margin-left:4px;">70</span></div>
+                        <div class="caption">锁定 <span style="font-weight:500; margin-left:4px;">5</span></div>
+                    </div>
+                    <div class="ops">
+                        <button class="btn outline" onclick="App.toast('已生成条码:SKU-1006')">打印条码</button>
+                        <button class="btn outline accent" onclick="openTransfer('SKU-1006','分仓',70)">调拨</button>
+                        <button class="btn outline danger" onclick="openScrap('SKU-1006','分仓',75)">报废</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabbar">
+            <div class="tab" data-tab="dashboard" onclick="App.go('dashboard.html')">
+                <div class="ico">⊞</div><div>仪表盘</div>
+            </div>
+            <div class="tab" data-tab="inbound" onclick="App.go('inbound-list.html')">
+                <div class="ico">⤓</div><div>入库</div>
+            </div>
+            <div class="tab" data-tab="outbound" onclick="App.go('outbound-list.html')">
+                <div class="ico">⤒</div><div>出库</div>
+            </div>
+            <div class="tab active" data-tab="inventory">
+                <div class="ico">▦</div><div>库存</div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+function openTransfer(sku, fromWh, available) {
+    const target = fromWh === '主仓' ? '分仓' : '主仓';
+    const screen = document.querySelector('.pda-screen');
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+        <div class="modal" style="max-width:300px;">
+            <div class="head">库存调拨</div>
+            <div class="body">
+                <div class="caption">${sku} · 从 ${fromWh} 调出</div>
+                <div class="caption mt-8">可用 <b style="color:var(--primary);">${available}</b> ${fromWh==='主仓'?'台/卷/个':''}</div>
+                <div class="field mt-12">
+                    <label>调入仓库</label>
+                    <select class="input"><option>${target}</option></select>
+                </div>
+                <div class="field mt-12">
+                    <label>调拨数量</label>
+                    <input class="input" type="number" id="__t_qty" placeholder="数量" />
+                </div>
+            </div>
+            <div class="actions">
+                <button data-act="cancel">取消</button>
+                <button class="primary" data-act="ok">确认</button>
+            </div>
+        </div>
+    `;
+    screen.appendChild(mask);
+    mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+    mask.querySelector('[data-act="cancel"]').onclick = () => mask.remove();
+    mask.querySelector('[data-act="ok"]').onclick = () => {
+        const q = parseInt(mask.querySelector('#__t_qty').value || '0');
+        if (q <= 0 || q > available) { App.toast('数量超过可用数 ' + available); return; }
+        mask.remove();
+        App.toast(`调拨完成 ${sku} ${fromWh} → ${target} × ${q}`);
+    };
+}
+
+function openScrap(sku, warehouse, onHand) {
+    const screen = document.querySelector('.pda-screen');
+    const mask = document.createElement('div');
+    mask.className = 'modal-mask';
+    mask.innerHTML = `
+        <div class="modal" style="max-width:300px;">
+            <div class="head">库存报废</div>
+            <div class="body">
+                <div class="caption">${sku} · ${warehouse}</div>
+                <div class="caption mt-8">在库 <b>${onHand}</b></div>
+                <div class="field mt-12">
+                    <label>报废数量</label>
+                    <input class="input" type="number" id="__s_qty" placeholder="数量" />
+                </div>
+                <div class="field mt-12">
+                    <label>报废原因</label>
+                    <select class="input">
+                        <option>过期</option><option>损坏</option><option>性能不达标</option>
+                        <option>客户退货</option><option>其它</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions">
+                <button data-act="cancel">取消</button>
+                <button class="primary" data-act="ok">确认</button>
+            </div>
+        </div>
+    `;
+    screen.appendChild(mask);
+    mask.addEventListener('click', e => { if (e.target === mask) mask.remove(); });
+    mask.querySelector('[data-act="cancel"]').onclick = () => mask.remove();
+    mask.querySelector('[data-act="ok"]').onclick = () => {
+        const q = parseInt(mask.querySelector('#__s_qty').value || '0');
+        if (q <= 0 || q > onHand) { App.toast('数量超过在库数 ' + onHand); return; }
+        mask.remove();
+        App.toast(`已报废 ${sku} × ${q}`);
+    };
+}
+</script>
+</body>
+</html>

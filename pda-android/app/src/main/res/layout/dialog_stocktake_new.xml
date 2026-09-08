@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/space_lg">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/stocktake_warehouse"
+        style="@style/Text.Caption" />
+
+    <Spinner
+        android:id="@+id/sp_warehouse"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/touch_min"
+        android:layout_marginTop="@dimen/space_xs"
+        android:background="@drawable/bg_input" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:text="@string/stocktake_mode"
+        style="@style/Text.Caption" />
+
+    <Spinner
+        android:id="@+id/sp_mode"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/touch_min"
+        android:layout_marginTop="@dimen/space_xs"
+        android:background="@drawable/bg_input" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:text="@string/stocktake_create_fmt"
+        android:lineSpacingExtra="2dp"
+        style="@style/Text.Caption" />
+</LinearLayout>

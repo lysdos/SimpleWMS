@@ -24,11 +24,15 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".ui.home.HomeActivity" android:exported="false" />
-        <activity android:name=".ui.inbound.InboundScanActivity" android:exported="false" />
-        <activity android:name=".ui.outbound.OutboundScanActivity" android:exported="false" />
-        <activity android:name=".ui.check.StockCheckActivity" android:exported="false" />
-        <activity android:name=".ui.lookup.LookupActivity" android:exported="false" />
+        <!-- 主框架 + 详情/新建/设置/盘点 — 对齐 prototype-html -->
+        <activity android:name=".ui.main.MainActivity"        android:exported="false" />
+        <activity android:name=".ui.login.SettingsActivity"   android:exported="false" />
+        <activity android:name=".ui.inbound.InboundDetailActivity"  android:exported="false" />
+        <activity android:name=".ui.inbound.InboundNewActivity"     android:exported="false" />
+        <activity android:name=".ui.outbound.OutboundDetailActivity" android:exported="false" />
+        <activity android:name=".ui.outbound.OutboundNewActivity"    android:exported="false" />
+        <activity android:name=".ui.stocktake.StocktakeListActivity"  android:exported="false" />
+        <activity android:name=".ui.stocktake.StocktakeDetailActivity" android:exported="false" />
 
     </application>
 </manifest>

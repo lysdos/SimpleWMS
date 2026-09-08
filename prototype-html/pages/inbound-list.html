@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>入库登记 · SimpleWMS PDA</title>
+    <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+<div class="pda">
+    <div class="pda-screen">
+        <div class="status-bar">
+            <span>09:12</span>
+            <span class="right"><span>📶</span><span>🔋 86%</span></span>
+        </div>
+
+        <div class="appbar">
+            <div class="title">入库登记</div>
+            <button class="icon-btn" onclick="App.toast('原型:已打开新建入库单')">＋</button>
+        </div>
+
+        <!-- 子 Tab -->
+        <div class="subtabs" data-target="inbound">
+            <div class="tab active">待入库 (2)</div>
+            <div class="tab">已入库 (1)</div>
+        </div>
+
+        <div class="content">
+            <!-- 待入库 -->
+            <div data-pane-group="inbound" data-pane-index="0">
+                <div class="list-item" onclick="App.go('inbound-detail.html?id=RK1001')">
+                    <div class="head">
+                        <div class="id">RK1001</div>
+                        <span class="pill warn">待执行</span>
+                    </div>
+                    <div class="meta">供应商 · 上海某科技公司</div>
+                    <div class="meta">目标仓库 · 主仓</div>
+                    <div class="footer">
+                        <span>2 行</span><span>09:12</span>
+                    </div>
+                </div>
+                <div class="list-item" onclick="App.go('inbound-detail.html?id=RK1002')">
+                    <div class="head">
+                        <div class="id">RK1002</div>
+                        <span class="pill warn">待执行</span>
+                    </div>
+                    <div class="meta">供应商 · 深圳某物联公司</div>
+                    <div class="meta">目标仓库 · 分仓</div>
+                    <div class="footer">
+                        <span>1 行</span><span>10:05</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 已入库 -->
+            <div data-pane-group="inbound" data-pane-index="1" style="display:none;">
+                <div class="list-item" onclick="App.go('inbound-detail.html?id=RK0993')">
+                    <div class="head">
+                        <div class="id">RK0993</div>
+                        <span class="pill ok">已完成</span>
+                    </div>
+                    <div class="meta">供应商 · 上海某科技公司</div>
+                    <div class="meta">目标仓库 · 主仓</div>
+                    <div class="footer">
+                        <span>1 行</span><span>昨天 16:40</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabbar">
+            <div class="tab" data-tab="dashboard" onclick="App.go('dashboard.html')">
+                <div class="ico">⊞</div><div>仪表盘</div>
+            </div>
+            <div class="tab active" data-tab="inbound">
+                <div class="ico">⤓</div><div>入库</div>
+            </div>
+            <div class="tab" data-tab="outbound" onclick="App.go('outbound-list.html')">
+                <div class="ico">⤒</div><div>出库</div>
+            </div>
+            <div class="tab" data-tab="inventory" onclick="App.go('inventory.html')">
+                <div class="ico">▦</div><div>库存</div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="../js/app.js"></script>
+<script>App.bindBottomNav('inbound');</script>
+</body>
+</html>

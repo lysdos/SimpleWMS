@@ -119,11 +119,12 @@ public class ProductDao {
             ps.setString(9, p.getRemark());
             return ps;
         }, kh);
-        Map<String, Object> keys = kh.getKeys();
-        if (keys != null && keys.get("id") != null) {
-            return ((Number) keys.get("id")).intValue();
+        Number k = kh.getKey();
+        if (k == null) {
+            Map<String, Object> keys = kh.getKeys();
+            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
         }
-        return 0;
+        return k == null ? 0 : k.intValue();
     }
 
     public int update(Product p) {

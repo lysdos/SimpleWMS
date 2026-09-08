@@ -50,4 +50,17 @@ docker-data/
 # 9) 其他工具/AI 内部目录(不属于本项目)
 .superpowers/
 .claude/
-docs/
+# 注意:docs/ 目录有意保留(产品 PRD / API 规范 / PDA 设计 等正式文档)
+
+# 10) 临时文件 / 截图 / 一次性输出(测试时残留)
+bc.png
+bc_nginx.png
+test-barcode.png
+tmp_barcode.png
+tmp.json
+tmp2.json
+tmp3.json
+tmp_r.json
+tmp_a.csv
+tmp_b.csv
+tmp_export.csv

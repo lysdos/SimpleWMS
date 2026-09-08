@@ -4,10 +4,14 @@
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/simple_wms?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    # 关键:连接建立后立即 SET NAMES utf8mb4,强制 client/connection/results 都是 utf8mb4
+    # (MySQL 8 在 docker 镜像里默认 character_set_client=latin1,会导致中文 mojibake)
+    url: jdbc:mysql://localhost:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: root
+    hikari:
+      connection-init-sql: "SET NAMES utf8mb4"
   sql:
     init:
       mode: always

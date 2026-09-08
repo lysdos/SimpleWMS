@@ -64,24 +64,4 @@ public class InventoryLogDao {
         }
         return 0;
     }
-
-    public List<InventoryLog> findLogs(String type, String keyword, Integer limit) {
-        StringBuilder sb = new StringBuilder(
-                "SELECT * FROM inventory_log WHERE 1=1");
-        java.util.List<Object> args = new java.util.ArrayList<>();
-        if (type != null && !type.isBlank() && !"ALL".equalsIgnoreCase(type)) {
-            sb.append(" AND type = ?");
-            args.add(type);
-        }
-        if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (sku LIKE ? OR product_name LIKE ? OR remark LIKE ? OR operator LIKE ?)");
-            String like = "%" + keyword.trim() + "%";
-            args.add(like); args.add(like); args.add(like); args.add(like);
-        }
-        sb.append(" ORDER BY id DESC");
-        int lim = (limit == null || limit <= 0 || limit > 500) ? 200 : limit;
-        sb.append(" LIMIT ").append(lim);
-
-        return jdbc.query(sb.toString(), ROW, args.toArray());
-    }
 }

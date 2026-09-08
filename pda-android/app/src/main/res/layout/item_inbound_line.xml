@@ -2,48 +2,43 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:padding="8dp"
-    android:gravity="center_vertical">
+    android:orientation="vertical"
+    android:padding="@dimen/space_md">
 
     <TextView
-        android:id="@+id/tvLineSku"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="2"
-        android:textSize="14sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tvLineName"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="3"
-        android:textSize="14sp" />
-
-    <TextView
-        android:id="@+id/tvLineQty"
+        android:id="@+id/tv_sku_name"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:textSize="14sp"
-        android:layout_marginStart="4dp" />
+        android:textColor="@color/text_primary"
+        android:textSize="@dimen/text_body"
+        android:textStyle="bold"
+        tools:text="SKU-1001  蓝牙条码扫描枪"
+        xmlns:tools="http://schemas.android.com/tools" />
 
-    <TextView
-        android:id="@+id/tvLineLocation"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="12sp"
-        android:layout_marginStart="4dp"
-        android:maxLines="1"
-        android:ellipsize="end" />
+        android:orientation="horizontal"
+        android:layout_marginTop="@dimen/space_xs">
 
-    <Button
-        android:id="@+id/btnLineDelete"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="×"
-        android:textSize="18sp"
-        android:layout_marginStart="4dp"
-        android:minWidth="40dp" />
+        <TextView
+            android:id="@+id/tv_barcode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="@dimen/text_caption"
+            tools:text="条码 6901234567001"
+            xmlns:tools="http://schemas.android.com/tools" />
 
+        <TextView
+            android:id="@+id/tv_qty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/primary"
+            android:textSize="@dimen/text_subtitle"
+            android:textStyle="bold"
+            tools:text="× 10 台"
+            xmlns:tools="http://schemas.android.com/tools" />
+    </LinearLayout>
 </LinearLayout>

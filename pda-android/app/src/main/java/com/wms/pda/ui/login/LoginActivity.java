@@ -2,121 +2,100 @@ package com.wms.pda.ui.login;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.widget.Button;
-import android.widget.Toast;
+import android.view.View;
+import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.textfield.TextInputEditText;
-import com.wms.pda.BuildConfig;
+import com.google.android.material.button.MaterialButton;
+import android.widget.ProgressBar;
 import com.wms.pda.R;
-import com.wms.pda.data.SessionStore;
-import com.wms.pda.model.ApiResponse;
-import com.wms.pda.model.LoginRequest;
-import com.wms.pda.net.ApiClient;
-import com.wms.pda.net.ApiException;
-import com.wms.pda.ui.home.HomeActivity;
+import com.wms.pda.data.api.ApiClient;
+import com.wms.pda.data.remote.RemoteWmsRepository;
+import com.wms.pda.data.repo.RepositoryProvider;
+import com.wms.pda.data.repo.SessionStore;
+import com.wms.pda.data.repo.SettingsStore;
+import com.wms.pda.ui.main.MainActivity;
 
-/** 登录页 - 服务器地址 + 用户名/密码 → JWT → 存 SessionStore → 跳 Home。 */
+/**
+ * 登录页。右上齿轮跳服务器设置。
+ * 接后端:POST /api/auth/login → 保存 token + 切到 RemoteWmsRepository。
+ */
 public class LoginActivity extends AppCompatActivity {
 
-    private TextInputEditText etServer, etUsername, etPassword;
-    private Button btnLogin;
-    private SessionStore session;
-    private ApiClient api;
+    private EditText etUser, etPwd;
+    private MaterialButton btnLogin;
+    private ProgressBar progress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        session = new SessionStore(this);
+        TextView tvServer = findViewById(R.id.tv_server_url);
+        etUser = findViewById(R.id.et_username);
+        etPwd = findViewById(R.id.et_password);
+        btnLogin = findViewById(R.id.btn_login);
+        progress = findViewById(R.id.progress);
+        ImageButton btnSettings = findViewById(R.id.btn_settings);
 
-        etServer = findViewById(R.id.etServer);
-        etUsername = findViewById(R.id.etUsername);
-        etPassword = findViewById(R.id.etPassword);
-        btnLogin = findViewById(R.id.btnLogin);
+        tvServer.setText(SettingsStore.getBaseUrl());
 
-        // 预填服务器地址:优先已保存的自定义地址,否则用构建默认
-        String saved = session.getBaseUrl();
-        etServer.setText(saved != null ? saved : BuildConfig.API_BASE_URL);
+        btnSettings.setOnClickListener(v ->
+                startActivity(new Intent(this, SettingsActivity.class)));
 
-        // 已登录直接跳走
-        if (session.getToken() != null) {
-            goHome();
-            return;
-        }
-
-        api = new ApiClient(session);
         btnLogin.setOnClickListener(v -> doLogin());
+
+        // 已登录直接进
+        if (SessionStore.isLoggedIn()) {
+            startActivity(new Intent(this, MainActivity.class));
+            finish();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        TextView tvServer = findViewById(R.id.tv_server_url);
+        tvServer.setText(SettingsStore.getBaseUrl());
     }
 
     private void doLogin() {
-        String u = etUsername.getText() == null ? "" : etUsername.getText().toString().trim();
-        String p = etPassword.getText() == null ? "" : etPassword.getText().toString();
-        if (u.isEmpty()) { Toast.makeText(this, R.string.username_required, Toast.LENGTH_SHORT).show(); return; }
-        if (p.isEmpty()) { Toast.makeText(this, R.string.password_required, Toast.LENGTH_SHORT).show(); return; }
+        String u = etUser.getText().toString().trim();
+        String p = etPwd.getText().toString().trim();
+        if (u.isEmpty()) { etUser.setError("请输入账号"); return; }
+        if (p.isEmpty()) { etPwd.setError("请输入密码"); return; }
 
-        // 保存服务器地址,按需重建 ApiClient
-        String raw = etServer.getText() == null ? "" : etServer.getText().toString().trim();
-        String newBase = normalizeBaseUrl(raw, BuildConfig.API_BASE_URL);
-        String cur = session.getBaseUrl();
-        if (!newBase.equals(cur)) {
-            session.setBaseUrl(newBase);
-            api = new ApiClient(session);   // 重新解析 baseUrl
-        }
+        setLoading(true);
+        ApiClient api = new ApiClient();
+        api.refreshBaseUrl();
+        RemoteWmsRepository remote = new RemoteWmsRepository(api);
+        RepositoryProvider.setRepository(remote);
 
-        btnLogin.setEnabled(false);
-        String addr = newBase;
-        new Thread(() -> {
-            try {
-                LoginRequest req = new LoginRequest(u, p);
-                // 后端返回 ApiResponse<LoginData>,我们用 Map 中转避开 DTO 嵌套
-                ApiResponse<java.util.Map<String, Object>> resp =
-                    api.post("/api/auth/login", req,
-                        (Class) java.util.HashMap.class);
-                if (resp == null || resp.data == null) {
-                    throw new ApiException(ApiException.ERR_PARSE, "登录响应为空");
-                }
-                String token = (String) resp.data.get("token");
-                String username = (String) resp.data.get("username");
-                String role = (String) resp.data.get("role");
-                session.setToken(token);
-                session.setUsername(username);
-                session.setRole(role);
-                runOnUiThread(this::goHome);
-            } catch (ApiException e) {
-                runOnUiThread(() -> {
-                    btnLogin.setEnabled(true);
-                    Toast.makeText(LoginActivity.this,
-                        getString(R.string.login_failed) + ": " + e.getMessage() + " (" + addr + ")",
-                        Toast.LENGTH_LONG).show();
-                });
+        remote.login(u, p, new com.wms.pda.data.repo.WmsCallback<String>() {
+            @Override public void onSuccess(String token) {
+                String role = remote.getLastLoginRole();
+                SessionStore.login(u, token, role);
+                setLoading(false);
+                startActivity(new Intent(LoginActivity.this, MainActivity.class));
+                finish();
             }
-        }).start();
+            @Override public void onError(int code, String msg) {
+                setLoading(false);
+                etPwd.setError("登录失败: " + msg);
+                // 登录失败 → 回退 Mock,避免主页面用 stale remote 调接口全失败
+                RepositoryProvider.resetToMock();
+                SessionStore.logout();
+            }
+        });
     }
 
-    /**
-     * 把用户输入的地址规范成完整 baseUrl(形如 http://192.168.1.100:8080)。
-     * 支持裸 IP、IP:端口、带 http:// 的完整地址。输入为空时回落到 defaultBase。
-     */
-    static String normalizeBaseUrl(String raw, String defaultBase) {
-        if (raw == null || raw.trim().isEmpty()) {
-            return defaultBase;
-        }
-        String s = raw.trim();
-        if (!s.contains("://")) {
-            s = "http://" + s;
-        }
-        // 去掉末尾斜杠,保证路径拼接干净
-        while (s.endsWith("/")) {
-            s = s.substring(0, s.length() - 1);
-        }
-        return s;
-    }
-
-    private void goHome() {
-        startActivity(new Intent(this, HomeActivity.class));
-        finish();
+    private void setLoading(boolean loading) {
+        btnLogin.setEnabled(!loading);
+        etUser.setEnabled(!loading);
+        etPwd.setEnabled(!loading);
+        progress.setVisibility(loading ? View.VISIBLE : View.GONE);
     }
 }

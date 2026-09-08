@@ -4,6 +4,7 @@ import com.wms.annotation.RequireRole;
 import com.wms.model.ApiResponse;
 import com.wms.model.AppUser;
 import com.wms.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -47,6 +48,20 @@ public class UserController {
     @PostMapping("/{id}/enabled")
     public ApiResponse<Void> setEnabled(@PathVariable int id, @RequestBody Map<String, Boolean> body) {
         userService.setEnabled(id, Boolean.TRUE.equals(body.get("enabled")));
+        return ApiResponse.ok();
+    }
+
+    /**
+     * 删除用户 — 不级联删业务记录(inventory_log.operator /
+     * inbound_order.operator / outbound_order.operator 是 VARCHAR,
+     * 不是外键,天然不级联)。
+     * 业务校验由 UserService.delete 负责:不能删自己/最后一名 ADMIN。
+     */
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> delete(@PathVariable int id, HttpServletRequest req) {
+        Object uidObj = req.getAttribute("userId");
+        int currentUserId = (uidObj instanceof Integer) ? (Integer) uidObj : -1;
+        userService.delete(id, currentUserId);
         return ApiResponse.ok();
     }
 }

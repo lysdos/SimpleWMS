@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>SimpleWMS PDA · 设计稿索引</title>
+    <link rel="stylesheet" href="css/app.css">
+    <style>
+        .device-label { font-size: 11px; color: #6a7080; text-align: center; margin-top: 6px; }
+        .page-pill {
+            display: inline-block;
+            padding: 1px 8px;
+            background: #2a2e38;
+            color: #cfd3db;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-left: 6px;
+        }
+    </style>
+</head>
+<body>
+<div class="stage">
+    <!-- 侧边索引 -->
+    <nav class="rail">
+        <h1>SimpleWMS PDA</h1>
+        <div class="sub">HTML 原型稿 v0.1</div>
+
+        <div class="group">入口</div>
+        <a href="pages/login.html" target="_blank">登录</a>
+        <a href="pages/settings.html" target="_blank">服务器设置</a>
+
+        <div class="group">主流程</div>
+        <a href="pages/dashboard.html" target="_blank">仪表盘</a>
+        <a href="pages/inbound-list.html" target="_blank">入库 · 列表</a>
+        <a href="pages/inbound-detail.html" target="_blank">入库 · 详情 (扫码)</a>
+        <a href="pages/outbound-list.html" target="_blank">出库 · 列表</a>
+        <a href="pages/outbound-detail.html" target="_blank">出库 · 详情 (扫码)</a>
+        <a href="pages/inventory.html" target="_blank">库存 · 列表</a>
+        <a href="pages/stocktake-list.html" target="_blank">盘点 · 列表</a>
+        <a href="pages/stocktake-detail.html" target="_blank">盘点 · 详情 (实盘)</a>
+
+        <div class="tip">
+            提示:点击每个页面在右侧新窗口打开查看。所有页面均为静态 HTML,使用浏览器即可预览。
+        </div>
+    </nav>
+
+    <div class="workarea">
+        <!-- 镜像预览(在主窗口中直接显示登录页作为门面) -->
+        <div>
+            <iframe src="pages/login.html"
+                    style="width:392px;height:752px;border:none;border-radius:28px;background:#1a1d24;
+                           box-shadow:0 0 0 2px #2a2e38,0 30px 60px rgba(0,0,0,0.5);"></iframe>
+            <div class="device-label">登录页 (默认门面)</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -98,4 +98,8 @@ public class UserDao {
         return jdbc.update(
             "UPDATE app_user SET enabled = ? WHERE id = ?", enabled, id);
     }
+
+    public int delete(int id) {
+        return jdbc.update("DELETE FROM app_user WHERE id = ?", id);
+    }
 }

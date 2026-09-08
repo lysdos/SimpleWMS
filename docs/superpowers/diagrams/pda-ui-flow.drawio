@@ -1,0 +1,72 @@
+<mxfile host="Electron">
+  <diagram name="PDA-UI-Flow" id="pda-ui-flow">
+    <mxGraphModel dx="2434" dy="1432" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1a3a5c;" value="SimpleWMS-PDA Android 手持机扫码 App — UI 导航流程图" vertex="1">
+          <mxGeometry height="40" width="1200" x="200" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontColor=#666666;" value="6 个 Activity + 1 个共享 item_scan_row 列表模板 + 1 个 item_stock_check_row 盘点模板" vertex="1">
+          <mxGeometry height="20" width="1200" x="200" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="login" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="LoginActivity&#xa;&#xa;• 服务器地址输入框(预填)&#xa;• 用户名 + 密码&#xa;• 登录按钮&#xa;&#xa;layout: activity_login.xml" vertex="1">
+          <mxGeometry height="180" width="240" x="60" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="home" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="HomeActivity&#xa;&#xa;顶栏: 用户名 + RFID 状态&#xa;  📥 入库扫码&#xa;  📤 出库扫码&#xa;  🔍 库存盘点&#xa;  🔎 扫码查询&#xa;退出按钮&#xa;&#xa;layout: activity_home.xml" vertex="1">
+          <mxGeometry height="200" width="280" x="500" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="inbound" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="InboundScanActivity&#xa;&#xa;• 扫码框 + [开始扫码] 按钮&#xa;• 已扫列表 (item_scan_row)&#xa;   - 24位码 + SKU + 商品名&#xa;   - ×数量 累加&#xa;• 库位 / 备注输入&#xa;• [提交入库] → /api/inbound/batch&#xa;&#xa;layout: activity_inbound_scan.xml" vertex="1">
+          <mxGeometry height="220" width="280" x="60" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="outbound" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="OutboundScanActivity&#xa;&#xa;• 扫码框 + [开始扫码] 按钮&#xa;• 已扫列表 (item_scan_row)&#xa;   - 24位码 + SKU + 商品名&#xa;   - ×数量 累加&#xa;• 领用方(客户)/ 备注&#xa;• [提交出库] → /api/outbound/batch&#xa;&#xa;layout: activity_outbound_scan.xml" vertex="1">
+          <mxGeometry height="220" width="280" x="440" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="stockcheck" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="StockCheckActivity&#xa;&#xa;• 范围下拉 (全部/按SKU/按库位)&#xa;• [创建盘点] → /api/stock-checks&#xa;• 进度: 已盘 X/Y 差 N&#xa;• 盘点列表 (item_stock_check_row)&#xa;   - 24位码 + SKU + 系统数&#xa;   - 实盘数输入框&#xa;• [提交盘点] → /commit&#xa;&#xa;layout: activity_stock_check.xml" vertex="1">
+          <mxGeometry height="240" width="280" x="820" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="lookup" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;strokeWidth=2;fontSize=12;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="LookupActivity&#xa;&#xa;• 24位码输入框 + [查询]&#xa;• 详细信息卡片&#xa;   - 编码 / EPC&#xa;   - SKU / 商品名 / 库位&#xa;   - 数量 / 状态&#xa;   - 入库单 / 出库单&#xa;   - 创建人 / 创建时间&#xa;&#xa;layout: activity_lookup.xml" vertex="1">
+          <mxGeometry height="220" width="280" x="1200" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="item_scan_row" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="item_scan_row.xml&#xa;共用列表项&#xa;(入/出库扫码)&#xa;&#xa;• SKU (左)&#xa;• 商品名 (中)&#xa;• ×数量 (右)" vertex="1">
+          <mxGeometry height="100" width="180" x="180" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="item_stock_check_row" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=1;dashed=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="item_stock_check_row.xml&#xa;盘点列表项&#xa;&#xa;• 24位码 (左2)&#xa;• SKU (中2)&#xa;• 系统 N (右)&#xa;• 实盘数输入框" vertex="1">
+          <mxGeometry height="100" width="200" x="820" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#999999;strokeWidth=1;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=8;" value="图例&#xa;&#xa;Login 紫色 | Home 蓝色&#xa;入库 绿色 | 出库 红色&#xa;盘点 黄色 | 查询 橙色" vertex="1">
+          <mxGeometry height="180" width="280" x="1200" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="login" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.3;fontSize=11;fontColor=#666666;strokeWidth=2;" target="home" value="登录成功&#xa;跳 Home">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="home" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;entryX=0.5;entryY=0;fontSize=11;fontColor=#666666;strokeWidth=2;" target="inbound" value="📥 入库扫码">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="home" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;fontSize=11;fontColor=#666666;strokeWidth=2;" target="outbound" value="📤 出库扫码">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="home" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=1;entryX=0.5;entryY=0;fontSize=11;fontColor=#666666;strokeWidth=2;" target="stockcheck" value="🔍 库存盘点">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="home" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontSize=11;fontColor=#666666;strokeWidth=2;" target="lookup" value="🔎 扫码查询">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="home" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.7;entryX=1;entryY=0.5;fontSize=11;fontColor=#999999;dashed=1;strokeWidth=1;" target="login" value="登录失败 / 退出&#xa;回 Login">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="inbound" style="edgeStyle=none;html=1;dashed=1;endArrow=open;startArrow=none;fontSize=10;fontColor=#999999;" target="item_scan_row" value="共用列表项">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="outbound" style="edgeStyle=none;html=1;dashed=1;endArrow=open;startArrow=none;" target="item_scan_row" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="stockcheck" style="edgeStyle=none;html=1;dashed=1;endArrow=open;startArrow=none;fontSize=10;fontColor=#999999;" target="item_stock_check_row" value="专属列表项">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

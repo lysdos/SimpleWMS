@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_page">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg">
+
+        <TextView
+            android:id="@+id/tv_welcome"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/Text.Title"
+            tools:text="您好, 张三"
+            xmlns:tools="http://schemas.android.com/tools" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xs"
+            android:text="今日作业概览"
+            style="@style/Text.Caption" />
+
+        <!-- KPI 第一行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/space_lg">
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_blue"
+                android:layout_marginEnd="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_inbound_today"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/primary" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_inbound_today"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_green"
+                android:layout_marginStart="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_outbound_today"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/success" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_outbound_today"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- KPI 第二行 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/space_md">
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_orange"
+                android:layout_marginEnd="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_pending_stocktake"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/warning" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_pending_stocktake"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_red"
+                android:layout_marginStart="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_low_stock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/danger" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_low_stock"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 最近操作 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_xl"
+            android:text="@string/dash_recent_title"
+            style="@style/Text.Subtitle"
+            android:textColor="@color/text_primary" />
+
+        <LinearLayout
+            android:id="@+id/recent_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_card"
+            android:padding="@dimen/space_sm"
+            android:layout_marginTop="@dimen/space_sm" />
+    </LinearLayout>
+</ScrollView>

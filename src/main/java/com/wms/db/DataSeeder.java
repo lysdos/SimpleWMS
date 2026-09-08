@@ -59,7 +59,7 @@ public class DataSeeder implements CommandLineRunner {
             seedSuppliers();
             seedProducts();
             seedProductSuppliers();
-            seedLogs();
+            seedLocations();
             log.info("DataSeeder: 演示数据写入完成");
         } catch (Exception e) {
             // 播种失败不影响主程序
@@ -79,6 +79,18 @@ public class DataSeeder implements CommandLineRunner {
         tryAddColumn("inbound_order_item", "supplier", "VARCHAR(128) DEFAULT NULL");
         // 注:supplier / product_supplier 表在 schema.sql 里 CREATE IF NOT EXISTS
         // 全新装库会自动建,老库(已有 supplier 表但表结构升级)靠 schema.sql 同样幂等
+
+        // 2026-09-04: 库位字典表(新表,schema.sql 已 CREATE IF NOT EXISTS;
+        // 老库若未建表,在启动时会自动建,但 seedLocations() 仅在 product 为空时跑)
+
+        // 2026-09-04: 入库/出库单明细加 location(冗余,记录当时的库位,商品换库位后历史单据不变)
+        tryAddColumn("inbound_order_item",  "location",  "VARCHAR(32) DEFAULT NULL");
+        tryAddColumn("outbound_order_item", "location",  "VARCHAR(32) DEFAULT NULL");
+        // 2026-09-04: 库存单元表(新表,schema.sql 已 CREATE IF NOT EXISTS;
+        // 老库若没建表会自动建,但不会回填历史数据,历史出入库单只展示,不进库存管理)
+        // 2026-09-04: 库存单元加 created_by 操作员(谁创建的实物单元)
+        tryAddColumn("inventory_item", "created_by", "VARCHAR(64) DEFAULT NULL");
+        // 2026-09-04: 库存盘点单 + 盘点明细(scheme.sql 已 CREATE IF NOT EXISTS;老库无表会自动建)
     }
 
     private void tryAddIndex(String indexName, String table, String col) {
@@ -145,6 +157,15 @@ public class DataSeeder implements CommandLineRunner {
         jdbc.update("INSERT INTO product_supplier (product_id, supplier_id, is_default) VALUES (5, 3, TRUE)");
     }
 
+    private void seedLocations() {
+        // 与演示商品 location 字段(A-01-03 等)对应
+        jdbc.update("INSERT INTO location (code, name, remark) VALUES ('A-01-03', 'A 区 01 排 03 位', '办公耗材区')");
+        jdbc.update("INSERT INTO location (code, name, remark) VALUES ('A-01-05', 'A 区 01 排 05 位', '办公耗材区')");
+        jdbc.update("INSERT INTO location (code, name, remark) VALUES ('A-01-07', 'A 区 01 排 07 位', '办公耗材区')");
+        jdbc.update("INSERT INTO location (code, name, remark) VALUES ('A-02-01', 'A 区 02 排 01 位', '办公文具区')");
+        jdbc.update("INSERT INTO location (code, name, remark) VALUES ('B-03-01', 'B 区 03 排 01 位', '饮用水区')");
+    }
+
     private void seedProducts() {
         jdbc.update("INSERT INTO product " +
                 "(sku,name,category,unit,location,quantity,unit_price,low_stock,remark) " +
@@ -161,26 +182,5 @@ public class DataSeeder implements CommandLineRunner {
         jdbc.update("INSERT INTO product " +
                 "(sku,name,category,unit,location,quantity,unit_price,low_stock,remark) " +
                 "VALUES ('SP-005','矿泉水','饮用水','箱','B-03-01',20,35.00,5,'550ml*24瓶')");
-    }
-
-    private void seedLogs() {
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('IN',1,'SP-001','A4 复印纸',50,0,50,'初始库存','系统')");
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('IN',2,'SP-002','中性笔',20,0,20,'初始库存','系统')");
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('OUT',2,'SP-002','中性笔',12,20,8,'行政部领用','张三')");
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('IN',3,'SP-003','便利贴',30,0,30,'初始库存','系统')");
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('IN',4,'SP-004','订书机',5,0,5,'初始库存','系统')");
-        jdbc.update("INSERT INTO inventory_log " +
-                "(type,product_id,sku,product_name,quantity,before_qty,after_qty,remark,operator) " +
-                "VALUES ('IN',5,'SP-005','矿泉水',20,0,20,'初始库存','系统')");
     }
 }
