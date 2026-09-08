@@ -18,6 +18,8 @@ const state = {
     orderType: 'IN',
     orderFilter: { beginDate: '', endDate: '', keyword: '', operator: '', status: 'COMMITTED' },
     orderPage: 1,
+    inboundCardStatus: 'ALL',
+    outboundCardStatus: 'ALL',
     currentRole: null,
     currentUser: null
 };
@@ -94,25 +96,56 @@ async function loadInbound() {
     setActive('inbound');
     state.orderType = 'IN';   // 同步类型,「查看」按钮 viewOrderDetail 用得到
     await ensureProducts();
-    let recent = [];
-    try {
-        // 入库登记卡片列出所有状态(草稿/已提交/已取消)— 用户能在卡片看到并直接点进详情做提交/取消
-        const d = await api.get('/api/inbound/orders?status=ALL&pageSize=10');
-        recent = d.list || [];
-    } catch (e) {}
-    document.getElementById('view').innerHTML = Views.inbound(state.products, recent);
+    // 先把骨架(含 tabs/tbody 容器)塞进 #view,再异步拉数据填进去
+    document.getElementById('view').innerHTML = Views.inbound(state.products, []);
+    await renderInboundRecent();
 }
 
 async function loadOutbound() {
     setActive('outbound');
     state.orderType = 'OUT';  // 同步类型,「查看」按钮 viewOrderDetail 用得到
     await ensureProducts();
-    let recent = [];
+    document.getElementById('view').innerHTML = Views.outbound(state.products, []);
+    await renderOutboundRecent();
+}
+
+async function renderInboundRecent() {
+    const st = state.inboundCardStatus || 'ALL';
+    // 后端 controller 的 status 默认值是 DRAFT,所以"全部"必须显式传 status=ALL
+    const url = '/api/inbound/orders?status=' + encodeURIComponent(st) + '&pageSize=10';
     try {
-        const d = await api.get('/api/outbound/orders?status=COMMITTED&pageSize=10');
-        recent = d.list || [];
+        const d = await api.get(url);
+        const rows = (d && d.list) || [];
+        const tb = document.getElementById('inbound-recent-tbody');
+        if (tb) tb.innerHTML = Views.inboundRecentRows(rows);
+        const title = document.getElementById('inbound-recent-title');
+        if (title) title.textContent = '最近入库单(最近 10 条)';
+        Views.applyCardTabs('inbound', st);
     } catch (e) {}
-    document.getElementById('view').innerHTML = Views.outbound(state.products, recent);
+}
+
+async function renderOutboundRecent() {
+    const st = state.outboundCardStatus || 'ALL';
+    const url = '/api/outbound/orders?status=' + encodeURIComponent(st) + '&pageSize=10';
+    try {
+        const d = await api.get(url);
+        const rows = (d && d.list) || [];
+        const tb = document.getElementById('outbound-recent-tbody');
+        if (tb) tb.innerHTML = Views.outboundRecentRows(rows);
+        const title = document.getElementById('outbound-recent-title');
+        if (title) title.textContent = '最近出库单(最近 10 条)';
+        Views.applyCardTabs('outbound', st);
+    } catch (e) {}
+}
+
+function setInboundCardStatus(st) {
+    state.inboundCardStatus = st;
+    renderInboundRecent();
+}
+
+function setOutboundCardStatus(st) {
+    state.outboundCardStatus = st;
+    renderOutboundRecent();
 }
 
 async function ensureProducts() {

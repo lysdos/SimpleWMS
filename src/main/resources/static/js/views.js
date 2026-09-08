@@ -209,20 +209,6 @@ const Views = {
 
     /* ================== 3. 入库登记(列表 + 新增按钮) ================== */
     inbound(products, recentOrders) {
-        recentOrders = recentOrders || [];
-        const recentRows = recentOrders.length === 0
-            ? `<tr><td colspan="6" class="empty">暂无入库单,点上方「新增入库单」开始</td></tr>`
-            : recentOrders.map(o => `
-                <tr>
-                    <td><strong>${escapeHtml(o.orderNo)}</strong></td>
-                    <td><span class="pill ${docStatusClass(o.status)}">${docStatusLabel(o.status)}</span></td>
-                    <td>${escapeHtml(o.externalNo || '-')}</td>
-                    <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
-                    <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
-                    <td class="actions">
-                        <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
-                    </td>
-                </tr>`).join('');
         return `
         <div class="page-head">
             <div>
@@ -234,7 +220,10 @@ const Views = {
             </div>
         </div>
         <div class="card">
-            <div class="card-title">最近入库单(最近 10 条)</div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span id="inbound-recent-title">最近入库单(最近 10 条)</span>
+                <span id="inbound-recent-tabs"></span>
+            </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
@@ -245,27 +234,33 @@ const Views = {
                         <th>操作员 · 时间</th>
                         <th style="width:100px;">操作</th>
                     </tr></thead>
-                    <tbody>${recentRows}</tbody>
+                    <tbody id="inbound-recent-tbody">${Views.inboundRecentRows(recentOrders)}</tbody>
                 </table>
             </div>
         </div>`;
     },
 
+    /* 入库卡片表格行(供 app.js 局部刷表) */
+    inboundRecentRows(recentOrders) {
+        recentOrders = recentOrders || [];
+        if (recentOrders.length === 0) {
+            return `<tr><td colspan="6" class="empty">暂无入库单,点上方「新增入库单」开始</td></tr>`;
+        }
+        return recentOrders.map(o => `
+            <tr>
+                <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                <td><span class="pill ${docStatusClass(o.status)}">${docStatusLabel(o.status)}</span></td>
+                <td>${escapeHtml(o.externalNo || '-')}</td>
+                <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
+                <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                <td class="actions">
+                    <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
+                </td>
+            </tr>`).join('');
+    },
+
     /* ================== 4. 出库登记(列表 + 新增按钮) ================== */
     outbound(products, recentOrders) {
-        recentOrders = recentOrders || [];
-        const recentRows = recentOrders.length === 0
-            ? `<tr><td colspan="5" class="empty">暂无出库单,点上方「新增出库单」开始</td></tr>`
-            : recentOrders.map(o => `
-                <tr>
-                    <td><strong>${escapeHtml(o.orderNo)}</strong></td>
-                    <td>${escapeHtml(o.customer || '-')}</td>
-                    <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
-                    <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
-                    <td class="actions">
-                        <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
-                    </td>
-                </tr>`).join('');
         return `
         <div class="page-head">
             <div>
@@ -277,7 +272,10 @@ const Views = {
             </div>
         </div>
         <div class="card">
-            <div class="card-title">最近出库单(最近 10 条)</div>
+            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span id="outbound-recent-title">最近出库单(最近 10 条)</span>
+                <span id="outbound-recent-tabs"></span>
+            </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
@@ -287,10 +285,49 @@ const Views = {
                         <th>操作员 · 时间</th>
                         <th style="width:100px;">操作</th>
                     </tr></thead>
-                    <tbody>${recentRows}</tbody>
+                    <tbody id="outbound-recent-tbody">${Views.outboundRecentRows(recentOrders)}</tbody>
                 </table>
             </div>
         </div>`;
+    },
+
+    /* 出库卡片表格行(供 app.js 局部刷表) */
+    outboundRecentRows(recentOrders) {
+        recentOrders = recentOrders || [];
+        if (recentOrders.length === 0) {
+            return `<tr><td colspan="5" class="empty">暂无出库单,点上方「新增出库单」开始</td></tr>`;
+        }
+        return recentOrders.map(o => `
+            <tr>
+                <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                <td>${escapeHtml(o.customer || '-')}</td>
+                <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
+                <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                <td class="actions">
+                    <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">查看</button>
+                </td>
+            </tr>`).join('');
+    },
+
+    /* 卡片 tab 渲染(全部/草稿/已提交/已取消);prefix='inbound' | 'outbound' */
+    applyCardTabs(prefix, current) {
+        const slot = document.getElementById(prefix + '-recent-tabs');
+        if (!slot) return;
+        const tabs = [
+            { v: 'ALL',       l: '全部' },
+            { v: 'DRAFT',     l: '草稿' },
+            { v: 'COMMITTED', l: '已提交' },
+            { v: 'CANCELLED', l: '已取消' }
+        ];
+        const fn = (prefix === 'inbound') ? 'setInboundCardStatus' : 'setOutboundCardStatus';
+        slot.innerHTML = tabs.map(t => {
+            const active = (t.v === current);
+            const bg = active ? '#fff' : 'transparent';
+            const color = active ? '#1565c0' : '#8492a6';
+            const border = active ? '1px solid #2196f3' : '1px solid transparent';
+            return `<button type="button" onclick="${fn}('${t.v}')"
+                style="margin-left:6px;padding:4px 12px;font-size:12px;border-radius:14px;cursor:pointer;background:${bg};color:${color};border:${border};">${t.l}</button>`;
+        }).join('');
     },
 
     /* ================== 新增入库/出库单 弹窗 ================== */
