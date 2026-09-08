@@ -211,10 +211,11 @@ const Views = {
     inbound(products, recentOrders) {
         recentOrders = recentOrders || [];
         const recentRows = recentOrders.length === 0
-            ? `<tr><td colspan="5" class="empty">暂无入库单,点上方「新增入库单」开始</td></tr>`
+            ? `<tr><td colspan="6" class="empty">暂无入库单,点上方「新增入库单」开始</td></tr>`
             : recentOrders.map(o => `
                 <tr>
                     <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                    <td><span class="pill ${docStatusClass(o.status)}">${docStatusLabel(o.status)}</span></td>
                     <td>${escapeHtml(o.externalNo || '-')}</td>
                     <td class="num">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</td>
                     <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
@@ -238,6 +239,7 @@ const Views = {
                 <table class="table">
                     <thead><tr>
                         <th>单号</th>
+                        <th style="width:90px;">状态</th>
                         <th>外部单号</th>
                         <th class="num">明细 / 数量</th>
                         <th>操作员 · 时间</th>
@@ -462,10 +464,11 @@ const Views = {
         const size   = (data && data.pageSize) || 20;
         const pages  = Math.max(1, Math.ceil(total / size));
 
-        const beginVal = (filter && filter.beginDate) || '';
-        const endVal   = (filter && filter.endDate)   || '';
-        const kwVal    = (filter && filter.keyword)   || '';
-        const opVal    = (filter && filter.operator)  || '';
+        const beginVal  = (filter && filter.beginDate) || '';
+        const endVal    = (filter && filter.endDate)   || '';
+        const kwVal     = (filter && filter.keyword)   || '';
+        const opVal     = (filter && filter.operator)  || '';
+        const statusVal = (filter && filter.status)    || 'COMMITTED';
 
         const rows = orders.length === 0
             ? `<tr><td colspan="8" class="empty">暂无单据</td></tr>`
@@ -513,6 +516,13 @@ const Views = {
                 <input id="od-end" type="date" class="input input-sm" value="${endVal}">
                 <input id="od-kw" class="input input-sm" placeholder="单号 / 供应商 / 客户 / 外部单号 / 备注" value="${escapeHtml(kwVal)}" style="width:280px;">
                 <input id="od-op" class="input input-sm" placeholder="操作员(精确)" value="${escapeHtml(opVal)}" style="width:140px;">
+                <label style="font-size:13px;color:#5d6d7e;">状态</label>
+                <select id="od-status" class="select" style="width:110px;">
+                    <option value=""           ${statusVal===''           ?'selected':''}>全部</option>
+                    <option value="DRAFT"      ${statusVal==='DRAFT'      ?'selected':''}>草稿</option>
+                    <option value="COMMITTED"  ${statusVal==='COMMITTED'  ?'selected':''}>已提交</option>
+                    <option value="CANCELLED"  ${statusVal==='CANCELLED'  ?'selected':''}>已取消</option>
+                </select>
                 <button class="btn btn-sm btn-primary" onclick="searchOrders()">查询</button>
                 <button class="btn btn-sm" onclick="resetOrderFilter()">重置</button>
             </div>
@@ -611,6 +621,10 @@ const Views = {
             <button class="btn btn-sm" onclick="printInboundOrder()">🖨 打印</button>
             <button class="btn btn-sm" onclick="printAllInboundBarcodes(${o.id})">📦 打印全部条码</button>
             <a class="btn btn-sm" href="/api/inbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ 导出 CSV</a>
+            ${o.status === 'DRAFT' ? `
+                <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">✓ 提交入库</button>
+                <button class="btn btn-sm" style="margin-left:8px;color:#e74c3c;border-color:#e74c3c;" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">✗ 取消</button>
+            ` : ''}
         </div>`;
     },
 

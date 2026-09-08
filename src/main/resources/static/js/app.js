@@ -16,7 +16,7 @@ const state = {
     stockCheckFilter: { beginDate: '', endDate: '', status: '' },
     stockCheckPage: 1,
     orderType: 'IN',
-    orderFilter: { beginDate: '', endDate: '', keyword: '', operator: '' },
+    orderFilter: { beginDate: '', endDate: '', keyword: '', operator: '', status: 'COMMITTED' },
     orderPage: 1,
     currentRole: null,
     currentUser: null
@@ -96,7 +96,8 @@ async function loadInbound() {
     await ensureProducts();
     let recent = [];
     try {
-        const d = await api.get('/api/inbound/orders?pageSize=10');
+        // 最近入库单卡片只显示已提交单(草稿/已取消的不出现在卡片里,详情入口仍可在「入库登记」找到)
+        const d = await api.get('/api/inbound/orders?status=COMMITTED&pageSize=10');
         recent = d.list || [];
     } catch (e) {}
     document.getElementById('view').innerHTML = Views.inbound(state.products, recent);
@@ -108,7 +109,7 @@ async function loadOutbound() {
     await ensureProducts();
     let recent = [];
     try {
-        const d = await api.get('/api/outbound/orders?pageSize=10');
+        const d = await api.get('/api/outbound/orders?status=COMMITTED&pageSize=10');
         recent = d.list || [];
     } catch (e) {}
     document.getElementById('view').innerHTML = Views.outbound(state.products, recent);
@@ -394,6 +395,24 @@ function statusLabel(s) {
     }
 }
 
+/* 单据状态 → 中文 label(草稿 / 已提交 / 已取消)*/
+function docStatusLabel(s) {
+    if (!s) return '-';
+    switch (s) {
+        case 'DRAFT':     return '草稿';
+        case 'COMMITTED': return '已提交';
+        case 'CANCELLED': return '已取消';
+        default: return s;
+    }
+}
+
+/* 单据状态 → pill 颜色 class(参考 app.css 中的 pill warn / ok / draft)*/
+function docStatusClass(s) {
+    if (s === 'COMMITTED') return 'ok';
+    if (s === 'CANCELLED') return 'draft';
+    return 'warn';  // DRAFT 默认 warn
+}
+
 async function openStockCheckDetail(id) {
     try {
         const c = await api.get('/api/stock-checks/' + id);
@@ -473,6 +492,7 @@ async function loadOrders() {
     if (f.endDate)   qs.set('endDate',   f.endDate);
     if (f.keyword)   qs.set('keyword',   f.keyword);
     if (f.operator)  qs.set('operator',  f.operator);
+    if (f.status)    qs.set('status',    f.status);
     qs.set('page', String(state.orderPage || 1));
     qs.set('pageSize', '20');
     const url = (t === 'IN' ? '/api/inbound/orders' : '/api/outbound/orders') + '?' + qs.toString();
@@ -486,13 +506,14 @@ function searchOrders() {
         beginDate: document.getElementById('od-begin').value || '',
         endDate:   document.getElementById('od-end').value   || '',
         keyword:   document.getElementById('od-kw').value    || '',
-        operator:  document.getElementById('od-op').value    || ''
+        operator:  document.getElementById('od-op').value    || '',
+        status:    document.getElementById('od-status').value || 'COMMITTED'
     };
     state.orderPage = 1;
     loadOrders();
 }
 function resetOrderFilter() {
-    state.orderFilter = { beginDate: '', endDate: '', keyword: '', operator: '' };
+    state.orderFilter = { beginDate: '', endDate: '', keyword: '', operator: '', status: 'COMMITTED' };
     state.orderPage = 1;
     loadOrders();
 }
@@ -508,8 +529,8 @@ async function viewOrderDetail(orderNo) {
     if (state._viewingOrder === orderNo) return;
     state._viewingOrder = orderNo;
     try {
-        // 通过 orderNo 反查 id
-        const data = await api.get(`${base}/orders?keyword=${encodeURIComponent(orderNo)}&pageSize=1`);
+        // 通过 orderNo 反查 id;必须显式 status=ALL — 后端默认 status=DRAFT 会过滤掉 COMMITTED 单子(PDA 提交后状态)
+        const data = await api.get(`${base}/orders?keyword=${encodeURIComponent(orderNo)}&status=ALL&pageSize=1`);
         const hit = (data.list || []).find(o => o.orderNo === orderNo);
         if (!hit) { toast('未找到单据', 'error'); return; }
         const full = await api.get(`${base}/orders/${hit.id}`);
@@ -550,6 +571,32 @@ function openOrderDetailModal(type, o) {
     newOk.addEventListener('click', closeModal);
     const modal = document.querySelector('.modal');
     if (modal) modal.classList.add('modal-wide');
+}
+
+/* 提交入库单(DRAFT → COMMITTED)。后端校验非空 + 状态 */
+async function commitInboundOrder(id, orderNo) {
+    if (!confirm(`确认提交入库单 ${orderNo} ?\n提交后将生成所有 24 位编码,无法再修改。`)) return;
+    try {
+        await api.post(`/api/inbound/orders/${id}/commit`);
+        toast(`入库单 ${orderNo} 已提交`);
+        closeModal();
+        await loadInbound();
+    } catch (e) {
+        toast(e.message || '提交失败', 'error');
+    }
+}
+
+/* 取消入库单(DRAFT → CANCELLED)。后端回滚 inventory_item + 商品 quantity */
+async function cancelInboundOrder(id, orderNo) {
+    if (!confirm(`确认取消入库单 ${orderNo} ?\n将回滚库存单元与商品数量,该操作不可撤销。`)) return;
+    try {
+        await api.post(`/api/inbound/orders/${id}/cancel`);
+        toast(`入库单 ${orderNo} 已取消`);
+        closeModal();
+        await loadInbound();
+    } catch (e) {
+        toast(e.message || '取消失败', 'error');
+    }
 }
 
 /* ---------- 搜索 ---------- */
