@@ -96,8 +96,8 @@ async function loadInbound() {
     await ensureProducts();
     let recent = [];
     try {
-        // 最近入库单卡片只显示已提交单(草稿/已取消的不出现在卡片里,详情入口仍可在「入库登记」找到)
-        const d = await api.get('/api/inbound/orders?status=COMMITTED&pageSize=10');
+        // 入库登记卡片列出所有状态(草稿/已提交/已取消)— 用户能在卡片看到并直接点进详情做提交/取消
+        const d = await api.get('/api/inbound/orders?status=ALL&pageSize=10');
         recent = d.list || [];
     } catch (e) {}
     document.getElementById('view').innerHTML = Views.inbound(state.products, recent);
