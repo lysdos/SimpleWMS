@@ -23,23 +23,20 @@
             android:layout_weight="1"
             android:textColor="@color/text_primary"
             android:textSize="@dimen/text_subtitle"
-            android:textStyle="bold"
-            tools:text="SKU-1001"
-            xmlns:tools="http://schemas.android.com/tools" />
+            android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/tv_low"
+            android:id="@+id/tv_status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_pill_warning"
+            android:background="@drawable/bg_pill_success"
             android:paddingStart="@dimen/space_sm"
             android:paddingEnd="@dimen/space_sm"
             android:paddingTop="2dp"
             android:paddingBottom="2dp"
             android:textColor="@color/on_primary"
             android:textSize="@dimen/text_caption"
-            android:text="预警"
-            android:visibility="gone" />
+            android:text="在库" />
     </LinearLayout>
 
     <TextView
@@ -50,7 +47,7 @@
         style="@style/Text.Body" />
 
     <TextView
-        android:id="@+id/tv_barcode"
+        android:id="@+id/tv_code"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/Text.Caption" />
@@ -73,30 +70,13 @@
             android:text="@string/inventory_qty_on_hand"
             style="@style/Text.Caption" />
         <TextView
-            android:id="@+id/tv_on_hand"
-            android:layout_width="0dp"
+            android:id="@+id/tv_qty"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:layout_marginStart="@dimen/space_xs"
             android:textColor="@color/primary"
             android:textSize="@dimen/text_subtitle"
-            android:textStyle="bold"
-            tools:text="48"
-            xmlns:tools="http://schemas.android.com/tools" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/inventory_qty_available"
-            style="@style/Text.Caption" />
-        <TextView
-            android:id="@+id/tv_available"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/space_xs"
-            style="@style/Text.Body"
-            tools:text="42"
-            xmlns:tools="http://schemas.android.com/tools" />
+            android:textStyle="bold" />
     </LinearLayout>
 
     <LinearLayout
@@ -114,16 +94,6 @@
             android:layout_marginEnd="@dimen/space_sm"
             android:text="@string/action_print"
             app:strokeColor="@color/primary" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_transfer"
-            style="@style/Widget.SimpleWMS.Button.Outlined"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginEnd="@dimen/space_sm"
-            android:text="@string/action_transfer"
-            app:strokeColor="@color/accent" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_scrap"

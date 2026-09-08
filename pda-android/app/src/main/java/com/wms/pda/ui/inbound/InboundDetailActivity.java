@@ -1,6 +1,5 @@
 package com.wms.pda.ui.inbound;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,10 +20,11 @@ import com.wms.pda.ui.common.StatusPill;
 
 import java.util.List;
 
-/** 入库单详情:显示主单 + 明细,提交入库(后端生成 24 位码)。 */
+/** 入库单详情:展示后端实际有的字段;主单 + 明细;添加明细;提交(后端生成 24 位码)。 */
 public class InboundDetailActivity extends AppCompatActivity {
 
-    private String orderId;
+    private Integer dbId;          // 后端数字 id(详情接口 / commit 接口都需要)
+    private String orderNo;         // 展示用单号
     private LinearLayout llLines;
     private MaterialButton btnComplete;
     private MaterialButton btnAddItem;
@@ -37,14 +37,14 @@ public class InboundDetailActivity extends AppCompatActivity {
         Toolbar tb = findViewById(R.id.toolbar);
         tb.setNavigationOnClickListener(v -> finish());
 
-        orderId = getIntent().getStringExtra("orderId");
+        dbId = getIntent().getIntExtra("orderDbId", -1);
+        orderNo = getIntent().getStringExtra("orderId");
         llLines = findViewById(R.id.ll_lines);
         btnComplete = findViewById(R.id.btn_complete);
         btnAddItem = findViewById(R.id.btn_scan);
 
         btnAddItem.setText(R.string.inbound_add_item_action);
         btnAddItem.setOnClickListener(v -> openAddItem());
-
         btnComplete.setOnClickListener(v -> doCommit());
     }
 
@@ -55,14 +55,13 @@ public class InboundDetailActivity extends AppCompatActivity {
     }
 
     private void openAddItem() {
-        // 拉取库存列表,作为"选商品"源
         RepositoryProvider.get().searchInventory("", new WmsCallback<List<com.wms.pda.data.model.InventoryItem>>() {
             @Override public void onSuccess(List<com.wms.pda.data.model.InventoryItem> items) {
                 if (items == null || items.isEmpty()) {
                     Toast.makeText(InboundDetailActivity.this, "请先在 PC 端维护商品", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                AddInboundItemDialog.show(InboundDetailActivity.this, items, orderId, () -> render());
+                AddInboundItemDialog.show(InboundDetailActivity.this, items, dbId, () -> render());
             }
             @Override public void onError(int code, String msg) {
                 Toast.makeText(InboundDetailActivity.this, "加载商品失败: " + msg, Toast.LENGTH_SHORT).show();
@@ -71,22 +70,25 @@ public class InboundDetailActivity extends AppCompatActivity {
     }
 
     private void doCommit() {
-        RepositoryProvider.get().commitInbound(orderId, new WmsCallback<InboundOrder>() {
+        if (dbId == null || dbId < 0) { return; }
+        btnComplete.setEnabled(false);
+        RepositoryProvider.get().commitInbound(String.valueOf(dbId), new WmsCallback<InboundOrder>() {
             @Override public void onSuccess(InboundOrder o) {
+                btnComplete.setEnabled(true);
                 Toast.makeText(InboundDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
                 render();
             }
             @Override public void onError(int code, String msg) {
+                btnComplete.setEnabled(true);
                 Toast.makeText(InboundDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
             }
         });
     }
 
     private void render() {
-        RepositoryProvider.get().listInbound(false, new WmsCallback<List<InboundOrder>>() {
-            @Override public void onSuccess(List<InboundOrder> orders) {
-                InboundOrder o = null;
-                for (InboundOrder x : orders) if (x.id.equals(orderId)) { o = x; break; }
+        if (dbId == null || dbId < 0) { finish(); return; }
+        RepositoryProvider.get().getInboundOrder(String.valueOf(dbId), new WmsCallback<InboundOrder>() {
+            @Override public void onSuccess(InboundOrder o) {
                 if (o == null) { finish(); return; }
                 doRender(o);
             }
@@ -99,10 +101,23 @@ public class InboundDetailActivity extends AppCompatActivity {
     private void doRender(InboundOrder o) {
         ((TextView) findViewById(R.id.tv_id)).setText(o.id);
         StatusPill.apply((TextView) findViewById(R.id.tv_status), o.status);
-        ((TextView) findViewById(R.id.tv_supplier)).setText(getString(R.string.supplier_prefix_fmt, o.supplier == null ? "-" : o.supplier));
-        ((TextView) findViewById(R.id.tv_warehouse)).setText(getString(R.string.warehouse_prefix_fmt, o.warehouse == null ? "-" : o.warehouse));
-        ((TextView) findViewById(R.id.tv_remark)).setText(
-                o.remark == null || o.remark.isEmpty() ? getString(R.string.remark_empty) : getString(R.string.remark_prefix_fmt, o.remark));
+
+        TextView tvExternal = findViewById(R.id.tv_external_no);
+        tvExternal.setText(o.externalNo == null || o.externalNo.isEmpty()
+                ? "外部单号: —" : "外部单号: " + o.externalNo);
+
+        TextView tvOperator = findViewById(R.id.tv_operator);
+        tvOperator.setText(o.operator == null ? "操作员: —" : "操作员: " + o.operator);
+
+        TextView tvRemark = findViewById(R.id.tv_remark);
+        tvRemark.setText(o.remark == null || o.remark.isEmpty()
+                ? getString(R.string.remark_empty) : getString(R.string.remark_prefix_fmt, o.remark));
+
+        TextView tvSummary = findViewById(R.id.tv_summary);
+        int itemCount = o.itemCount == null ? 0 : o.itemCount;
+        int totalQty  = o.totalQuantity == null ? 0 : o.totalQuantity;
+        tvSummary.setText(itemCount + " 行 · " + totalQty + " 件 · 创建于 " +
+                (o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
@@ -115,9 +130,26 @@ public class InboundDetailActivity extends AppCompatActivity {
         } else {
             for (InboundOrder.InboundLine l : o.lines) {
                 View row = li.inflate(R.layout.item_inbound_line, llLines, false);
-                ((TextView) row.findViewById(R.id.tv_sku_name)).setText(l.sku + "  " + l.name);
-                ((TextView) row.findViewById(R.id.tv_barcode)).setText(getString(R.string.qty_fmt, l.qty, l.uom));
-                ((TextView) row.findViewById(R.id.tv_qty)).setText("");
+                TextView tvSkuName = row.findViewById(R.id.tv_sku_name);
+                TextView tvInfo    = row.findViewById(R.id.tv_barcode);
+                TextView tvQty     = row.findViewById(R.id.tv_qty);
+
+                tvSkuName.setText((l.sku == null ? "?" : l.sku) + "  " + (l.name == null ? "" : l.name));
+                tvQty.setText("× " + l.qty + " " + (l.uom == null ? "" : l.uom));
+
+                StringBuilder info = new StringBuilder();
+                if (l.location != null && !l.location.isEmpty()) info.append("库位: ").append(l.location).append("  ");
+                if (l.supplier != null && !l.supplier.isEmpty()) info.append("供应商: ").append(l.supplier).append("  ");
+                if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
+                if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
+                if (l.codes != null && !l.codes.isEmpty()) {
+                    info.append("\n24 位码: ").append(l.codes.size()).append(" 个");
+                    // 仅展示前 3 个,过长折叠
+                    int shown = Math.min(3, l.codes.size());
+                    for (int i = 0; i < shown; i++) info.append("\n  • ").append(l.codes.get(i));
+                    if (l.codes.size() > 3) info.append("\n  • …(+").append(l.codes.size() - 3).append(")");
+                }
+                tvInfo.setText(info.toString());
                 llLines.addView(row);
             }
         }

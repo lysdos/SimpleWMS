@@ -1,9 +1,7 @@
 package com.wms.pda.ui.outbound;
 
 import android.os.Bundle;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -15,7 +13,7 @@ import com.wms.pda.data.model.OutboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 
-/** 新建出库单 */
+/** 新建出库单:客户 + 外部单号 + 备注(后端真正存的字段) */
 public class OutboundNewActivity extends AppCompatActivity {
 
     @Override
@@ -27,22 +25,18 @@ public class OutboundNewActivity extends AppCompatActivity {
         tb.setNavigationOnClickListener(v -> finish());
 
         EditText etCust = findViewById(R.id.et_customer);
+        EditText etExternalNo = findViewById(R.id.et_external_no);
         EditText etRemark = findViewById(R.id.et_remark);
-        Spinner sp = findViewById(R.id.sp_warehouse);
         MaterialButton submit = findViewById(R.id.btn_submit);
-
-        ArrayAdapter<String> ad = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, new String[]{"主仓", "分仓"});
-        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        sp.setAdapter(ad);
 
         submit.setOnClickListener(v -> {
             String cust = etCust.getText().toString().trim();
             if (cust.isEmpty()) { etCust.setError("请填写客户/部门"); return; }
-            String wh = (String) sp.getSelectedItem();
+            String externalNo = etExternalNo.getText().toString().trim();
             String remark = etRemark.getText().toString().trim();
             submit.setEnabled(false);
-            RepositoryProvider.get().createOutbound(cust, wh, remark, new WmsCallback<OutboundOrder>() {
+            // customer 真实传入后端(后端必填);externalNo / remark 可选
+            RepositoryProvider.get().createOutbound(cust, externalNo, remark, new WmsCallback<OutboundOrder>() {
                 @Override public void onSuccess(OutboundOrder o) {
                     Toast.makeText(OutboundNewActivity.this, "已创建: " + o.id, Toast.LENGTH_SHORT).show();
                     finish();

@@ -23,12 +23,11 @@ import com.wms.pda.ui.common.StatusPill;
 import java.util.List;
 
 /**
- * 盘点单详情:扫码定位行 / 提交。
- * 接后端模式:用户扫码 → POST /api/stock-checks/{id}/scan → 后端 countedQty += 1,自动算 diff。
+ * 盘点单详情:对接后端 /api/stock-checks/{id}。扫码定位行 / 提交。
  */
 public class StocktakeDetailActivity extends AppCompatActivity {
 
-    private String orderId;
+    private Integer dbId;
     private LinearLayout llLines;
     private TextView tvProgress;
     private MaterialButton btnScan;
@@ -42,24 +41,25 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         MaterialToolbar tb = findViewById(R.id.toolbar);
         tb.setNavigationOnClickListener(v -> finish());
 
-        orderId = getIntent().getStringExtra("orderId");
+        dbId = getIntent().getIntExtra("orderDbId", -1);
         llLines = findViewById(R.id.ll_lines);
         tvProgress = findViewById(R.id.tv_progress);
         btnScan = findViewById(R.id.btn_scan);
         btnSubmit = findViewById(R.id.btn_submit);
 
         btnScan.setOnClickListener(v -> ScanSimulator.show(this, code ->
-                RepositoryProvider.get().submitStocktakeScan(orderId, code, new WmsCallback<StocktakeOrder>() {
-                    @Override public void onSuccess(StocktakeOrder o) {
-                        Toast.makeText(StocktakeDetailActivity.this,
-                                getString(R.string.stocktake_located_fmt, code), Toast.LENGTH_SHORT).show();
-                        render();
-                    }
-                    @Override public void onError(int code, String msg) {
-                        Toast.makeText(StocktakeDetailActivity.this,
-                                "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
-                    }
-                })));
+                RepositoryProvider.get().submitStocktakeScan(String.valueOf(dbId), code,
+                        new WmsCallback<StocktakeOrder>() {
+                            @Override public void onSuccess(StocktakeOrder o) {
+                                Toast.makeText(StocktakeDetailActivity.this,
+                                        getString(R.string.stocktake_located_fmt, code), Toast.LENGTH_SHORT).show();
+                                render();
+                            }
+                            @Override public void onError(int code, String msg) {
+                                Toast.makeText(StocktakeDetailActivity.this,
+                                        "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+                            }
+                        })));
 
         btnSubmit.setOnClickListener(v -> confirmAndSubmit());
     }
@@ -68,50 +68,57 @@ public class StocktakeDetailActivity extends AppCompatActivity {
     protected void onResume() { super.onResume(); render(); }
 
     private void confirmAndSubmit() {
-        // 简化:不校验未盘行(后端允许部分未盘),直接二次确认
         new AlertDialog.Builder(this)
                 .setTitle(R.string.btn_complete_stocktake)
                 .setMessage(R.string.stocktake_submit_confirm_all)
                 .setPositiveButton(R.string.action_confirm, (d, w) ->
-                        RepositoryProvider.get().commitStocktake(orderId, new WmsCallback<StocktakeOrder>() {
-                            @Override public void onSuccess(StocktakeOrder o) {
-                                Toast.makeText(StocktakeDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
-                                finish();
-                            }
-                            @Override public void onError(int code, String msg) {
-                                Toast.makeText(StocktakeDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
-                            }
-                        }))
+                        RepositoryProvider.get().commitStocktake(String.valueOf(dbId),
+                                new WmsCallback<StocktakeOrder>() {
+                                    @Override public void onSuccess(StocktakeOrder o) {
+                                        Toast.makeText(StocktakeDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
+                                        finish();
+                                    }
+                                    @Override public void onError(int code, String msg) {
+                                        Toast.makeText(StocktakeDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    }
+                                }))
                 .setNegativeButton(R.string.action_cancel, null)
                 .show();
     }
 
     private void render() {
-        RepositoryProvider.get().listStocktake(false, new WmsCallback<List<StocktakeOrder>>() {
-            @Override public void onSuccess(List<StocktakeOrder> all) {
-                StocktakeOrder o = null;
-                for (StocktakeOrder x : all) if (x.id.equals(orderId)) { o = x; break; }
-                if (o == null) { finish(); return; }
-                doRender(o);
-            }
-            @Override public void onError(int code, String msg) {
-                Toast.makeText(StocktakeDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
-            }
-        });
+        if (dbId == null || dbId < 0) { finish(); return; }
+        RepositoryProvider.get().getStocktake(String.valueOf(dbId),
+                new WmsCallback<StocktakeOrder>() {
+                    @Override public void onSuccess(StocktakeOrder o) {
+                        if (o == null) { finish(); return; }
+                        doRender(o);
+                    }
+                    @Override public void onError(int code, String msg) {
+                        Toast.makeText(StocktakeDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void doRender(StocktakeOrder o) {
         TextView tvId = findViewById(R.id.tv_id);
         TextView tvStatus = findViewById(R.id.tv_status);
-        TextView tvWh = findViewById(R.id.tv_warehouse);
+        TextView tvScope = findViewById(R.id.tv_warehouse);
         TextView tvMode = findViewById(R.id.tv_mode);
+        TextView tvOperator = findViewById(R.id.tv_operator);
         TextView tvCreated = findViewById(R.id.tv_created);
 
         tvId.setText(o.id);
         StatusPill.apply(tvStatus, o.status);
-        tvWh.setText("盘点仓库 · " + (o.warehouse == null ? "-" : o.warehouse));
-        tvMode.setText("盘点方式 · " + (o.mode == null ? "-" : o.mode.label));
-        tvCreated.setText(getString(R.string.created_at_fmt, o.createdAt == null ? "-" : o.createdAt));
+        String kw = (o.scopeKeyword == null || o.scopeKeyword.isEmpty()) ? "—" : o.scopeKeyword;
+        tvScope.setText("盘点范围: " + kw);
+        String scopeLabel = "ALL".equals(o.scope) ? "全盘"
+                : "SKU".equals(o.scope) ? "抽样盘"
+                : "LOCATION".equals(o.scope) ? "动碰盘"
+                : (o.scope == null ? "—" : o.scope);
+        tvMode.setText("盘点方式: " + scopeLabel);
+        tvOperator.setText("操作员: " + (o.operator == null ? "—" : o.operator));
+        tvCreated.setText(getString(R.string.created_at_fmt, o.createdAt == null ? "—" : o.createdAt));
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
@@ -132,19 +139,23 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 TextView tvDiff = row.findViewById(R.id.tv_diff);
                 TextView tvPill = row.findViewById(R.id.tv_pill);
 
-                tvSku.setText(l.sku);
-                tvSub.setText(getString(R.string.stocktake_line_fmt, l.name, l.barcode, l.location == null ? "-" : l.location));
-                tvBook.setText(String.valueOf(l.bookQty));
-                etActual.setText(l.actualQty < 0 ? "" : String.valueOf(l.actualQty));
-                etActual.setEnabled(false);  // 后端模式下不支持手填(需要 itemId),用扫码
+                tvSku.setText(l.sku == null ? "?" : l.sku);
+                tvSub.setText((l.productName == null ? "" : l.productName)
+                        + " · 码 " + (l.code == null ? "—" : l.code)
+                        + " · " + (l.locationCode == null ? "—" : l.locationCode));
+                tvBook.setText(l.systemQty == null ? "—" : String.valueOf(l.systemQty));
+                etActual.setText(l.countedQty == null ? "" : String.valueOf(l.countedQty));
+                etActual.setEnabled(false);
 
-                if (l.actualQty < 0) {
+                int sys = l.systemQty == null ? 0 : l.systemQty;
+                int cnt = l.countedQty == null ? -1 : l.countedQty;
+                if (cnt < 0) {
                     tvDiff.setText("—");
                     tvDiff.setTextColor(0xFF9AA3B2);
                     tvPill.setText(R.string.stocktake_status_uncounted);
                     tvPill.setBackgroundResource(R.drawable.bg_pill_draft);
                 } else {
-                    int d = l.actualQty - l.bookQty;
+                    int d = cnt - sys;
                     String sign = d > 0 ? "+" : "";
                     tvDiff.setText(sign + d);
                     if (d == 0) {
@@ -169,9 +180,8 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         btnScan.setEnabled(!done);
         btnSubmit.setEnabled(!done);
 
-        int total = o.lines == null ? 0 : o.lines.size();
-        int counted = 0;
-        if (o.lines != null) for (StocktakeOrder.Line l : o.lines) if (l.actualQty >= 0) counted++;
+        int total = o.totalCount == null ? 0 : o.totalCount;
+        int counted = o.countedCount == null ? 0 : o.countedCount;
         tvProgress.setText(getString(R.string.stocktake_progress_fmt, counted, total));
     }
 }

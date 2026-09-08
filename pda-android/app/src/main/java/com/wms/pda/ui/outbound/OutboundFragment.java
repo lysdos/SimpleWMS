@@ -48,6 +48,7 @@ public class OutboundFragment extends Fragment {
         adapter = new OutboundAdapter(o -> {
             Intent i = new Intent(requireContext(), OutboundDetailActivity.class);
             i.putExtra("orderId", o.id);
+            if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
             startActivity(i);
         });
         list.setAdapter(adapter);

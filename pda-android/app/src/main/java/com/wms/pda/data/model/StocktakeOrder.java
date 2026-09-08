@@ -3,58 +3,79 @@ package com.wms.pda.data.model;
 import java.util.List;
 
 /**
- * 盘点单。盘点方式:全盘/动碰盘/抽样盘。
- * 提交后系统自动比对 账面 vs 实盘,产出盘盈/盘亏。
+ * 盘点单(主单 + 明细)。
+ * 对接 /api/stock-checks,字段 1:1 对应后端 JSON。
  */
 public class StocktakeOrder {
-    public String id;
-    public String warehouse;
-    public Mode mode;
+    public Integer dbId;          // 后端数据库自增 id(详情/扫码接口需要)
+    public String id;             // 后端 checkNo(展示用单号)
+    public String scope;          // ALL / SKU / LOCATION
+    public String scopeKeyword;   // scope 过滤值
+    public String operator;       // 操作员
+    public Integer totalCount;    // 行数
+    public Integer countedCount;  // 已扫行数
+    public Integer diffCount;     // 差异行数
+    public String remark;
     public Enums.DocStatus status;
     public String createdAt;
     public List<Line> lines;
 
     public StocktakeOrder() {}
 
-    public StocktakeOrder(String id, String warehouse, Mode mode, Enums.DocStatus status,
-                          String createdAt, List<Line> lines) {
+    public StocktakeOrder(Integer dbId, String id, String scope, String scopeKeyword,
+                         String operator, Integer totalCount, Integer countedCount,
+                         Integer diffCount, String remark, Enums.DocStatus status,
+                         String createdAt, List<Line> lines) {
+        this.dbId = dbId;
         this.id = id;
-        this.warehouse = warehouse;
-        this.mode = mode;
+        this.scope = scope;
+        this.scopeKeyword = scopeKeyword;
+        this.operator = operator;
+        this.totalCount = totalCount;
+        this.countedCount = countedCount;
+        this.diffCount = diffCount;
+        this.remark = remark;
         this.status = status;
         this.createdAt = createdAt;
         this.lines = lines;
     }
 
+    /** ALL 全盘 / SKU 抽样盘 / LOCATION 动碰盘(按 sku/location 过滤) */
     public enum Mode {
         ALL("全盘"),
-        MOVEMENT("动碰盘"),
-        SAMPLE("抽样盘");
+        SKU("抽样盘"),
+        LOCATION("动碰盘");
         public final String label;
         Mode(String label) { this.label = label; }
     }
 
     public static class Line {
+        public Integer id;
+        public Integer inventoryItemId;
+        public String code;            // 24 位 inventory_item.code
         public String sku;
-        public String name;
-        public String barcode;
-        public int bookQty;     // 账面
-        public int actualQty;   // 实盘(初始为 -1 表示未盘)
-        public String location;
+        public String productName;
+        public String locationCode;
+        public Integer systemQty;      // 账面
+        public Integer countedQty;     // 实盘(null = 未盘)
+        public Integer diff;
+        public String rowRemark;
 
         public Line() {}
 
-        public Line(String sku, String name, String barcode, int bookQty, int actualQty, String location) {
+        public Line(Integer id, Integer inventoryItemId, String code, String sku,
+                    String productName, String locationCode, Integer systemQty,
+                    Integer countedQty, Integer diff, String rowRemark) {
+            this.id = id;
+            this.inventoryItemId = inventoryItemId;
+            this.code = code;
             this.sku = sku;
-            this.name = name;
-            this.barcode = barcode;
-            this.bookQty = bookQty;
-            this.actualQty = actualQty;
-            this.location = location;
-        }
-
-        public int diff() {
-            return actualQty < 0 ? 0 : (actualQty - bookQty);
+            this.productName = productName;
+            this.locationCode = locationCode;
+            this.systemQty = systemQty;
+            this.countedQty = countedQty;
+            this.diff = diff;
+            this.rowRemark = rowRemark;
         }
     }
 }

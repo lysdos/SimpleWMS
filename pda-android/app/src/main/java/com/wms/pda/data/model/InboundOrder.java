@@ -3,24 +3,30 @@ package com.wms.pda.data.model;
 import java.util.List;
 
 /**
- * 入库单(主单 + 明细)。对应 SimpleWMS 后端入库单表,接入时按真实字段映射。
+ * 入库单(主单 + 明细)。对接 /api/inbound/orders,字段 1:1 对应后端 JSON。
  */
 public class InboundOrder {
-    public String id;             // 单号
-    public String supplier;       // 供应商
-    public String warehouse;      // 目标仓库
+    public Integer dbId;          // 后端数据库自增 id(详情接口需要)
+    public String id;             // 后端 orderNo(展示用单号)
+    public String externalNo;     // 外部单号
+    public String operator;       // 操作员
+    public Integer totalQuantity; // 入库总件数(后端字段)
+    public Integer itemCount;     // 入库行数(后端字段)
     public String remark;         // 备注
     public Enums.DocStatus status;
-    public String createdAt;      // 创建时间(yyyy-MM-dd HH:mm)
+    public String createdAt;      // 创建时间(ISO 字符串)
     public List<InboundLine> lines;
 
     public InboundOrder() {}
 
-    public InboundOrder(String id, String supplier, String warehouse, String remark,
-                        Enums.DocStatus status, String createdAt, List<InboundLine> lines) {
+    public InboundOrder(String id, String externalNo, String operator, Integer totalQuantity,
+                        Integer itemCount, String remark, Enums.DocStatus status,
+                        String createdAt, List<InboundLine> lines) {
         this.id = id;
-        this.supplier = supplier;
-        this.warehouse = warehouse;
+        this.externalNo = externalNo;
+        this.operator = operator;
+        this.totalQuantity = totalQuantity;
+        this.itemCount = itemCount;
         this.remark = remark;
         this.status = status;
         this.createdAt = createdAt;
@@ -28,20 +34,39 @@ public class InboundOrder {
     }
 
     public static class InboundLine {
+        public Integer id;          // 后端 line.id
+        public Integer productId;   // 后端 productId
         public String sku;
-        public String name;
-        public String barcode;     // 扫码后回填
-        public int qty;
-        public String uom;         // 单位
+        public String name;         // 后端 productName
+        public String supplier;     // 行级供应商
+        public String unitPrice;    // BigDecimal → String
+        public Integer beforeQty;
+        public Integer afterQty;
+        public String location;     // 库位
+        public String rowRemark;    // 行级备注
+        public int qty;             // 后端 quantity
+        public String uom;          // 后端无此字段,PDA 端占位 "件"
+        public List<String> codes;  // commit 后生成的 24 位码
 
         public InboundLine() {}
 
-        public InboundLine(String sku, String name, String barcode, int qty, String uom) {
+        public InboundLine(Integer id, Integer productId, String sku, String name,
+                           String supplier, String unitPrice, Integer beforeQty,
+                           Integer afterQty, String location, String rowRemark,
+                           int qty, String uom, List<String> codes) {
+            this.id = id;
+            this.productId = productId;
             this.sku = sku;
             this.name = name;
-            this.barcode = barcode;
+            this.supplier = supplier;
+            this.unitPrice = unitPrice;
+            this.beforeQty = beforeQty;
+            this.afterQty = afterQty;
+            this.location = location;
+            this.rowRemark = rowRemark;
             this.qty = qty;
             this.uom = uom;
+            this.codes = codes;
         }
     }
 }

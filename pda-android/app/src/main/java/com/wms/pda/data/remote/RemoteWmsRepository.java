@@ -84,10 +84,11 @@ public class RemoteWmsRepository implements WmsRepository {
         api.get("/api/dashboard/stats", Dto.DashboardStats.class, new ApiClient.Callback<Dto.DashboardStats>() {
             @Override public void onSuccess(Dto.DashboardStats s) {
                 DashboardSnapshot snap = new DashboardSnapshot(
-                        s == null ? 0 : nz(s.todayInbound),
-                        s == null ? 0 : nz(s.todayOutbound),
-                        0,  // pendingStocktake 待 listStocktake 算,这里先放 0
-                        s == null ? 0 : nz(s.lowStockCount),
+                        nz(s == null ? null : s.productCount),
+                        nz(s == null ? null : s.totalQuantity),
+                        s == null || s.totalValue == null ? java.math.BigDecimal.ZERO
+                                : new java.math.BigDecimal(s.totalValue),
+                        nz(s == null ? null : s.lowStockCount),
                         new ArrayList<OpLog>()  // TODO: 接 /api/dashboard/recent-ops
                 );
                 cb.onSuccess(snap);
@@ -114,15 +115,34 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
+    public void getInboundOrder(String orderId, WmsCallback<InboundOrder> cb) {
+        // 后端 path variable 是数字 id,PDA 用 orderNo,这里尝试两种
+        try {
+            int numericId = Integer.parseInt(orderId);
+            api.get("/api/inbound/orders/" + numericId, Dto.InboundOrder.class,
+                    new ApiClient.Callback<Dto.InboundOrder>() {
+                @Override public void onSuccess(Dto.InboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+                @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+            });
+        } catch (NumberFormatException e) {
+            cb.onError(400, "单号无效: " + orderId);
+        }
+    }
+
+    @Override
     public void createInbound(String supplier, String warehouse, String remark, WmsCallback<InboundOrder> cb) {
+        // 接口入参约定:第 1 个 string 实际是 externalNo(后端入库单的字段);
+        // supplier/warehouse 后端不入库表,PDA 端忽略。
+        String externalNo = supplier;
         Map<String, Object> body = new HashMap<>();
+        if (externalNo != null && !externalNo.isEmpty()) body.put("externalNo", externalNo);
         if (remark != null && !remark.isEmpty()) body.put("remark", remark);
-        // supplier/warehouse 不发,后端不入库表(PDA 端记到行级 supplier)
         api.post("/api/inbound/orders", body, Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
             @Override public void onSuccess(Dto.InboundOrder o) {
                 InboundOrder m = Mappers.toModel(o);
-                m.supplier = supplier;
-                m.warehouse = warehouse;
+                if (externalNo != null && !externalNo.isEmpty() && m.externalNo == null) {
+                    m.externalNo = externalNo;
+                }
                 cb.onSuccess(m);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -181,16 +201,27 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void createOutbound(String customer, String warehouse, String remark, WmsCallback<OutboundOrder> cb) {
+    public void getOutboundOrder(String orderDbId, WmsCallback<OutboundOrder> cb) {
+        try {
+            int numericId = Integer.parseInt(orderDbId);
+            api.get("/api/outbound/orders/" + numericId, Dto.OutboundOrder.class,
+                    new ApiClient.Callback<Dto.OutboundOrder>() {
+                @Override public void onSuccess(Dto.OutboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+                @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+            });
+        } catch (NumberFormatException e) {
+            cb.onError(400, "单号无效: " + orderDbId);
+        }
+    }
+
+    @Override
+    public void createOutbound(String customer, String externalNo, String remark, WmsCallback<OutboundOrder> cb) {
         Map<String, Object> body = new HashMap<>();
         if (customer != null && !customer.isEmpty()) body.put("customer", customer);
+        if (externalNo != null && !externalNo.isEmpty()) body.put("externalNo", externalNo);
         if (remark != null && !remark.isEmpty()) body.put("remark", remark);
         api.post("/api/outbound/orders", body, Dto.OutboundOrder.class, new ApiClient.Callback<Dto.OutboundOrder>() {
-            @Override public void onSuccess(Dto.OutboundOrder o) {
-                OutboundOrder m = Mappers.toModel(o);
-                m.warehouse = warehouse;
-                cb.onSuccess(m);
-            }
+            @Override public void onSuccess(Dto.OutboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
     }
@@ -228,14 +259,25 @@ public class RemoteWmsRepository implements WmsRepository {
     @Override
     public void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb) {
         String k = keyword == null ? "" : keyword.trim();
+        // 后端 inventory_item 列表支持 sku / location / status 过滤(无 name/code 模糊)。
+        // PDA 端"按 SKU/名称/条码搜索"先用 sku 过滤,fallback 拉全部 + 客户端再模糊。
         String path = k.isEmpty()
                 ? "/api/inventory/items?page=1&pageSize=200"
-                : "/api/inventory/items?page=1&pageSize=200";  // 后端 inventory 不支持 keyword,简化
+                : "/api/inventory/items?sku=" + java.net.URLEncoder.encode(k, java.nio.charset.StandardCharsets.UTF_8)
+                  + "&page=1&pageSize=200";
         api.get(path, ListInvItemWrap.class, new ApiClient.Callback<ListInvItemWrap>() {
             @Override public void onSuccess(ListInvItemWrap w) {
                 List<InventoryItem> out = new ArrayList<>();
                 if (w == null || w.list == null) { cb.onSuccess(out); return; }
-                for (Dto.InventoryItem it : w.list) out.add(Mappers.toModel(it));
+                String kk = k.toLowerCase();
+                for (Dto.InventoryItem it : w.list) {
+                    // 客户端二次过滤:sku 之外也接受 productName / code
+                    String sku  = it.sku  == null ? "" : it.sku.toLowerCase();
+                    String name = it.productName == null ? "" : it.productName.toLowerCase();
+                    String code = it.code == null ? "" : it.code.toLowerCase();
+                    if (!kk.isEmpty() && !sku.contains(kk) && !name.contains(kk) && !code.contains(kk)) continue;
+                    out.add(Mappers.toModel(it));
+                }
                 cb.onSuccess(out);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -275,17 +317,34 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
+    public void getStocktake(String orderDbId, WmsCallback<StocktakeOrder> cb) {
+        try {
+            int numericId = Integer.parseInt(orderDbId);
+            api.get("/api/stock-checks/" + numericId, Dto.StockCheck.class,
+                    new ApiClient.Callback<Dto.StockCheck>() {
+                @Override public void onSuccess(Dto.StockCheck o) { cb.onSuccess(Mappers.toModel(o)); }
+                @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+            });
+        } catch (NumberFormatException e) {
+            cb.onError(400, "单号无效: " + orderDbId);
+        }
+    }
+
+    @Override
     public void createStocktake(String warehouse, StocktakeOrder.Mode mode, WmsCallback<StocktakeOrder> cb) {
+        // 后端接口 body: {scope, keyword, remark};ALL 模式不传 keyword,LOCATION 模式 keyword=仓库
         Map<String, Object> body = new HashMap<>();
-        body.put("scope", mode == null ? "ALL" : mode.name());
-        // 后端 location 维度需要 LOCATION 模式 + keyword=仓库
-        if (mode == StocktakeOrder.Mode.ALL) {
+        StocktakeOrder.Mode m = mode == null ? StocktakeOrder.Mode.ALL : mode;
+        body.put("scope", m.name());
+        if (m == StocktakeOrder.Mode.LOCATION && warehouse != null && !warehouse.isEmpty()) {
+            body.put("keyword", warehouse);
+        } else {
             body.put("keyword", "");
         }
         api.post("/api/stock-checks", body, Dto.StockCheck.class, new ApiClient.Callback<Dto.StockCheck>() {
             @Override public void onSuccess(Dto.StockCheck o) {
                 StocktakeOrder m = Mappers.toModel(o);
-                m.warehouse = warehouse;  // 后端不返回 warehouse(在 keyword 里)
+                m.scopeKeyword = warehouse;  // 后端不返回 warehouse
                 cb.onSuccess(m);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -321,6 +380,7 @@ public class RemoteWmsRepository implements WmsRepository {
 
     // ---- helpers ----
     private static int nz(Integer i) { return i == null ? 0 : i; }
+    private static int nz(Long i)    { return i == null ? 0 : i.intValue(); }
 
     /** 后端分页响应壳:`{list, total, page, pageSize}` */
     public static class ListInboundWrap {

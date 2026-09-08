@@ -41,15 +41,21 @@
                 android:textColorHint="@color/text_hint"
                 android:inputType="text" />
 
-            <TextView android:text="@string/inbound_warehouse" style="@style/Text.Caption"
+            <TextView android:text="@string/inbound_external_no" style="@style/Text.Caption"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_md" />
-            <Spinner
-                android:id="@+id/sp_warehouse"
+            <EditText
+                android:id="@+id/et_external_no"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/touch_min"
                 android:layout_marginTop="@dimen/space_xs"
-                android:background="@drawable/bg_input" />
+                android:background="@drawable/bg_input"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_md"
+                android:hint="如:OUT-2026-001"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_hint"
+                android:inputType="text" />
 
             <TextView android:text="@string/inbound_remark" style="@style/Text.Caption"
                 android:layout_width="wrap_content" android:layout_height="wrap_content"

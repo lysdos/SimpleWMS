@@ -48,7 +48,7 @@ public final class ScanSimulator {
                 ad.clear();
                 if (items != null) {
                     for (com.wms.pda.data.model.InventoryItem i : items) {
-                        ad.add(i.barcode + "  (" + i.name + ")");
+                        ad.add(i.code + "  (" + (i.productName == null ? "" : i.productName) + ")");
                     }
                 }
                 ad.notifyDataSetChanged();

@@ -23,7 +23,7 @@ import com.wms.pda.ui.stocktake.StocktakeListActivity;
 
 import java.util.List;
 
-/** 库存管理:搜索 + 行内操作(打印条码/调拨/报废) + 跳转盘点。 */
+/** 库存管理:搜索 + 行内操作(打印条码/报废) + 跳转盘点。 */
 public class InventoryFragment extends Fragment {
 
     private InventoryAdapter adapter;
@@ -49,21 +49,18 @@ public class InventoryFragment extends Fragment {
 
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new InventoryAdapter(new InventoryAdapter.Callbacks() {
-            @Override public void onPrint(String sku) {
-                RepositoryProvider.get().printBarcode(sku, new WmsCallback<Void>() {
+            @Override public void onPrint(String code) {
+                RepositoryProvider.get().printBarcode(code, new WmsCallback<Void>() {
                     @Override public void onSuccess(Void v) {
-                        if (isAdded()) Toast.makeText(requireContext(), "已生成条码: " + sku, Toast.LENGTH_SHORT).show();
+                        if (isAdded()) Toast.makeText(requireContext(), "已生成条码: " + code, Toast.LENGTH_SHORT).show();
                     }
                     @Override public void onError(int code, String msg) {
                         if (isAdded()) Toast.makeText(requireContext(), "生成失败: " + msg, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
-            @Override public void onTransfer(String sku, String warehouse, int available) {
-                TransferDialog.show(requireContext(), sku, warehouse, available);
-            }
-            @Override public void onScrap(String sku, String warehouse, int onHand) {
-                ScrapDialog.show(requireContext(), sku, warehouse, onHand);
+            @Override public void onScrap(String code, String warehouse, int onHand) {
+                ScrapDialog.show(requireContext(), code, warehouse, onHand);
             }
         });
         list.setAdapter(adapter);

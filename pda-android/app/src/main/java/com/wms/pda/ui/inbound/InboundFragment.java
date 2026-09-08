@@ -50,6 +50,7 @@ public class InboundFragment extends Fragment {
         adapter = new InboundAdapter(o -> {
             Intent i = new Intent(requireContext(), InboundDetailActivity.class);
             i.putExtra("orderId", o.id);
+            if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
             startActivity(i);
         });
         list.setAdapter(adapter);

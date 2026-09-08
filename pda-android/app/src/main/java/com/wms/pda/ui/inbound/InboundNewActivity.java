@@ -1,9 +1,7 @@
 package com.wms.pda.ui.inbound;
 
 import android.os.Bundle;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
-import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -15,7 +13,7 @@ import com.wms.pda.data.model.InboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 
-/** 新建入库单 */
+/** 新建入库单:外部单号 + 备注(后端真正入库的字段) */
 public class InboundNewActivity extends AppCompatActivity {
 
     @Override
@@ -26,23 +24,15 @@ public class InboundNewActivity extends AppCompatActivity {
         Toolbar tb = findViewById(R.id.toolbar);
         tb.setNavigationOnClickListener(v -> finish());
 
-        EditText etSupplier = findViewById(R.id.et_supplier);
+        EditText etExternalNo = findViewById(R.id.et_external_no);
         EditText etRemark = findViewById(R.id.et_remark);
-        Spinner sp = findViewById(R.id.sp_warehouse);
         MaterialButton submit = findViewById(R.id.btn_submit);
 
-        ArrayAdapter<String> ad = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, new String[]{"主仓", "分仓"});
-        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        sp.setAdapter(ad);
-
         submit.setOnClickListener(v -> {
-            String supplier = etSupplier.getText().toString().trim();
-            if (supplier.isEmpty()) { etSupplier.setError("请填写供应商"); return; }
-            String wh = (String) sp.getSelectedItem();
+            String externalNo = etExternalNo.getText().toString().trim();
             String remark = etRemark.getText().toString().trim();
             submit.setEnabled(false);
-            RepositoryProvider.get().createInbound(supplier, wh, remark, new WmsCallback<InboundOrder>() {
+            RepositoryProvider.get().createInbound(externalNo, null, remark, new WmsCallback<InboundOrder>() {
                 @Override public void onSuccess(InboundOrder order) {
                     Toast.makeText(InboundNewActivity.this, "已创建: " + order.id, Toast.LENGTH_SHORT).show();
                     finish();

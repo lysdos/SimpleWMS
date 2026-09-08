@@ -11,12 +11,10 @@ public class Dto {
 
     // ---- 仪表盘 ----
     public static class DashboardStats {
-        public Integer productCount;
-        public Integer totalQuantity;
-        public java.math.BigDecimal totalValue;
-        public Integer lowStockCount;
-        public Integer todayInbound;
-        public Integer todayOutbound;
+        public Long productCount;
+        public Long totalQuantity;
+        public String totalValue;     // BigDecimal → 字符串
+        public Long lowStockCount;
     }
 
     // ---- 入库 ----

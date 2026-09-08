@@ -45,10 +45,11 @@
 
     <!-- 仪表盘 -->
     <string name="dash_welcome">您好, %1$s</string>
-    <string name="dash_kpi_inbound_today">今日入库单数</string>
-    <string name="dash_kpi_outbound_today">今日出库单数</string>
-    <string name="dash_kpi_pending_stocktake">待盘点任务</string>
     <string name="dash_kpi_low_stock">库存预警 SKU</string>
+    <string name="dash_kpi_product_count">商品种类</string>
+    <string name="dash_kpi_total_quantity">库存总件数</string>
+    <string name="dash_kpi_total_value">库存总值</string>
+    <string name="dash_overview">系统概览</string>
     <string name="dash_recent_title">最近操作</string>
 
     <!-- 入库 -->
@@ -58,6 +59,7 @@
     <string name="inbound_new_title">新建入库单</string>
     <string name="inbound_detail_title">入库单详情</string>
     <string name="inbound_supplier">供应商</string>
+    <string name="inbound_external_no">外部单号</string>
     <string name="inbound_warehouse">目标仓库</string>
     <string name="inbound_remark">备注</string>
     <string name="inbound_scan_hint">点击下方按钮扫码,扫到的条码会自动加入入库明细</string>

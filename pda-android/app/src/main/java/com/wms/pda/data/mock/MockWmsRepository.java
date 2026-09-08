@@ -40,6 +40,18 @@ public class MockWmsRepository implements WmsRepository {
 
     private MockWmsRepository() { seed(); }
 
+    private static InventoryItem make(Integer id, String code, String sku, String name,
+                                      String warehouse, String location, int qty, int remaining,
+                                      String status, int inboundOrderId) {
+        InventoryItem m = new InventoryItem();
+        m.id = id; m.code = code; m.sku = sku; m.productName = name;
+        m.productId = Integer.parseInt(sku.replace("SKU-", ""));
+        m.locationCode = location; m.quantity = qty; m.remaining = remaining;
+        m.status = status; m.inboundOrderId = inboundOrderId;
+        m.createdBy = "admin"; m.createdAt = "2026-09-08 12:00:00";
+        return m;
+    }
+
     /** 立即在调用线程同步执行 body,再切回主线程触发回调(模拟异步)。 */
     private <T> void reply(WmsCallback<T> cb, T value) {
         if (cb == null) return;
@@ -51,52 +63,59 @@ public class MockWmsRepository implements WmsRepository {
     }
 
     private void seed() {
-        inventory.add(new InventoryItem("SKU-1001", "蓝牙条码扫描枪",   "6901234567001", "主仓", "A-01-03", 48, 42, 6, "台", false));
-        inventory.add(new InventoryItem("SKU-1002", "热敏标签打印机",   "6901234567002", "主仓", "A-01-04", 12, 10, 2, "台", true));
-        inventory.add(new InventoryItem("SKU-1003", "工业 PDA 终端",   "6901234567003", "主仓", "A-02-01",  6,  4, 2, "台", true));
-        inventory.add(new InventoryItem("SKU-1004", "不干胶标签 50x30", "6901234567004", "主仓", "B-03-02", 320, 320, 0, "卷", false));
-        inventory.add(new InventoryItem("SKU-1005", "碳带 110mm x 300m", "6901234567005", "主仓", "B-03-05", 18, 16, 2, "卷", false));
-        inventory.add(new InventoryItem("SKU-1006", "周转箱 600x400",   "6901234567006", "分仓", "C-01-01", 75, 70, 5, "个", false));
-        inventory.add(new InventoryItem("SKU-1007", "防静电手套",       "6901234567007", "分仓", "C-02-02", 200, 200, 0, "双", false));
+        inventory.add(make(1, "202609081200010010000001", "SKU-1001", "蓝牙条码扫描枪",   "主仓", "A-01-03", 48, 42, "IN_STOCK", 1));
+        inventory.add(make(2, "202609081200010020000002", "SKU-1002", "热敏标签打印机",   "主仓", "A-01-04", 12, 10, "IN_STOCK", 1));
+        inventory.add(make(3, "202609081200010030000003", "SKU-1003", "工业 PDA 终端",   "主仓", "A-02-01",  6,  4, "IN_STOCK", 1));
+        inventory.add(make(4, "202609081200010040000004", "SKU-1004", "不干胶标签 50x30", "主仓", "B-03-02", 320, 320, "IN_STOCK", 3));
+        inventory.add(make(5, "202609081200010050000005", "SKU-1005", "碳带 110mm x 300m", "主仓", "B-03-05", 18, 16, "IN_STOCK", 3));
+        inventory.add(make(6, "202609081200010060000006", "SKU-1006", "周转箱 600x400",   "分仓", "C-01-01", 75, 70, "IN_STOCK", 4));
+        inventory.add(make(7, "202609081200010070000007", "SKU-1007", "防静电手套",       "分仓", "C-02-02", 200, 200, "IN_STOCK", 4));
 
         inboundOrders.add(new InboundOrder(
-                "RK" + inboundSeq++, "上海某科技公司", "主仓", "采购到货",
+                "RK" + inboundSeq++, null, "admin", 14, 2, "采购到货",
                 Enums.DocStatus.PENDING, "2026-09-08 09:12",
                 Arrays.asList(
-                        new InboundOrder.InboundLine("SKU-1001", "蓝牙条码扫描枪", "6901234567001", 10, "台"),
-                        new InboundOrder.InboundLine("SKU-1002", "热敏标签打印机", "6901234567002",  4, "台"))));
+                        new InboundOrder.InboundLine(null, null, "SKU-1001", "蓝牙条码扫描枪",
+                                "上海某科技公司", "12.50", 0, 10, "A-01-01", null, 10, "台", null),
+                        new InboundOrder.InboundLine(null, null, "SKU-1002", "热敏标签打印机",
+                                "上海某科技公司", "8.00", 0, 4, "A-01-02", null, 4, "台", null))));
 
         inboundOrders.add(new InboundOrder(
-                "RK" + inboundSeq++, "深圳某物联公司", "分仓", "调拨入库",
+                "RK" + inboundSeq++, null, "admin", 30, 1, "调拨入库",
                 Enums.DocStatus.PENDING, "2026-09-08 10:05",
                 Arrays.asList(
-                        new InboundOrder.InboundLine("SKU-1006", "周转箱 600x400", "6901234567006", 30, "个"))));
+                        new InboundOrder.InboundLine(null, null, "SKU-1006", "周转箱 600x400",
+                                "深圳某物联公司", "5.00", 0, 30, "B-03-02", null, 30, "个", null))));
 
         inboundOrders.add(new InboundOrder(
-                "RK" + (inboundSeq - 10), "上海某科技公司", "主仓", "",
+                "RK" + (inboundSeq - 10), null, "admin", 80, 1, "",
                 Enums.DocStatus.DONE, "2026-09-07 16:40",
-                Arrays.asList(new InboundOrder.InboundLine("SKU-1004", "不干胶标签 50x30", "6901234567004", 80, "卷"))));
+                Arrays.asList(new InboundOrder.InboundLine(null, null, "SKU-1004", "不干胶标签 50x30",
+                        "上海某科技公司", "3.50", 0, 80, "B-03-02", null, 80, "卷", null))));
 
         outboundOrders.add(new OutboundOrder(
-                "CK" + outboundSeq++, "生产线 A", "主仓", "工单领料",
+                null, "CK" + outboundSeq++, "生产线 A", "OUT-2026-001", "admin", 22, 2, "工单领料",
                 Enums.DocStatus.PENDING, "2026-09-08 08:30",
                 Arrays.asList(
-                        new OutboundOrder.Line("SKU-1001", "蓝牙条码扫描枪", "6901234567001", 2, "台"),
-                        new OutboundOrder.Line("SKU-1004", "不干胶标签 50x30", "6901234567004", 20, "卷"))));
+                        new OutboundOrder.Line(null, null, "SKU-1001", "蓝牙条码扫描枪",
+                                "12.50", 50, 48, "A-01-01", "首批领用", 2, "台"),
+                        new OutboundOrder.Line(null, null, "SKU-1004", "不干胶标签 50x30",
+                                "3.50", 340, 320, "B-03-02", null, 20, "卷"))));
 
         outboundOrders.add(new OutboundOrder(
-                "CK" + outboundSeq++, "工程部", "主仓", "部门领用",
+                null, "CK" + outboundSeq++, "工程部", null, "admin", 10, 1, "部门领用",
                 Enums.DocStatus.PENDING, "2026-09-08 11:00",
                 Arrays.asList(
-                        new OutboundOrder.Line("SKU-1007", "防静电手套", "6901234567007", 10, "双"))));
+                        new OutboundOrder.Line(null, null, "SKU-1007", "防静电手套",
+                                "1.20", 200, 190, "C-02-02", null, 10, "双"))));
 
         stocktakes.add(new StocktakeOrder(
-                "PD" + stocktakeSeq++, "主仓", StocktakeOrder.Mode.ALL, Enums.DocStatus.PENDING,
-                "2026-09-08 07:30",
+                1, "PD" + stocktakeSeq++, "ALL", "", "admin", 3, 0, 0, "",
+                Enums.DocStatus.PENDING, "2026-09-08 07:30",
                 Arrays.asList(
-                        new StocktakeOrder.Line("SKU-1001", "蓝牙条码扫描枪", "6901234567001", 48, -1, "A-01-03"),
-                        new StocktakeOrder.Line("SKU-1002", "热敏标签打印机", "6901234567002", 12, -1, "A-01-04"),
-                        new StocktakeOrder.Line("SKU-1003", "工业 PDA 终端", "6901234567003",  6, -1, "A-02-01"))));
+                        new StocktakeOrder.Line(1, 1, "202609081200010010000001", "SKU-1001", "蓝牙条码扫描枪", "A-01-03", 48, null, null, null),
+                        new StocktakeOrder.Line(2, 2, "202609081200010020000002", "SKU-1002", "热敏标签打印机", "A-01-04", 12, null, null, null),
+                        new StocktakeOrder.Line(3, 3, "202609081200010030000003", "SKU-1003", "工业 PDA 终端", "A-02-01",  6, null, null, null))));
 
         ops.add(new OpLog("2026-09-08 11:20", "入库", "RK1003", "扫描入库 2 行 4 件"));
         ops.add(new OpLog("2026-09-08 10:55", "盘点", "PD3001", "生成全盘单"));
@@ -112,14 +131,20 @@ public class MockWmsRepository implements WmsRepository {
     // ---- 仪表盘 ----
     @Override
     public void loadDashboard(WmsCallback<DashboardSnapshot> cb) {
-        int inToday = 0, outToday = 0;
-        for (InboundOrder o : inboundOrders)   if (o.createdAt.startsWith("2026-09-08")) inToday++;
-        for (OutboundOrder o : outboundOrders) if (o.createdAt.startsWith("2026-09-08")) outToday++;
-        int pendingSt = 0;
-        for (StocktakeOrder s : stocktakes) if (s.status == Enums.DocStatus.PENDING) pendingSt++;
         int low = 0;
-        for (InventoryItem i : inventory) if (i.lowStock) low++;
-        reply(cb, new DashboardSnapshot(inToday, outToday, pendingSt, low, new ArrayList<>(ops)));
+        int productCount = 0;
+        java.util.Set<String> skus = new java.util.HashSet<>();
+        int totalQty = 0;
+        for (InventoryItem i : inventory) {
+            if (i.remaining != null && i.remaining > 0 && "IN_STOCK".equals(i.status)) {
+                totalQty += i.remaining;
+                if (i.productId != null) skus.add(String.valueOf(i.productId));
+                if (i.remaining <= 5) low++;
+            }
+        }
+        productCount = skus.size();
+        reply(cb, new DashboardSnapshot(productCount, totalQty,
+                java.math.BigDecimal.ZERO, low, new ArrayList<>(ops)));
     }
 
     // ---- 入库 ----
@@ -131,9 +156,16 @@ public class MockWmsRepository implements WmsRepository {
     }
 
     @Override
+    public void getInboundOrder(String orderId, WmsCallback<InboundOrder> cb) {
+        InboundOrder found = null;
+        for (InboundOrder o : inboundOrders) if (o.id.equals(orderId)) { found = o; break; }
+        reply(cb, found);
+    }
+
+    @Override
     public void createInbound(String supplier, String warehouse, String remark, WmsCallback<InboundOrder> cb) {
         InboundOrder o = new InboundOrder(
-                "RK" + inboundSeq++, supplier, warehouse, remark,
+                "RK" + inboundSeq++, null, "admin", 0, 0, remark,
                 Enums.DocStatus.PENDING, "2026-09-08 12:00", new ArrayList<>());
         inboundOrders.add(0, o);
         ops.add(0, new OpLog("2026-09-08 12:00", "入库", o.id, "创建入库单"));
@@ -146,7 +178,8 @@ public class MockWmsRepository implements WmsRepository {
         InboundOrder o = findInbound(orderId);
         if (o == null) { replyErr(cb, 404, "单据不存在"); return; }
         // mock 简化:不查 productId,用 qty 占位
-        o.lines.add(new InboundOrder.InboundLine("SKU-" + productId, "商品" + productId, "", quantity, "件"));
+        o.lines.add(new InboundOrder.InboundLine(null, null, "SKU-" + productId, "商品" + productId,
+                supplier, null, null, null, null, rowRemark, quantity, "件", null));
         reply(cb, o);
     }
 
@@ -157,9 +190,10 @@ public class MockWmsRepository implements WmsRepository {
         o.status = Enums.DocStatus.DONE;
         for (InboundOrder.InboundLine l : o.lines) {
             for (InventoryItem i : inventory) {
-                if (i.sku.equals(l.sku)) {
-                    i.onHand += l.qty;
-                    i.available += l.qty;
+                if (i.sku != null && i.sku.equals(l.sku)) {
+                    i.remaining = (i.remaining == null ? 0 : i.remaining) + l.qty;
+                    i.quantity = (i.quantity == null ? 0 : i.quantity) + l.qty;
+                    i.status = "IN_STOCK";
                     break;
                 }
             }
@@ -190,9 +224,16 @@ public class MockWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void createOutbound(String customer, String warehouse, String remark, WmsCallback<OutboundOrder> cb) {
+    public void getOutboundOrder(String orderDbId, WmsCallback<OutboundOrder> cb) {
+        OutboundOrder found = null;
+        for (OutboundOrder o : outboundOrders) if (o.id.equals(orderDbId)) { found = o; break; }
+        reply(cb, found);
+    }
+
+    @Override
+    public void createOutbound(String customer, String externalNo, String remark, WmsCallback<OutboundOrder> cb) {
         OutboundOrder o = new OutboundOrder(
-                "CK" + outboundSeq++, customer, warehouse, remark,
+                null, "CK" + outboundSeq++, customer, externalNo, "admin", 0, 0, remark,
                 Enums.DocStatus.PENDING, "2026-09-08 12:10", new ArrayList<>());
         outboundOrders.add(0, o);
         ops.add(0, new OpLog("2026-09-08 12:10", "出库", o.id, "创建出库单"));
@@ -203,17 +244,19 @@ public class MockWmsRepository implements WmsRepository {
     public void submitOutboundScan(String orderId, String code, WmsCallback<OutboundOrder> cb) {
         OutboundOrder o = findOutbound(orderId);
         if (o == null) { replyErr(cb, 404, "单据不存在"); return; }
-        for (OutboundOrder.Line l : o.lines) {
-            if (code.equals(l.barcode)) { l.qty += 1; reply(cb, o); return; }
-        }
-        // 反查库存条码
+        // mock 简化:按 code 反查库存单元(后端按 24 位码)
         for (InventoryItem i : inventory) {
-            if (code.equals(i.barcode)) {
-                o.lines.add(new OutboundOrder.Line(i.sku, i.name, i.barcode, 1, i.uom));
+            if (code.equals(i.code)) {
+                for (OutboundOrder.Line l : o.lines) {
+                    if (i.sku != null && i.sku.equals(l.sku)) { l.qty += 1; reply(cb, o); return; }
+                }
+                o.lines.add(new OutboundOrder.Line(null, null, i.sku, i.productName,
+                        null, null, null, null, null, 1, "件"));
                 reply(cb, o); return;
             }
         }
-        o.lines.add(new OutboundOrder.Line("?", "未知条码 " + code, code, 1, "件"));
+        o.lines.add(new OutboundOrder.Line(null, null, "?", "未知条码 " + code,
+                null, null, null, null, null, 1, "件"));
         reply(cb, o);
     }
 
@@ -224,9 +267,9 @@ public class MockWmsRepository implements WmsRepository {
         o.status = Enums.DocStatus.DONE;
         for (OutboundOrder.Line l : o.lines) {
             for (InventoryItem i : inventory) {
-                if (i.sku.equals(l.sku)) {
-                    i.onHand = Math.max(0, i.onHand - l.qty);
-                    i.available = Math.max(0, i.available - l.qty);
+                if (i.sku != null && i.sku.equals(l.sku)) {
+                    i.remaining = Math.max(0, (i.remaining == null ? 0 : i.remaining) - l.qty);
+                    i.status = i.remaining == 0 ? "OUT" : i.status;
                     break;
                 }
             }
@@ -255,51 +298,27 @@ public class MockWmsRepository implements WmsRepository {
         String k = keyword.trim().toLowerCase();
         List<InventoryItem> r = new ArrayList<>();
         for (InventoryItem i : inventory) {
-            if (i.sku.toLowerCase().contains(k)
-                    || i.name.toLowerCase().contains(k)
-                    || i.barcode.toLowerCase().contains(k)) r.add(i);
+            String name = i.productName == null ? "" : i.productName.toLowerCase();
+            String code = i.code == null ? "" : i.code.toLowerCase();
+            String sku  = i.sku  == null ? "" : i.sku.toLowerCase();
+            if (sku.contains(k) || name.contains(k) || code.contains(k)) r.add(i);
         }
         reply(cb, r);
     }
 
     @Override
     public void transfer(String sku, String fromWh, String toWh, int qty, WmsCallback<Void> cb) {
-        InventoryItem src = null, dst = null;
-        for (InventoryItem i : inventory) {
-            if (i.sku.equals(sku) && i.warehouse.equals(fromWh)) src = i;
-            if (i.sku.equals(sku) && i.warehouse.equals(toWh))   dst = i;
-        }
-        if (src == null || qty <= 0 || qty > src.available) { replyErr(cb, 400, "数量超过可用数"); return; }
-        src.onHand -= qty; src.available -= qty;
-        if (dst == null) {
-            dst = new InventoryItem(src.sku, src.name, src.barcode, toWh, "—",
-                    qty, qty, 0, src.uom, false);
-            inventory.add(dst);
-        } else {
-            dst.onHand += qty; dst.available += qty;
-        }
-        ops.add(0, new OpLog("2026-09-08 13:00", "调拨", sku, fromWh + " → " + toWh + " " + qty + src.uom));
-        reply(cb, null);
+        replyErr(cb, 501, "PDA 端请用扫码按 inventory_item 操作");
     }
 
     @Override
     public void scrap(String sku, String warehouse, int qty, String reason, WmsCallback<Void> cb) {
-        for (InventoryItem i : inventory) {
-            if (i.sku.equals(sku) && i.warehouse.equals(warehouse)) {
-                if (qty <= 0 || qty > i.onHand) { replyErr(cb, 400, "数量超过在库数"); return; }
-                i.onHand -= qty;
-                i.available -= qty;
-                break;
-            }
-        }
-        ops.add(0, new OpLog("2026-09-08 13:10", "报废", sku, warehouse + " " + qty + " 件 · " + reason));
-        reply(cb, null);
+        replyErr(cb, 501, "PDA 端请用扫码按 inventory_item 操作");
     }
 
     @Override
     public void printBarcode(String sku, WmsCallback<Void> cb) {
-        ops.add(0, new OpLog("2026-09-08 13:20", "打印", sku, "已生成条码 PDF (原型)"));
-        reply(cb, null);
+        replyErr(cb, 501, "条码打印请走 PC 端");
     }
 
     // ---- 盘点 ----
@@ -311,29 +330,35 @@ public class MockWmsRepository implements WmsRepository {
     }
 
     @Override
+    public void getStocktake(String orderDbId, WmsCallback<StocktakeOrder> cb) {
+        StocktakeOrder found = null;
+        for (StocktakeOrder s : stocktakes) if (s.id.equals(orderDbId)) { found = s; break; }
+        reply(cb, found);
+    }
+
+    @Override
     public void createStocktake(String warehouse, StocktakeOrder.Mode mode, WmsCallback<StocktakeOrder> cb) {
+        String scope = mode == null ? "ALL" : mode.name();
         List<StocktakeOrder.Line> lines = new ArrayList<>();
         for (InventoryItem i : inventory) {
-            if (i.warehouse.equals(warehouse)) {
-                lines.add(new StocktakeOrder.Line(i.sku, i.name, i.barcode, i.onHand, -1, i.location));
+            if ("IN_STOCK".equals(i.status)) {
+                lines.add(new StocktakeOrder.Line(
+                        null, i.id, i.code, i.sku, i.productName, i.locationCode,
+                        i.remaining, null, null, null));
             }
         }
         StocktakeOrder s = new StocktakeOrder(
-                "PD" + stocktakeSeq++, warehouse, mode, Enums.DocStatus.PENDING,
-                "2026-09-08 13:30", lines);
+                stocktakes.size() + 1, "PD" + stocktakeSeq++, scope, "", "admin",
+                lines.size(), 0, 0, "",
+                Enums.DocStatus.PENDING, "2026-09-08 13:30", lines);
         stocktakes.add(0, s);
-        ops.add(0, new OpLog("2026-09-08 13:30", "盘点", s.id, "创建" + mode.label + "单"));
+        ops.add(0, new OpLog("2026-09-08 13:30", "盘点", s.id, "创建" + (mode == null ? "全盘" : mode.label) + "单"));
         reply(cb, s);
     }
 
     @Override
     public void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb) {
-        StocktakeOrder s = findStocktake(orderId);
-        if (s == null) { replyErr(cb, 404, "单据不存在"); return; }
-        for (StocktakeOrder.Line l : s.lines) {
-            if (l.sku.equals(sku)) { l.actualQty = qty; reply(cb, null); return; }
-        }
-        replyErr(cb, 404, "行不存在");
+        replyErr(cb, 501, "PDA 端请用扫码模式");
     }
 
     @Override
@@ -341,9 +366,10 @@ public class MockWmsRepository implements WmsRepository {
         StocktakeOrder s = findStocktake(orderId);
         if (s == null) { replyErr(cb, 404, "单据不存在"); return; }
         for (StocktakeOrder.Line l : s.lines) {
-            if (barcode.equals(l.barcode)) {
-                if (l.actualQty < 0) l.actualQty = l.bookQty + 1;
-                else l.actualQty += 1;
+            if (barcode.equals(l.code)) {
+                if (l.countedQty == null) l.countedQty = (l.systemQty == null ? 0 : l.systemQty) + 1;
+                else l.countedQty += 1;
+                l.diff = (l.countedQty == null || l.systemQty == null) ? null : (l.countedQty - l.systemQty);
                 reply(cb, s); return;
             }
         }
@@ -355,17 +381,13 @@ public class MockWmsRepository implements WmsRepository {
         StocktakeOrder s = findStocktake(orderId);
         if (s == null) { replyErr(cb, 404, "单据不存在"); return; }
         s.status = Enums.DocStatus.DONE;
+        int counted = 0, diffSum = 0;
         for (StocktakeOrder.Line l : s.lines) {
-            if (l.actualQty < 0) continue;
-            int diff = l.actualQty - l.bookQty;
-            for (InventoryItem i : inventory) {
-                if (i.sku.equals(l.sku) && i.warehouse.equals(s.warehouse)) {
-                    i.onHand += diff;
-                    i.available += diff;
-                    break;
-                }
-            }
+            if (l.countedQty != null) counted++;
+            if (l.systemQty != null && l.countedQty != null) diffSum += l.countedQty - l.systemQty;
         }
+        s.countedCount = counted;
+        s.diffCount = Math.abs(diffSum);
         ops.add(0, new OpLog("2026-09-08 14:00", "盘点", s.id, "提交盘点,已校正库存"));
         reply(cb, s);
     }

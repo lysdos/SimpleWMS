@@ -19,13 +19,14 @@
             xmlns:tools="http://schemas.android.com/tools" />
 
         <TextView
+            android:id="@+id/tv_overview_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_xs"
-            android:text="今日作业概览"
+            android:text="系统概览"
             style="@style/Text.Caption" />
 
-        <!-- KPI 第一行 -->
+        <!-- KPI 第一行:商品种类 + 库存总件数 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -38,22 +39,22 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:background="@drawable/bg_kpi_blue"
+                android:background="@drawable/bg_kpi_purple"
                 android:layout_marginEnd="@dimen/space_sm">
 
                 <TextView
-                    android:id="@+id/kpi_inbound_today"
+                    android:id="@+id/kpi_product_count"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0"
                     android:textSize="28sp"
                     android:textStyle="bold"
-                    android:textColor="@color/primary" />
+                    android:textColor="#7B5CE0" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/dash_kpi_inbound_today"
+                    android:text="@string/dash_kpi_product_count"
                     style="@style/Text.Caption"
                     android:layout_marginTop="@dimen/space_xs" />
             </LinearLayout>
@@ -64,28 +65,28 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:background="@drawable/bg_kpi_green"
+                android:background="@drawable/bg_kpi_blue"
                 android:layout_marginStart="@dimen/space_sm">
 
                 <TextView
-                    android:id="@+id/kpi_outbound_today"
+                    android:id="@+id/kpi_total_quantity"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0"
                     android:textSize="28sp"
                     android:textStyle="bold"
-                    android:textColor="@color/success" />
+                    android:textColor="@color/primary" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/dash_kpi_outbound_today"
+                    android:text="@string/dash_kpi_total_quantity"
                     style="@style/Text.Caption"
                     android:layout_marginTop="@dimen/space_xs" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- KPI 第二行 -->
+        <!-- KPI 第二行:库存预警 + 库存总值 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -98,34 +99,8 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical"
-                android:background="@drawable/bg_kpi_orange"
-                android:layout_marginEnd="@dimen/space_sm">
-
-                <TextView
-                    android:id="@+id/kpi_pending_stocktake"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textSize="28sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/warning" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/dash_kpi_pending_stocktake"
-                    style="@style/Text.Caption"
-                    android:layout_marginTop="@dimen/space_xs" />
-            </LinearLayout>
-
-            <LinearLayout
-                style="@style/Card.SimpleWMS"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical"
                 android:background="@drawable/bg_kpi_red"
-                android:layout_marginStart="@dimen/space_sm">
+                android:layout_marginEnd="@dimen/space_sm">
 
                 <TextView
                     android:id="@+id/kpi_low_stock"
@@ -140,6 +115,32 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/dash_kpi_low_stock"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_green"
+                android:layout_marginStart="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_total_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="¥ —"
+                    android:textSize="22sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/success" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_total_value"
                     style="@style/Text.Caption"
                     android:layout_marginTop="@dimen/space_xs" />
             </LinearLayout>

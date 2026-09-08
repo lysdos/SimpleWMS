@@ -43,10 +43,19 @@ class InboundAdapter extends RecyclerView.Adapter<InboundAdapter.VH> {
         InboundOrder o = data.get(position);
         h.tvId.setText(o.id);
         StatusPill.apply(h.tvStatus, o.status);
-        h.tvSupplier.setText("供应商: " + (o.supplier == null ? "-" : o.supplier));
-        h.tvWarehouse.setText("目标仓库: " + (o.warehouse == null ? "-" : o.warehouse));
-        h.tvLines.setText(o.lines == null ? "0 行" : (o.lines.size() + " 行"));
-        h.tvTime.setText(o.createdAt == null ? "" : o.createdAt.substring(11));
+
+        h.tvExternalNo.setText(o.externalNo == null || o.externalNo.isEmpty()
+                ? "外部单号: —" : "外部单号: " + o.externalNo);
+        h.tvOperator.setText(o.operator == null ? "操作员: —" : "操作员: " + o.operator);
+
+        // 后端 itemCount / totalQuantity 是真实数据;lines 可能为 null(列表接口不带 items)
+        int itemCount = o.itemCount == null ? 0 : o.itemCount;
+        int totalQty = o.totalQuantity == null ? 0 : o.totalQuantity;
+        h.tvSummary.setText(itemCount + " 行 · " + totalQty + " 件");
+
+        h.tvTime.setText(o.createdAt == null ? "" :
+                (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt));
+
         h.itemView.setOnClickListener(v -> onClick.onClick(o));
     }
 
@@ -54,15 +63,15 @@ class InboundAdapter extends RecyclerView.Adapter<InboundAdapter.VH> {
     public int getItemCount() { return data.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        final TextView tvId, tvStatus, tvSupplier, tvWarehouse, tvLines, tvTime;
+        final TextView tvId, tvStatus, tvExternalNo, tvOperator, tvSummary, tvTime;
         VH(View v) {
             super(v);
-            tvId        = v.findViewById(R.id.tv_id);
-            tvStatus    = v.findViewById(R.id.tv_status);
-            tvSupplier  = v.findViewById(R.id.tv_supplier);
-            tvWarehouse = v.findViewById(R.id.tv_warehouse);
-            tvLines     = v.findViewById(R.id.tv_lines);
-            tvTime      = v.findViewById(R.id.tv_time);
+            tvId         = v.findViewById(R.id.tv_id);
+            tvStatus     = v.findViewById(R.id.tv_status);
+            tvExternalNo = v.findViewById(R.id.tv_external_no);
+            tvOperator   = v.findViewById(R.id.tv_operator);
+            tvSummary    = v.findViewById(R.id.tv_summary);
+            tvTime       = v.findViewById(R.id.tv_time);
         }
     }
 }

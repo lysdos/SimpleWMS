@@ -21,9 +21,12 @@ final class Mappers {
     static InboundOrder toModel(Dto.InboundOrder o) {
         if (o == null) return null;
         InboundOrder m = new InboundOrder();
+        m.dbId = o.id;
         m.id = o.orderNo == null ? ("o-" + o.id) : o.orderNo;
-        m.supplier = firstSupplier(o.items);
-        m.warehouse = "";   // 后端无此字段
+        m.externalNo = o.externalNo;
+        m.operator = o.operator;
+        m.totalQuantity = o.totalQuantity;
+        m.itemCount = o.itemCount;
         m.remark = o.remark;
         m.status = mapStatus(o.status);
         m.createdAt = o.createdAt;
@@ -37,20 +40,32 @@ final class Mappers {
     private static InboundOrder.InboundLine toLine(Dto.InboundOrderItem it) {
         if (it == null) return null;
         InboundOrder.InboundLine l = new InboundOrder.InboundLine();
+        l.id = it.id;
+        l.productId = it.productId;
         l.sku = it.sku;
         l.name = it.productName;
-        l.barcode = it.codes != null && !it.codes.isEmpty() ? it.codes.get(0) : "";
+        l.supplier = it.supplier;
+        l.unitPrice = it.unitPrice;
+        l.beforeQty = it.beforeQty;
+        l.afterQty = it.afterQty;
+        l.location = it.location;
+        l.rowRemark = it.rowRemark;
         l.qty = it.quantity == null ? 0 : it.quantity;
-        l.uom = "件";
+        l.uom = "件";  // 后端未持久化单位,PDA 端占位
+        l.codes = it.codes;
         return l;
     }
 
     static OutboundOrder toModel(Dto.OutboundOrder o) {
         if (o == null) return null;
         OutboundOrder m = new OutboundOrder();
+        m.dbId = o.id;
         m.id = o.orderNo == null ? ("o-" + o.id) : o.orderNo;
         m.customer = o.customer;
-        m.warehouse = "";
+        m.externalNo = o.externalNo;
+        m.operator = o.operator;
+        m.totalQuantity = o.totalQuantity;
+        m.itemCount = o.itemCount;
         m.remark = o.remark;
         m.status = mapStatus(o.status);
         m.createdAt = o.createdAt;
@@ -58,9 +73,15 @@ final class Mappers {
         if (o.items != null) {
             for (Dto.OutboundOrderItem it : o.items) {
                 OutboundOrder.Line l = new OutboundOrder.Line();
+                l.id = it.id;
+                l.productId = it.productId;
                 l.sku = it.sku;
                 l.name = it.productName;
-                l.barcode = "";
+                l.unitPrice = it.unitPrice;
+                l.beforeQty = it.beforeQty;
+                l.afterQty = it.afterQty;
+                l.location = it.location;
+                l.rowRemark = it.rowRemark;
                 l.qty = it.quantity == null ? 0 : it.quantity;
                 l.uom = "件";
                 m.lines.add(l);
@@ -72,21 +93,31 @@ final class Mappers {
     static StocktakeOrder toModel(Dto.StockCheck c) {
         if (c == null) return null;
         StocktakeOrder s = new StocktakeOrder();
+        s.dbId = c.id;
         s.id = c.checkNo == null ? ("c-" + c.id) : c.checkNo;
-        s.warehouse = c.scopeKeyword == null ? "" : c.scopeKeyword;
-        s.mode = mapScope(c.scope);
+        s.scope = c.scope;
+        s.scopeKeyword = c.scopeKeyword;
+        s.operator = c.operator;
+        s.totalCount = c.totalCount;
+        s.countedCount = c.countedCount;
+        s.diffCount = c.diffCount;
+        s.remark = c.remark;
         s.status = mapStatus(c.status);
         s.createdAt = c.createdAt;
         s.lines = new ArrayList<>();
         if (c.items != null) {
             for (Dto.StockCheckItem it : c.items) {
                 StocktakeOrder.Line l = new StocktakeOrder.Line();
+                l.id = it.id;
+                l.inventoryItemId = it.inventoryItemId;
+                l.code = it.code;
                 l.sku = it.sku;
-                l.name = it.productName;
-                l.barcode = it.code;        // 24 位 inventory_item.code
-                l.bookQty = it.systemQty == null ? 0 : it.systemQty;
-                l.actualQty = it.countedQty == null ? -1 : it.countedQty;
-                l.location = it.locationCode;
+                l.productName = it.productName;
+                l.locationCode = it.locationCode;
+                l.systemQty = it.systemQty;
+                l.countedQty = it.countedQty;
+                l.diff = it.diff;
+                l.rowRemark = it.rowRemark;
                 s.lines.add(l);
             }
         }
@@ -97,24 +128,19 @@ final class Mappers {
         if (it == null) return null;
         InventoryItem m = new InventoryItem();
         m.id = it.id;
+        m.code = it.code;
         m.productId = it.productId;
         m.sku = it.sku;
-        m.name = it.productName;
-        m.barcode = it.code;
-        m.warehouse = "";
-        m.location = it.locationCode;
-        m.onHand = it.remaining == null ? 0 : it.remaining;
-        m.available = it.remaining == null ? 0 : it.remaining;
-        m.locked = 0;
-        m.uom = "件";
-        m.lowStock = false;
+        m.productName = it.productName;
+        m.locationCode = it.locationCode;
+        m.quantity = it.quantity;
+        m.remaining = it.remaining;
+        m.status = it.status;
+        m.inboundOrderId = it.inboundOrderId;
+        m.outboundOrderId = it.outboundOrderId;
+        m.createdBy = it.createdBy;
+        m.createdAt = it.createdAt;
         return m;
-    }
-
-    private static String firstSupplier(List<Dto.InboundOrderItem> items) {
-        if (items == null) return null;
-        for (Dto.InboundOrderItem it : items) if (it.supplier != null && !it.supplier.isEmpty()) return it.supplier;
-        return null;
     }
 
     private static Enums.DocStatus mapStatus(String s) {
@@ -124,15 +150,6 @@ final class Mappers {
             case "COMMITTED": return Enums.DocStatus.DONE;
             case "CANCELLED": return Enums.DocStatus.CANCELLED;
             default:          return Enums.DocStatus.PENDING;
-        }
-    }
-
-    private static StocktakeOrder.Mode mapScope(String s) {
-        if (s == null) return StocktakeOrder.Mode.ALL;
-        switch (s) {
-            case "SKU":      return StocktakeOrder.Mode.SAMPLE;
-            case "LOCATION": return StocktakeOrder.Mode.MOVEMENT;
-            default:         return StocktakeOrder.Mode.ALL;
         }
     }
 }

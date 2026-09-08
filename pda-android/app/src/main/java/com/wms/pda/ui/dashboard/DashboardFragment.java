@@ -19,12 +19,14 @@ import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.SessionStore;
 import com.wms.pda.data.repo.WmsCallback;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 
-/** 仪表盘:4 KPI + 最近操作。 */
+/** 仪表盘:4 KPI(商品种类 / 库存总件数 / 库存预警 / 库存总值)+ 最近操作。 */
 public class DashboardFragment extends Fragment {
 
-    private TextView k1, k2, k3, k4;
+    private TextView kProduct, kQty, kLow, kValue;
     private LinearLayout recent;
 
     @Nullable
@@ -39,13 +41,15 @@ public class DashboardFragment extends Fragment {
         super.onViewCreated(v, savedInstanceState);
 
         TextView welcome = v.findViewById(R.id.tv_welcome);
-        welcome.setText(getString(R.string.dash_welcome, SessionStore.currentUser()));
+        TextView tvOverview = v.findViewById(R.id.tv_overview_date);
+        kProduct = v.findViewById(R.id.kpi_product_count);
+        kQty     = v.findViewById(R.id.kpi_total_quantity);
+        kLow     = v.findViewById(R.id.kpi_low_stock);
+        kValue   = v.findViewById(R.id.kpi_total_value);
+        recent   = v.findViewById(R.id.recent_container);
 
-        k1 = v.findViewById(R.id.kpi_inbound_today);
-        k2 = v.findViewById(R.id.kpi_outbound_today);
-        k3 = v.findViewById(R.id.kpi_pending_stocktake);
-        k4 = v.findViewById(R.id.kpi_low_stock);
-        recent = v.findViewById(R.id.recent_container);
+        welcome.setText(getString(R.string.dash_welcome, SessionStore.currentUser()));
+        tvOverview.setText(R.string.dash_overview);
     }
 
     @Override
@@ -58,10 +62,10 @@ public class DashboardFragment extends Fragment {
         RepositoryProvider.get().loadDashboard(new WmsCallback<DashboardSnapshot>() {
             @Override public void onSuccess(DashboardSnapshot snap) {
                 if (!isAdded() || snap == null) return;
-                k1.setText(String.valueOf(snap.inboundToday));
-                k2.setText(String.valueOf(snap.outboundToday));
-                k3.setText(String.valueOf(snap.pendingStocktake));
-                k4.setText(String.valueOf(snap.lowStockSkuCount));
+                kProduct.setText(String.valueOf(snap.productCount));
+                kQty.setText(String.valueOf(snap.totalQuantity));
+                kLow.setText(String.valueOf(snap.lowStockSkuCount));
+                kValue.setText(formatValue(snap.totalValue));
 
                 recent.removeAllViews();
                 LayoutInflater li = LayoutInflater.from(requireContext());
@@ -88,5 +92,10 @@ public class DashboardFragment extends Fragment {
                 Toast.makeText(requireContext(), "加载失败: " + msg, Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    private static String formatValue(BigDecimal v) {
+        if (v == null || v.signum() == 0) return "¥ —";
+        return "¥ " + String.format(Locale.getDefault(), "%,d", v.longValue());
     }
 }

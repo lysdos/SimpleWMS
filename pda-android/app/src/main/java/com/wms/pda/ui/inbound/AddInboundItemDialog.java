@@ -22,14 +22,14 @@ import java.util.List;
 final class AddInboundItemDialog {
     private AddInboundItemDialog() {}
 
-    static void show(Context ctx, List<InventoryItem> items, String orderId, Runnable onDone) {
+    static void show(Context ctx, List<InventoryItem> items, Integer orderDbId, Runnable onDone) {
         View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_add_inbound_item, null, false);
         Spinner spProduct = v.findViewById(R.id.sp_product);
         EditText etQty = v.findViewById(R.id.et_qty);
         EditText etSupplier = v.findViewById(R.id.et_supplier);
 
         List<String> labels = new ArrayList<>();
-        for (InventoryItem i : items) labels.add(i.sku + " · " + i.name);
+        for (InventoryItem i : items) labels.add((i.sku == null ? "?" : i.sku) + " · " + (i.productName == null ? "" : i.productName));
         ArrayAdapter<String> ad = new ArrayAdapter<>(ctx,
                 android.R.layout.simple_spinner_item, labels);
         ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -53,7 +53,7 @@ final class AddInboundItemDialog {
                         Toast.makeText(ctx, "该库存行缺少商品 ID,请刷新", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    RepositoryProvider.get().addInboundItem(orderId, productId,
+                    RepositoryProvider.get().addInboundItem(String.valueOf(orderDbId), productId,
                             qty, supplier, null, new WmsCallback<com.wms.pda.data.model.InboundOrder>() {
                                 @Override public void onSuccess(com.wms.pda.data.model.InboundOrder v) {
                                     Toast.makeText(ctx, "已添加", Toast.LENGTH_SHORT).show();

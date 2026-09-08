@@ -52,6 +52,7 @@ public class StocktakeListActivity extends AppCompatActivity {
         adapter = new StocktakeAdapter(o -> {
             Intent i = new Intent(this, StocktakeDetailActivity.class);
             i.putExtra("orderId", o.id);
+            if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
             startActivity(i);
         });
         list.setAdapter(adapter);
@@ -117,8 +118,8 @@ public class StocktakeListActivity extends AppCompatActivity {
                 String modeLabel = (String) spMode.getSelectedItem();
                 StocktakeOrder.Mode mode;
                 if (modeLabel.equals(getString(R.string.stocktake_mode_all)))       mode = StocktakeOrder.Mode.ALL;
-                else if (modeLabel.equals(getString(R.string.stocktake_mode_movement))) mode = StocktakeOrder.Mode.MOVEMENT;
-                else                                                                  mode = StocktakeOrder.Mode.SAMPLE;
+                else if (modeLabel.equals(getString(R.string.stocktake_mode_movement))) mode = StocktakeOrder.Mode.LOCATION;
+                else                                                                  mode = StocktakeOrder.Mode.SKU;
                 RepositoryProvider.get().createStocktake(wh, mode, new WmsCallback<StocktakeOrder>() {
                     @Override public void onSuccess(StocktakeOrder o) {
                         Toast.makeText(StocktakeListActivity.this, "已创建盘点单 " + o.id, Toast.LENGTH_SHORT).show();

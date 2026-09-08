@@ -32,14 +32,20 @@
     </LinearLayout>
 
     <TextView
-        android:id="@+id/tv_warehouse"
+        android:id="@+id/tv_mode"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_xs"
         style="@style/Text.Body" />
 
     <TextView
-        android:id="@+id/tv_mode"
+        android:id="@+id/tv_scope"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        style="@style/Text.Body" />
+
+    <TextView
+        android:id="@+id/tv_operator"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="@style/Text.Body" />

@@ -23,6 +23,7 @@ public interface WmsRepository {
 
     // ---- 入库(DRAFT 单流) ----
     void listInbound(boolean onlyPending, WmsCallback<List<InboundOrder>> cb);
+    void getInboundOrder(String orderId, WmsCallback<InboundOrder> cb);
     void createInbound(String supplier, String warehouse, String remark, WmsCallback<InboundOrder> cb);
     /** 选商品+数量+库位+备注追加到 DRAFT 单。返回最新单(含 items[]) */
     void addInboundItem(String orderId, int productId, int quantity, String supplier,
@@ -32,7 +33,8 @@ public interface WmsRepository {
 
     // ---- 出库(DRAFT 单流 + 扫码累计) ----
     void listOutbound(boolean onlyPending, WmsCallback<List<OutboundOrder>> cb);
-    void createOutbound(String customer, String warehouse, String remark, WmsCallback<OutboundOrder> cb);
+    void getOutboundOrder(String orderDbId, WmsCallback<OutboundOrder> cb);
+    void createOutbound(String customer, String externalNo, String remark, WmsCallback<OutboundOrder> cb);
     /** 出库扫码:每扫一码调一次,后端 inventory_item 校验后累加 item[].quantity */
     void submitOutboundScan(String orderId, String code, WmsCallback<OutboundOrder> cb);
     void commitOutbound(String orderId, WmsCallback<OutboundOrder> cb);
@@ -46,6 +48,7 @@ public interface WmsRepository {
 
     // ---- 盘点 ----
     void listStocktake(boolean onlyPending, WmsCallback<List<StocktakeOrder>> cb);
+    void getStocktake(String orderDbId, WmsCallback<StocktakeOrder> cb);
     void createStocktake(String warehouse, StocktakeOrder.Mode mode, WmsCallback<StocktakeOrder> cb);
     /** 手填实盘数量;countedQty = -1 表示清空 */
     void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb);
