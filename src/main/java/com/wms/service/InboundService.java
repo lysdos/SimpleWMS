@@ -138,10 +138,13 @@ public class InboundService {
         for (BatchItem b : merged.values()) {
             List<InventoryItem> codes = processItemBatch(b, operator, newOrderId);
             InboundOrderItem itemEntity = persistOrderItem(b, newOrderId, codes);
-            persistInventoryLog(b, operator, newOrderId, itemEntity);
             itemEntities.add(itemEntity);
         }
         order.setItems(itemEntities);
+
+        // 5. 老 batch 接口直接下单 = COMMITTED — 立即"生效":PENDING 单元 → IN_STOCK,
+        //    累加 productDao.adjustQuantity,写 inventory_log
+        activateItemsAndLog(itemEntities, operator, newOrderId);
         return order;
     }
 
@@ -217,13 +220,42 @@ public class InboundService {
         if (totalQty == null || totalQty <= 0) {
             throw new IllegalStateException("空单不能提交,请先添加明细");
         }
+
+        // 把该单所有 PENDING 库存单元 → IN_STOCK + remaining=1(每件真正"入"库)
+        // + 累加 product.quantity + 写 inventory_log
+        List<InboundOrderItem> items = orderDao.findItemsByOrderId(orderId);
+        String operator = order.getOperator();
+        if (operator == null || operator.isBlank()) operator = "操作员";
+        activateItemsAndLog(items, operator, orderId);
+
         orderDao.updateStatus(orderId, InboundOrder.STATUS_COMMITTED);
         return getOrderWithCodes(orderId);
     }
 
     /**
-     * cancel:校验 DRAFT;回滚 inventory_item + 商品 quantity + 删 inbound_order_item
-     *         + 删相关 inventory_log;改 status = CANCELLED(留审计)。
+     * 把一组 InboundOrderItem 的 PENDING 库存单元升级为 IN_STOCK(remaining=1),
+     * 累加 product.quantity,写 inventory_log。
+     * commitDraft 与 doInboundBatch 复用。
+     */
+    private void activateItemsAndLog(List<InboundOrderItem> items, String operator, int orderId) {
+        for (InboundOrderItem item : items) {
+            if (item.getProductId() == null || item.getQuantity() == null) continue;
+            Product p = productDao.findById(item.getProductId())
+                    .orElseThrow(() -> new IllegalArgumentException("商品不存在, id=" + item.getProductId()));
+            int before = p.getQuantity();
+            int rows = productDao.adjustQuantity(p.getId(), item.getQuantity());
+            if (rows == 0) throw new IllegalStateException("入库失败,商品状态异常 id=" + p.getId());
+            int after = before + item.getQuantity();
+            // 把该行所有 PENDING 库存单元升级为 IN_STOCK + remaining=1
+            itemDao.activateByInboundItem(item.getId());
+            // 写一条 IN 流水
+            persistInventoryLog(item, operator, orderId, before, after);
+        }
+    }
+
+    /**
+     * cancel:校验 DRAFT;删 PENDING 状态的 inventory_item(未生效);删 inbound_order_item;
+     *         不动 product.quantity(DRAFT 期本来就没加过);改 status = CANCELLED(留审计)。
      */
     @Transactional
     public void cancelDraft(int orderId) {
@@ -233,25 +265,13 @@ public class InboundService {
             throw new IllegalStateException("只有 DRAFT 单可以取消, 当前 status=" + order.getStatus());
         }
 
-        // 1) 列出该单所有明细,把商品 quantity 减回去
-        List<InboundOrderItem> items = orderDao.findItemsByOrderId(orderId);
-        if (items != null) {
-            for (InboundOrderItem it : items) {
-                if (it.getProductId() == null || it.getQuantity() == null) continue;
-                productDao.adjustQuantity(it.getProductId(), -it.getQuantity());
-            }
-        }
+        // 1) 删 PENDING 状态的库存单元占位(DRAFT 期未生效,不需要回滚 product.quantity)
+        itemDao.deletePendingByInboundOrder(orderId);
 
-        // 2) 删 inventory_item 关联
-        jdbc.update("DELETE FROM inventory_item WHERE inbound_order_id = ?", orderId);
-
-        // 3) 删 inbound_order_item
+        // 2) 删 inbound_order_item
         orderDao.deleteItemsByOrderId(orderId);
 
-        // 4) 删相关 inventory_log
-        jdbc.update("DELETE FROM inventory_log WHERE order_id = ?", orderId);
-
-        // 5) 主表 aggregates 清零 + status 改 CANCELLED
+        // 3) 主表 aggregates 清零 + status 改 CANCELLED
         orderDao.refreshAggregates(orderId);
         orderDao.updateStatus(orderId, InboundOrder.STATUS_CANCELLED);
     }
@@ -301,7 +321,7 @@ public class InboundService {
         for (BatchItem b : merged.values()) {
             List<InventoryItem> codes = processItemBatch(b, operator, orderId);
             InboundOrderItem itemEntity = persistOrderItem(b, orderId, codes);
-            persistInventoryLog(b, operator, orderId, itemEntity);
+            // 不写 inventory_log,不调整 product.quantity — commit 才生效
         }
 
         // 刷新 aggregates
@@ -309,16 +329,14 @@ public class InboundService {
         return getOrder(orderId);
     }
 
-    /** 生成 N 个 inventory_item 24 位码并落库。返回所有生成的 InventoryItem 实体 */
+    /** 生成 N 个 inventory_item 24 位码并落库(仅作码占位)。返回所有生成的 InventoryItem 实体
+     *  注意:此阶段 inventory_item 状态为 PENDING + remaining=0,不入库总库存、不调 productDao.adjustQuantity、
+     *  不写 inventory_log。真正的"生效"在 commitDraft() 里完成。*/
     private List<InventoryItem> processItemBatch(BatchItem b, String operator, int orderId) {
         Product p = productDao.findById(b.productId)
                 .orElseThrow(() -> new IllegalArgumentException("商品不存在, id=" + b.productId));
-        int before = p.getQuantity();
-        int rows = productDao.adjustQuantity(b.productId, b.quantity);
-        if (rows == 0) throw new IllegalStateException("入库失败,商品状态异常 id=" + b.productId);
-        int after = before + b.quantity;
-        b._beforeQty = before;
-        b._afterQty = after;
+        b._beforeQty = p.getQuantity();        // 提交前快照;commit 时真正做 adjustQuantity
+        b._afterQty = p.getQuantity();
 
         String locCode = blankToNull(p.getLocation()) == null ? "默认库位" : p.getLocation();
         List<InventoryItem> generated = new ArrayList<>();
@@ -329,8 +347,8 @@ public class InboundService {
             ii.setProductName(p.getName());
             ii.setLocationCode(locCode);
             ii.setQuantity(1);
-            ii.setRemaining(1);
-            ii.setStatus(InventoryItem.STATUS_IN_STOCK);
+            ii.setRemaining(0);               // 占位期剩余 0
+            ii.setStatus(InventoryItem.STATUS_PENDING);  // 待入库
             ii.setInboundOrderId(orderId);
             ii.setCreatedBy(operator);
             // 生成 24 位编码;冲突自动重试(UNIQUE 索引兜底)
@@ -370,7 +388,7 @@ public class InboundService {
         if (it.getId() != null && generated != null) {
             for (InventoryItem ii : generated) {
                 if (ii != null && ii.getId() != null) {
-                    itemDao.updateInboundItemId(ii.getId(), it.getId());
+                    itemDao.updateInboundItemId(it.getId(), ii.getId());
                 }
             }
         }
@@ -381,17 +399,18 @@ public class InboundService {
         return it;
     }
 
-    /** 写 inventory_log */
-    private void persistInventoryLog(BatchItem b, String operator, int orderId, InboundOrderItem itemEntity) {
+    /** 写一条入库流水(IN)。commitDraft 时调用,before/after 来自 productDao.adjustQuantity 前后值 */
+    private void persistInventoryLog(InboundOrderItem itemEntity, String operator, int orderId,
+                                    int before, int after) {
         InventoryLog log = new InventoryLog();
         log.setType(InventoryLog.TYPE_IN);
         log.setProductId(itemEntity.getProductId());
         log.setSku(itemEntity.getSku());
         log.setProductName(itemEntity.getProductName());
-        log.setQuantity(b.quantity);
-        log.setBeforeQty(b._beforeQty);
-        log.setAfterQty(b._afterQty);
-        log.setRemark(b.rowRemark);
+        log.setQuantity(itemEntity.getQuantity());
+        log.setBeforeQty(before);
+        log.setAfterQty(after);
+        log.setRemark(itemEntity.getRowRemark());
         log.setOperator(operator);
         log.setOrderId(orderId);
         logDao.insert(log);

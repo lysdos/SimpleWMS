@@ -418,4 +418,18 @@ body {
         font-size: 8pt !important;
         color: #000 !important;
     }
+
+/* 状态药丸(草稿 / 已提交 / 已取消) */
+.pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    color: #fff;
+    background: #95a5a6;
+    white-space: nowrap;
+}
+.pill.warn  { background: #f39c12; }
+.pill.ok    { background: #27ae60; }
+.pill.draft { background: #7f8c8d; }
 }

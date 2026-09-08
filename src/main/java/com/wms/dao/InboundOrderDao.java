@@ -87,22 +87,29 @@ public class InboundOrderDao {
         return k == null ? 0 : k.intValue();
     }
 
-    public void insertItem(InboundOrderItem it) {
+    public int insertItem(InboundOrderItem it) {
         String sql = "INSERT INTO inbound_order_item (order_id, product_id, sku, product_name, " +
                 "supplier, quantity, unit_price, before_qty, after_qty, location, row_remark) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
-        jdbc.update(sql,
-                it.getOrderId(),
-                it.getProductId(),
-                it.getSku(),
-                it.getProductName(),
-                it.getSupplier(),
-                it.getQuantity(),
-                it.getUnitPrice(),
-                it.getBeforeQty(),
-                it.getAfterQty(),
-                it.getLocation(),
-                it.getRowRemark());
+        KeyHolder kh = new GeneratedKeyHolder();
+        int rows = jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
+            ps.setInt(1, it.getOrderId());
+            ps.setInt(2, it.getProductId());
+            ps.setString(3, it.getSku());
+            ps.setString(4, it.getProductName());
+            if (it.getSupplier() == null) ps.setNull(5, java.sql.Types.VARCHAR); else ps.setString(5, it.getSupplier());
+            ps.setInt(6, it.getQuantity());
+            ps.setBigDecimal(7, it.getUnitPrice());
+            ps.setInt(8, it.getBeforeQty() == null ? 0 : it.getBeforeQty());
+            ps.setInt(9, it.getAfterQty() == null ? 0 : it.getAfterQty());
+            if (it.getLocation() == null) ps.setNull(10, java.sql.Types.VARCHAR); else ps.setString(10, it.getLocation());
+            if (it.getRowRemark() == null) ps.setNull(11, java.sql.Types.VARCHAR); else ps.setString(11, it.getRowRemark());
+            return ps;
+        }, kh);
+        Number k = kh.getKey();
+        if (k != null) it.setId(k.intValue());
+        return rows;
     }
 
     /** 更新入库单状态(DRAFT / COMMITTED / CANCELLED) */

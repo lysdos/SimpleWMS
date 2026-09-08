@@ -77,6 +77,7 @@ public class InventoryItemDao {
             Map<String, Object> keys = kh.getKeys();
             if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
         }
+        if (k != null) i.setId(k.intValue());
         return k == null ? 0 : k.intValue();
     }
 
@@ -106,11 +107,34 @@ public class InventoryItemDao {
                 ROW, inboundItemId);
     }
 
+    /**
+     * commitDraft 时调用:把某明细行的所有 PENDING 库存单元升级为 IN_STOCK + remaining=1。
+     * 这样库存才真正"生效"(加入 product.quantity 与库存总览)。
+     */
+    public int activateByInboundItem(int inboundItemId) {
+        return jdbc.update(
+                "UPDATE inventory_item " +
+                "SET status = ?, remaining = quantity, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE inbound_item_id = ? AND status = ?",
+                InventoryItem.STATUS_IN_STOCK, inboundItemId, InventoryItem.STATUS_PENDING);
+    }
+
+    /**
+     * cancelDraft 时调用:删除某入库单所有 PENDING 占位行(DRAFT 期未生效,直接清理)。
+     */
+    public int deletePendingByInboundOrder(int orderId) {
+        return jdbc.update(
+                "DELETE FROM inventory_item WHERE inbound_order_id = ? AND status = ?",
+                orderId, InventoryItem.STATUS_PENDING);
+    }
+
     /** 把 inventory_item 的 inbound_item_id 字段回填(每件实物→它所属的明细行) */
-    public int updateInboundItemId(int inventoryItemId, int inboundItemId) {
+    public int updateInboundItemId(int inboundItemId, int inventoryItemId) {
+        // SQL 顺序:SET 新值, WHERE 列值
         return jdbc.update(
                 "UPDATE inventory_item SET inbound_item_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 inboundItemId, inventoryItemId);
+        // 注:参数顺序是 (新值, WHERE 列值) — 第一?是 SET inbound_item_id=?,第二?是 WHERE id=?
     }
 
     /** 列出某出库单消耗的所有库存单元(包含已 OUT 的) */

@@ -74,11 +74,16 @@ public class InboundController {
         return ApiResponse.ok(order);
     }
 
-    /** 入库单详情(弹窗展示) */
+    /** 入库单详情(弹窗展示)— COMMITTED 单子需要返回 24 位码,用 getOrderWithCodes */
     @GetMapping("/orders/{id}")
     public ApiResponse<InboundOrder> getOrder(@PathVariable int id) {
         InboundOrder o = inboundService.getOrder(id);
         if (o == null) throw new IllegalArgumentException("入库单不存在, id=" + id);
+        // COMMITTED 单子的 inbound_order_item.codes 需要从 inventory_item 查,补一次 codes
+        if (InboundOrder.STATUS_COMMITTED.equals(o.getStatus())) {
+            InboundOrder withCodes = inboundService.getOrderWithCodes(id);
+            if (withCodes != null) return ApiResponse.ok(withCodes);
+        }
         return ApiResponse.ok(o);
     }
 

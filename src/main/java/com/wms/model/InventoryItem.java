@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
  */
 public class InventoryItem {
 
-    /** 在库 */
+    /** 在库 — 已生效(commit 后);remaining>0 计入总库存 */
     public static final String STATUS_IN_STOCK     = "IN_STOCK";
     /** 已出库(quantity 全部消耗) */
     public static final String STATUS_OUT          = "OUT";
@@ -15,6 +15,8 @@ public class InventoryItem {
     public static final String STATUS_SCRAPPED     = "SCRAPPED";
     /** 已调拨(原位置全部迁出) */
     public static final String STATUS_TRANSFERRED  = "TRANSFERRED";
+    /** 待入库 — 仅作 24 位码占位(remaining=0);入库单 commit 后变为 IN_STOCK */
+    public static final String STATUS_PENDING      = "PENDING";
 
     private Integer id;
     private String code;                // 24 位编码,UNIQUE
