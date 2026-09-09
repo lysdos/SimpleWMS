@@ -2,22 +2,50 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>登录 - SimpleWMS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="login.title">登录 - SimpleWMS</title>
 <link rel="stylesheet" href="/css/app.css">
 </head>
 <body class="login-page">
 <main class="login-card">
-    <h1>📦 SimpleWMS</h1>
-    <p class="subtitle">简单仓库管理系统</p>
-    <form id="login-form">
-        <label>用户名<input id="username" autocomplete="username" required></label>
-        <label>密码<input id="password" type="password" autocomplete="current-password" required></label>
-        <button type="submit" class="btn btn-primary">登录</button>
+    <div class="logo-icon">📦</div>
+    <h1>SimpleWMS</h1>
+    <p class="subtitle" data-i18n="app.brand.subtitle">简单仓库管理系统</p>
+    <form id="login-form" autocomplete="off">
+        <label>
+            <span data-i18n="login.username">用户名</span>
+            <input id="username" autocomplete="username" required>
+        </label>
+        <label>
+            <span data-i18n="login.password">密码</span>
+            <input id="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn btn-primary" data-i18n="login.submit">登录</button>
         <div id="login-error" class="error" hidden></div>
     </form>
+    <div class="lang-row" id="lang-switch" data-i18n-title="login.lang.toggle" title="切换语言">
+        <button type="button" data-lang="zh-CN">中文</button>
+        <button type="button" data-lang="en-US">English</button>
+    </div>
 </main>
+
+<script src="/js/i18n.js"></script>
 <script src="/js/auth.js"></script>
 <script>
+/* 应用静态 i18n + 绑定语言切换 */
+I18N.applyI18n(document);
+function refreshLangButtons() {
+    document.querySelectorAll('#lang-switch button').forEach(b => {
+        b.classList.toggle('active', b.dataset.lang === I18N.getLang());
+    });
+}
+refreshLangButtons();
+document.getElementById('lang-switch').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-lang]');
+    if (!b) return;
+    I18N.setLang(b.dataset.lang);
+});
+
 document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const err = document.getElementById('login-error');
