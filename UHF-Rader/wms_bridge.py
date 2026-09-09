@@ -30,12 +30,18 @@ import urllib.error
 # 复用 app.py 的状态
 try:
     from app import (
-        READER_HOST, READER_PORT, WMS_BASE_URL,
+        READER_HOST, READER_PORT,
         tag_list, tag_list_lock, is_connected, is_reading
     )
 except ImportError:
     print("[WMS-Bridge] FATAL: 必须和 app.py 在同目录运行(共享 tag_list 等内部对象)")
     raise
+
+
+def _wms_base():
+    """WMS URL 运行时可被登录接口覆盖。"""
+    from app import WMS_BASE_URL as _env
+    return state.wms_url or _env
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +59,9 @@ HTTP_TIMEOUT  = 5  # 秒
 class BridgeState:
     def __init__(self):
         self.token: Optional[str] = None
+        self.user: Optional[str] = None     # 当前登录的 WMS 用户名
+        self.role: Optional[str] = None     # ADMIN / OPERATOR
+        self.wms_url: Optional[str] = None  # 登录时覆盖 env 默认 URL
         self.login_lock = threading.Lock()
         # 当前选定的 DRAFT 出库单
         self.selected_order_id: Optional[int] = None
@@ -70,7 +79,7 @@ state = BridgeState()
 def _http_post(path, body=None, headers=None):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(
-        WMS_BASE_URL + path,
+        _wms_base() + path,
         data=data,
         method="POST",
         headers={"Content-Type": "application/json", **(headers or {})}
@@ -88,7 +97,7 @@ def _http_post(path, body=None, headers=None):
 
 def _http_get(path, headers=None):
     req = urllib.request.Request(
-        WMS_BASE_URL + path,
+        _wms_base() + path,
         method="GET",
         headers={**(headers or {})}
     )
@@ -151,7 +160,10 @@ def load_expected_epcs(order_id):
     return []
 
 def scan_epc(order_id, epc):
-    """调后端 scan-epc 接口。EPC 必须是 24 位 hex(12 字节 = 96 bit UHF Gen2)。"""
+    """调后端 scan-epc 接口。EPC 必须是 24 位 hex(12 字节 = 96 bit UHF Gen2)。
+
+    operator 用当前登录用户(全用户支持);没登录时回退到 env 默认账号。
+    """
     if not epc:
         return {"matched": False, "reason": "EPC 为空"}
     e = epc.strip().upper()
@@ -166,7 +178,7 @@ def scan_epc(order_id, epc):
         if not login():
             return {"matched": False, "reason": "登录失败"}
     r = _http_post(f"/api/outbound/orders/{order_id}/scan-epc",
-                   {"epc": e, "operator": WMS_USERNAME},
+                   {"epc": e, "operator": (state.user or WMS_USERNAME)},
                    headers=hdrs or {})
     if r.get("code") == 0:
         return r.get("data", {"matched": False, "reason": "返回为空"})
@@ -232,6 +244,8 @@ def get_state_snapshot():
     with state.lock:
         return {
             "loggedIn": state.token is not None,
+            "user": state.user,
+            "role": state.role,
             "selectedOrderId": state.selected_order_id,
             "selectedOrderNo": state.selected_order_no,
             "expectedCount": len(state.expected_epcs),

@@ -291,26 +291,22 @@ async function init() {
     const lastUser = localStorage.getItem('wms_last_user') || '';
     document.getElementById('loginUser').value = lastUser;
 
-    // 如果本地有保存的 token,尝试静默登录
-    const savedToken = localStorage.getItem('wms_token');
-    const savedWms = localStorage.getItem('wms_base_url');
-    if (savedToken && savedWms) {
-        _wmsBase = savedWms.replace(/\/+$/, '');
-        // 验证 token 是否还有效
+    // 静默登录:用 localStorage 里的 WMS URL + 上次账号,让 bridge 重新登录
+    if (savedUrl && lastUser) {
         try {
-            const r = await fetch(_wmsBase + '/api/products?pageSize=1', {
-                headers: { 'Authorization': 'Bearer ' + savedToken }
-            });
-            if (r.ok) {
-                _currentUser = localStorage.getItem('wms_last_user') || 'admin';
-                onLoginSuccess(_currentUser, savedToken);
+            // 试一下,如果 bridge 还有 token 就直接进
+            const st = await fetch('/api/wms/state').then(r => r.json());
+            if (st.data && st.data.loggedIn) {
+                _wmsBase = savedUrl.replace(/\/+$/, '');
+                _currentUser = st.data.user || lastUser;
+                onLoginSuccess(_currentUser, st.data.role || '');
                 return;
             }
         } catch (e) {}
     }
 }
 
-// ====== 登录 ======
+// ====== 登录(走 bridge 代理避开 CORS) ======
 async function doLogin() {
     const wms = (document.getElementById('loginWmsUrl').value || '').trim();
     const user = (document.getElementById('loginUser').value || '').trim();
@@ -318,20 +314,20 @@ async function doLogin() {
     if (!wms) { alert('请填写 WMS 地址'); return; }
     if (!user || !pass) { alert('请填写账号和密码'); return; }
     try {
-        const r = await fetch(wms.replace(/\/+$/, '') + '/api/auth/login', {
+        // 先把 WMS URL 告诉 bridge(写到 .env 不行,需要运行时注入)
+        // 简单方案:把 URL 编码进 localStorage,登录时通过 query string 传过去
+        const r = await fetch('/api/wms/login?wms=' + encodeURIComponent(wms), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: user, password: pass })
         });
         const j = await r.json();
-        if (j.code === 0 && j.data && j.data.token) {
+        if (j.code === 0) {
             localStorage.setItem('wms_base_url', wms);
             localStorage.setItem('wms_last_user', user);
-            localStorage.setItem('wms_token', j.data.token);
-            localStorage.setItem('wms_user_role', j.data.role || '');
             _wmsBase = wms.replace(/\/+$/, '');
             _currentUser = user;
-            onLoginSuccess(user, j.data.token);
+            onLoginSuccess(user, j.data.role || '');
         } else {
             alert('登录失败: ' + (j.message || '未知错误'));
         }
@@ -340,12 +336,12 @@ async function doLogin() {
     }
 }
 
-function onLoginSuccess(username, token) {
+function onLoginSuccess(username, role) {
     document.getElementById('loginView').style.display = 'none';
     document.getElementById('mainView').style.display = '';
     document.getElementById('wmsBadge').className = 'badge online';
     document.getElementById('wmsBadge').textContent = 'WMS 已登录';
-    document.getElementById('userInfo').textContent = '👤 ' + username;
+    document.getElementById('userInfo').textContent = '👤 ' + username + (role ? ' (' + role + ')' : '');
     document.getElementById('userInfo').style.display = '';
     document.getElementById('btnLogout').style.display = '';
     // 启动轮询
@@ -358,7 +354,6 @@ function onLoginSuccess(username, token) {
 
 function logout() {
     if (!confirm('确定退出?')) return;
-    localStorage.removeItem('wms_token');
     location.reload();
 }
 
@@ -415,14 +410,11 @@ async function selectOrder(id, no) {
     await pollScanResults();
 }
 
-// ===== 加载并渲染"期望扫码"列表(本单锁定的所有 EPC) =====
+// ===== 加载并渲染"期望扫码"列表(本单锁定的所有 EPC,走 bridge 避开 CORS) =====
 async function loadExpectedEpcs() {
     if (!selectedOrderId) return;
-    const token = localStorage.getItem('wms_token');
     try {
-        const r = await fetch(_wmsBase + '/api/outbound/orders/' + selectedOrderId + '/expect', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        }).then(r => r.json());
+        const r = await fetch('/api/wms/orders/' + selectedOrderId + '/expect').then(r => r.json());
         if (r.code === 0) {
             expectedEpcs = r.data || [];
             renderExpectedList();
@@ -610,19 +602,17 @@ function beepFail() {
     setTimeout(() => beep(1200, 400, 'square'), 600);
 }
 
-// ===== 手动扫码(无读卡器时也能演示) =====
+// ===== 手动扫码(无读卡器时也能演示,走 bridge 避开 CORS) =====
 async function manualScan() {
     if (!selectedOrderId) { alert('请先选择 DRAFT 出库单'); return; }
     const input = document.getElementById('manualEpc');
     const epc = (input.value || '').trim().toUpperCase();
     if (!epc) { alert('请输入 24 位 EPC'); return; }
     if (epc.length !== 24) { beepFail(); alert('EPC 长度必须 24 位,当前 ' + epc.length); return; }
-    // 走 WMS 直连(用当前用户 token),保证扫码人 = 登录人
-    const token = localStorage.getItem('wms_token');
-    const r = await fetch(_wmsBase + '/api/outbound/orders/' + selectedOrderId + '/scan-epc', {
+    const r = await fetch('/api/wms/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ epc: epc, operator: _currentUser })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epc: epc, orderId: selectedOrderId })
     }).then(r => r.json());
     if (r.code === 0 && r.data) {
         const sr = Object.assign({}, r.data, { _epc: epc, _ts: new Date().toLocaleTimeString() });
@@ -641,18 +631,16 @@ async function manualScan() {
     }
 }
 
-// ===== 提交出库(全部扫完才允许) =====
+// ===== 提交出库(全部扫完才允许,走 bridge 避开 CORS) =====
 async function doCommit() {
     if (!selectedOrderId) { alert('请先选择出库单'); return; }
     if (!confirm('确认提交出库单 ' + selectedOrderNo + ' ?\n提交后库存将正式扣减,出库单状态变为 COMMITTED。')) return;
-    const token = localStorage.getItem('wms_token');
     const btn = document.getElementById('btnCommit');
     btn.disabled = true;
     btn.textContent = '提交中...';
     try {
-        const r = await fetch(_wmsBase + '/api/outbound/orders/' + selectedOrderId + '/commit', {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }
+        const r = await fetch('/api/wms/orders/' + selectedOrderId + '/commit', {
+            method: 'POST'
         }).then(r => r.json());
         if (r.code === 0) {
             showResult(true, '✓ 提交成功', '出库单 ' + selectedOrderNo + ' 已正式出库\n共 ' + (r.data.totalQuantity || 0) + ' 件');
