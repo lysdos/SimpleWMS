@@ -269,6 +269,8 @@ const I18N = (() => {
         'outbound_order.no_barcode':{ 'zh-CN': '(无条码记录)',              'en-US': '(no barcode record)' },
         'outbound_order.print_title':{ 'zh-CN': '出库单 #{id} 条码标签(已消耗)','en-US': 'Outbound Order #{id} - Barcode Labels (consumed)' },
         'outbound_order.barcode_count':{ 'zh-CN': '共 {n} 个 24 位编码',     'en-US': 'Total {n} 24-digit codes' },
+        'outbound_order.btn.commit':{ 'zh-CN': '✓ 提交出库',                 'en-US': '✓ Commit Outbound' },
+        'outbound_order.btn.cancel':{ 'zh-CN': '✗ 取消',                     'en-US': '✗ Cancel' },
         'outbound_order.barcode_label':{ 'zh-CN': '24 位编码',               'en-US': '24-digit Code' },
         'outbound_order.strike':{ 'zh-CN': '[已出库]',                     'en-US': '[Consumed]' },
 

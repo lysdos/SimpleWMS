@@ -491,6 +491,10 @@ const Views = {
         <div class="form-row" style="margin-top:16px;justify-content:flex-end;">
             <button class="btn btn-sm" onclick="printOutboundOrder()">🖨 ${t('common.print')}</button>
             <a class="btn btn-sm" href="/api/outbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
+            ${o.status === 'DRAFT' ? `
+                <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.commit')}</button>
+                <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.cancel')}</button>
+            ` : ''}
         </div>`;
     },
 
