@@ -168,8 +168,18 @@ public class InventoryItemDao {
             args.add(status);
         }
         sb.append(" ORDER BY id DESC");
-        int lim = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
-        int offset = page <= 0 ? 0 : (page - 1) * lim;
+        // 导出场景:controller 传 pageSize=5000(导出全部),被 cap 成 20 = 漏数据。
+        // 把上限放到 100000(只对导出生效,UI 列表仍走 pageSize=20),确保 export.csv 拿到全集。
+        int lim;
+        int offset;
+        if (pageSize > 200) {
+            // 导出 / 批量:不应用 200 的硬上限
+            lim = pageSize;
+            offset = 0;
+        } else {
+            lim = pageSize <= 0 ? 20 : pageSize;
+            offset = page <= 0 ? 0 : (page - 1) * lim;
+        }
         sb.append(" LIMIT ").append(lim).append(" OFFSET ").append(offset);
         return jdbc.query(sb.toString(), ROW, args.toArray());
     }
