@@ -285,19 +285,6 @@ function openNewStockCheckModal() {
     radios.forEach(r => r.addEventListener('change', paintScopeUi));
     paintScopeUi();
 }
-    const sel = document.getElementById('nsc-scope');
-    const kw = document.getElementById('nsc-keyword');
-    const kwLabel = document.getElementById('nsc-keyword-label');
-    function sync() {
-        const isAll = sel.value === 'ALL';
-        kw.disabled = isAll;
-        if (isAll) { kw.value = ''; kwLabel.textContent = t('stock_check.scope.keyword'); }
-        else if (sel.value === 'SKU') kwLabel.textContent = t('stock_check.scope.sku_label');
-        else if (sel.value === 'LOCATION') kwLabel.textContent = t('stock_check.scope.location_label');
-    }
-    sel.addEventListener('change', sync);
-    sync();
-}
 
 /* ---------- 入库单 → 每件条码展示 ---------- */
 async function viewInboundOrderBarcodes(orderId, sku, productName) {
