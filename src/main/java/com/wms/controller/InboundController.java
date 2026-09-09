@@ -29,9 +29,9 @@ public class InboundController {
         this.inboundService = inboundService;
     }
 
-    /** 老接口:单货入库(兼容,内部走批量) */
+    /** 老接口:单货入库(兼容,内部走 DRAFT 路径) */
     @PostMapping
-    public ApiResponse<InventoryLog> inbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
+    public ApiResponse<InboundOrder> inbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         Integer productId = asInt(body.get("productId"));
         Integer quantity  = asInt(body.get("quantity"));
         String remark    = asString(body.get("remark"));

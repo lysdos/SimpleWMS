@@ -67,7 +67,7 @@ public class InboundOrderDao {
     /** 插入入库单主表,返回自增 id */
     public int insertOrder(InboundOrder o) {
         String sql = "INSERT INTO inbound_order (order_no, external_no, remark, " +
-                "operator, total_quantity, item_count) VALUES (?,?,?,?,?,?)";
+                "operator, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
@@ -77,6 +77,7 @@ public class InboundOrderDao {
             ps.setString(4, o.getOperator());
             ps.setInt(5, o.getTotalQuantity() == null ? 0 : o.getTotalQuantity());
             ps.setInt(6, o.getItemCount() == null ? 0 : o.getItemCount());
+            ps.setString(7, o.getStatus() == null ? InboundOrder.STATUS_DRAFT : o.getStatus());
             return ps;
         }, kh);
         Number k = kh.getKey();

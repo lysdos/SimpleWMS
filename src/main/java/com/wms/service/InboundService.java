@@ -49,33 +49,28 @@ public class InboundService {
         this.jdbc = jdbc;
     }
 
-    /** 单条入库,保持老接口签名(内部走批量,只传 1 条明细) */
-    public InventoryLog doInbound(int productId, int quantity, String remark, String operator) {
+    /**
+     * 单条入库(老接口):改为 DRAFT 语义,不再即时写 inventory_log
+     * 调用方(controller)负责后续 commit。返回创建出来的 DRAFT InboundOrder
+     */
+    public InboundOrder doInbound(int productId, int quantity, String remark, String operator) {
         List<BatchItem> items = new ArrayList<>();
         BatchItem it = new BatchItem();
         it.productId = productId;
         it.quantity = quantity;
         it.rowRemark = remark;
         items.add(it);
-        InboundOrder order = doInboundBatch(items, null, remark, operator, null);
-        InventoryLog mirror = new InventoryLog();
-        mirror.setType(InventoryLog.TYPE_IN);
-        mirror.setProductId(productId);
-        mirror.setQuantity(quantity);
-        mirror.setOrderId(order.getId());
-        return mirror;
+        return doInboundBatch(items, null, remark, operator, null);
     }
 
     /**
-     * 批量入库:事务内完成
-     *   1) 同 (productId, supplier) 合并数量(允许不同供应商)
-     *   2) 逐商品加库存(adjustQuantity)
-     *   3) 写入 inbound_order + inbound_order_item(明细带 supplier)
-     *   4) 写入 inventory_log(关联 orderId)
-     * 任何一步异常 → 整体回滚,库存与流水/单据保持一致
+     * 批量入库(老 batch 接口):统一改为"DRAFT + 提交"语义,确保未正式提交不影响库存
+     *   1) 校验 + 合并同 (productId, supplier) 的数量
+     *   2) 写主表 status=DRAFT
+     *   3) 调 addItemsToDraftInternal 写明细 + 生成 PENDING 单元(不调 adjustQuantity、不写流水)
+     * 真实"生效"在 commitDraft() 里完成(PENDING 单元 → IN_STOCK + adjustQuantity + 写 inventory_log)
      *
-     * @param orderId 可选:非 null 时把 items 追加到该 DRAFT 单(走 addItemsToDraftInternal),
-     *                主表 externalNo/remark/orderNo 不会被覆盖;为 null 时按传统自建单流程
+     * @param orderId 可选:非 null 时把 items 追加到该 DRAFT 单,主表 externalNo/remark/orderNo 不会被覆盖
      */
     @Transactional
     public InboundOrder doInboundBatch(List<BatchItem> items,
@@ -103,49 +98,20 @@ public class InboundService {
             b.rowRemark = blankToNull(b.rowRemark);
         }
 
-        // 2. 同 (productId, supplier) 合并数量
-        Map<String, BatchItem> merged = new LinkedHashMap<>();
-        for (BatchItem raw : items) {
-            String key = raw.productId + "|" + (raw.supplier == null ? "" : raw.supplier);
-            BatchItem acc = merged.get(key);
-            if (acc == null) {
-                merged.put(key, raw);
-            } else {
-                acc.quantity += raw.quantity;
-                if ((acc.rowRemark == null || acc.rowRemark.isBlank())
-                        && raw.rowRemark != null && !raw.rowRemark.isBlank()) {
-                    acc.rowRemark = raw.rowRemark;
-                }
-            }
-        }
-
-        // 3. 写主表(supplier 字段已移至明细,主表不再存)
+        // 2. 写主表 status=DRAFT(INSERT SQL 现在写入 status 列)
         InboundOrder order = new InboundOrder();
         order.setOrderNo(genOrderNo());
         order.setExternalNo(blankToNull(externalNo));
         order.setRemark(blankToNull(orderRemark));
         order.setOperator(operator);
-        order.setStatus(InboundOrder.STATUS_COMMITTED);  // 老 batch 接口直接 = COMMITTED
-        int totalQty = 0;
-        for (BatchItem b : merged.values()) totalQty += b.quantity;
-        order.setTotalQuantity(totalQty);
-        order.setItemCount(merged.size());
+        order.setStatus(InboundOrder.STATUS_DRAFT);
+        order.setTotalQuantity(0);
+        order.setItemCount(0);
         int newOrderId = orderDao.insertOrder(order);
         order.setId(newOrderId);
 
-        // 4. 逐行加库存 + 写明细 + 写流水 + 一物一码生成库存单元
-        List<InboundOrderItem> itemEntities = new ArrayList<>();
-        for (BatchItem b : merged.values()) {
-            List<InventoryItem> codes = processItemBatch(b, operator, newOrderId);
-            InboundOrderItem itemEntity = persistOrderItem(b, newOrderId, codes);
-            itemEntities.add(itemEntity);
-        }
-        order.setItems(itemEntities);
-
-        // 5. 老 batch 接口直接下单 = COMMITTED — 立即"生效":PENDING 单元 → IN_STOCK,
-        //    累加 productDao.adjustQuantity,写 inventory_log
-        activateItemsAndLog(itemEntities, operator, newOrderId);
-        return order;
+        // 3. 写明细 + 生成 PENDING 单元(不调 adjustQuantity、不写 inventory_log)
+        return addItemsToDraftInternal(newOrderId, items, operator);
     }
 
     @Transactional(readOnly = true)

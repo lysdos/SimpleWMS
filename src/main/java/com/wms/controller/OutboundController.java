@@ -29,9 +29,9 @@ public class OutboundController {
         this.outboundService = outboundService;
     }
 
-    /** 老接口:单货出库(兼容,内部走批量) */
+    /** 老接口:单货出库(兼容,内部走 DRAFT 路径) */
     @PostMapping
-    public ApiResponse<InventoryLog> outbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
+    public ApiResponse<OutboundOrder> outbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         Integer productId = asInt(body.get("productId"));
         Integer quantity  = asInt(body.get("quantity"));
         String remark    = asString(body.get("remark"));

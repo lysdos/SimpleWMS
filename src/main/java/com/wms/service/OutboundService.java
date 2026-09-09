@@ -25,17 +25,86 @@ import java.util.Map;
 public class OutboundService {
     private final ProductDao productDao; private final InventoryLogDao logDao; private final OutboundOrderDao orderDao; private final InventoryItemDao itemDao;
     @Autowired public OutboundService(ProductDao p,InventoryLogDao l,OutboundOrderDao o,InventoryItemDao i){productDao=p;logDao=l;orderDao=o;itemDao=i;}
-    public InventoryLog doOutbound(int productId,int quantity,String remark,String operator){BatchItem i=new BatchItem();i.productId=productId;i.quantity=quantity;i.rowRemark=remark;OutboundOrder o=doOutboundBatch(List.of(i),null,null,remark,operator,null);InventoryLog x=new InventoryLog();x.setType(InventoryLog.TYPE_OUT);x.setProductId(productId);x.setQuantity(quantity);x.setOrderId(o.getId());return x;}
+    /**
+     * 单条出库(老接口):改为 DRAFT 语义,不再即时扣库存
+     * 真实生效在 commitDraft() 里完成(adjustQuantity + consumeForOutbound + 写 OUT 流水)
+     */
+    @Transactional public OutboundOrder doOutbound(int productId,int quantity,String remark,String operator){
+        BatchItem i=new BatchItem();i.productId=productId;i.quantity=quantity;i.rowRemark=remark;
+        return doOutboundBatch(List.of(i),null,null,remark,operator,null);
+    }
     @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String operator){return doOutboundBatch(items,customer,externalNo,orderRemark,operator,null);}
     @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String operator,Integer orderId){
-        if(items==null||items.isEmpty())throw new IllegalArgumentException("出库明细不能为空");if(operator==null||operator.isBlank())operator="操作员";Map<Integer,BatchItem> m=new LinkedHashMap<>();for(BatchItem r:items){if(r.productId==null)throw new IllegalArgumentException("请选择商品");if(r.quantity==null||r.quantity<=0)throw new IllegalArgumentException("出库数量必须大于 0");BatchItem a=m.computeIfAbsent(r.productId,k->{BatchItem z=new BatchItem();z.productId=k;z.quantity=0;z.rowRemark=r.rowRemark;return z;});a.quantity+=r.quantity;}
-        OutboundOrder o=orderId==null?new OutboundOrder():orderDao.findOrderById(orderId);if(orderId!=null&&(o==null||!OutboundOrder.STATUS_DRAFT.equals(o.getStatus())))throw new IllegalStateException("出库单不是草稿");if(orderId==null){o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(orderRemark));o.setOperator(operator);o.setStatus(OutboundOrder.STATUS_COMMITTED);o.setTotalQuantity(m.values().stream().mapToInt(x->x.quantity).sum());o.setItemCount(m.size());int id=orderDao.insertOrder(o);o.setId(id);}
-        for(BatchItem b:m.values()){Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));String loc=blank(p.getLocation())==null?"默认库位":p.getLocation();Long av=itemDao.sumRemaining(p.getId(),loc);if((av==null?0:av)<b.quantity&&!(p.getQuantity()>=b.quantity&&(av==null||av==0)))throw new IllegalStateException("库存不足");if(orderId==null){int before=p.getQuantity();if(productDao.adjustQuantity(b.productId,-b.quantity)==0)throw new IllegalStateException("出库失败");itemDao.consumeForOutbound(p.getId(),loc,b.quantity,o.getId());OutboundOrderItem it=new OutboundOrderItem();it.setOrderId(o.getId());it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());it.setBeforeQty(before);it.setAfterQty(before-b.quantity);it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));orderDao.insertItem(it);}}
-        if(orderId!=null){orderDao.refreshAggregates(orderId);o=orderDao.findOrderById(orderId);}o.setItems(orderDao.findItemsByOrderId(o.getId()));return o;
+        if(items==null||items.isEmpty())throw new IllegalArgumentException("出库明细不能为空");
+        if(operator==null||operator.isBlank())operator="操作员";
+        Map<Integer,BatchItem> m=new LinkedHashMap<>();
+        for(BatchItem r:items){
+            if(r.productId==null)throw new IllegalArgumentException("请选择商品");
+            if(r.quantity==null||r.quantity<=0)throw new IllegalArgumentException("出库数量必须大于 0");
+            BatchItem a=m.computeIfAbsent(r.productId,k->{BatchItem z=new BatchItem();z.productId=k;z.quantity=0;z.rowRemark=r.rowRemark;return z;});
+            a.quantity+=r.quantity;
+        }
+
+        if(orderId!=null){
+            // DRAFT 单追加明细分支:不校验库存、不调 adjustQuantity,只写 DRAFT 明细
+            OutboundOrder o=orderDao.findOrderById(orderId);
+            if(o==null||!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");
+            for(BatchItem b:m.values()){
+                Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
+                OutboundOrderItem it=new OutboundOrderItem();
+                it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
+                it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
+                it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
+                it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
+                orderDao.insertItem(it);
+            }
+            orderDao.refreshAggregates(orderId);
+            o=orderDao.findOrderById(orderId);o.setItems(orderDao.findItemsByOrderId(o.getId()));
+            return o;
+        }
+
+        // 新建 DRAFT 单 + 写 DRAFT 明细(不调 adjustQuantity、不写 inventory_log)
+        OutboundOrder o=new OutboundOrder();
+        o.setOrderNo(genOrderNo());
+        o.setCustomer(blank(customer));
+        o.setExternalNo(blank(externalNo));
+        o.setRemark(blank(orderRemark));
+        o.setOperator(operator);
+        o.setStatus(OutboundOrder.STATUS_DRAFT);  // INSERT SQL 已写 status 列
+        o.setTotalQuantity(m.values().stream().mapToInt(x->x.quantity).sum());
+        o.setItemCount(m.size());
+        int id=orderDao.insertOrder(o);o.setId(id);
+        for(BatchItem b:m.values()){
+            Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
+            OutboundOrderItem it=new OutboundOrderItem();
+            it.setOrderId(id);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
+            it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
+            it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
+            it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());
+            orderDao.insertItem(it);
+        }
+        o=orderDao.findOrderById(id);o.setItems(orderDao.findItemsByOrderId(id));
+        return o;
     }
     @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String operator){if(operator==null||operator.isBlank())operator="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setOperator(operator);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
     @Transactional public OutboundOrder scanCodeToDraft(int orderId,String code){OutboundOrder o=requireDraft(orderId);InventoryItem inv=itemDao.findByCode(code);if(inv==null)throw new IllegalArgumentException("码不存在");if(InventoryItem.STATUS_OUT.equals(inv.getStatus()))throw new IllegalStateException("已出库");if(InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus()))throw new IllegalStateException("已报废");if(!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus()))throw new IllegalStateException("库存状态不可出库");Product p=productDao.findById(inv.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(orderId);OutboundOrderItem line=lines.stream().filter(x->x.getProductId().equals(inv.getProductId())).findFirst().orElse(null);if(line==null){line=new OutboundOrderItem();line.setOrderId(orderId);line.setProductId(p.getId());line.setSku(p.getSku());line.setProductName(p.getName());line.setQuantity(1);line.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());line.setLocation(blank(p.getLocation()));line.setBeforeQty(p.getQuantity());line.setAfterQty(p.getQuantity()-1);orderDao.insertItem(line);}else{orderDao.updateItemQuantity(line.getId(),line.getQuantity()+1);}orderDao.refreshAggregates(orderId);return getOrder(orderId);}
-    @Transactional public OutboundOrder commitDraft(int id){OutboundOrder o=requireDraft(id);List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);if(o.getTotalQuantity()==null||o.getTotalQuantity()<=0)throw new IllegalStateException("草稿单不能为空");for(OutboundOrderItem x:lines){Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));String loc=blank(p.getLocation())==null?"默认库位":p.getLocation();if((itemDao.sumRemaining(p.getId(),loc)==null?0:itemDao.sumRemaining(p.getId(),loc))<x.getQuantity())throw new IllegalStateException("库存不足");if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");itemDao.consumeForOutbound(p.getId(),loc,x.getQuantity(),id);}orderDao.updateStatus(id,OutboundOrder.STATUS_COMMITTED);return getOrder(id);}
+    @Transactional public OutboundOrder commitDraft(int id){OutboundOrder o=requireDraft(id);List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);if(o.getTotalQuantity()==null||o.getTotalQuantity()<=0)throw new IllegalStateException("草稿单不能为空");String operator=o.getOperator();if(operator==null||operator.isBlank())operator="操作员";for(OutboundOrderItem x:lines){Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));String loc=blank(p.getLocation())==null?"默认库位":p.getLocation();if((itemDao.sumRemaining(p.getId(),loc)==null?0:itemDao.sumRemaining(p.getId(),loc))<x.getQuantity())throw new IllegalStateException("库存不足");int before=p.getQuantity();if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");itemDao.consumeForOutbound(p.getId(),loc,x.getQuantity(),id);int after=before-x.getQuantity();persistOutboundLog(x,operator,id,before,after);}orderDao.updateStatus(id,OutboundOrder.STATUS_COMMITTED);return getOrder(id);}
+
+    /** 写一条出库流水(OUT),commitDraft 时调用 */
+    private void persistOutboundLog(OutboundOrderItem it,String operator,int orderId,int before,int after){
+        InventoryLog log=new InventoryLog();
+        log.setType(InventoryLog.TYPE_OUT);
+        log.setProductId(it.getProductId());
+        log.setSku(it.getSku());
+        log.setProductName(it.getProductName());
+        log.setQuantity(it.getQuantity());
+        log.setBeforeQty(before);
+        log.setAfterQty(after);
+        log.setRemark(it.getRowRemark());
+        log.setOperator(operator);
+        log.setOrderId(orderId);
+        logDao.insert(log);
+    }
     @Transactional public void cancelDraft(int id){OutboundOrder o=requireDraft(id);orderDao.deleteItemsByOrderId(id);orderDao.updateStatus(id,OutboundOrder.STATUS_CANCELLED);}
     private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new IllegalArgumentException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
     @Transactional(readOnly=true) public OutboundOrder getOrder(int id){OutboundOrder o=orderDao.findOrderById(id);if(o!=null)o.setItems(orderDao.findItemsByOrderId(id));return o;}
