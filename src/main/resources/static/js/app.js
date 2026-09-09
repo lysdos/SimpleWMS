@@ -585,6 +585,32 @@ async function cancelInboundOrder(id, orderNo) {
     }
 }
 
+/* 提交出库单 */
+async function commitOutboundOrder(id, orderNo) {
+    if (!confirm(t('outbound.confirm_commit', { n: orderNo }))) return;
+    try {
+        await api.post(`/api/outbound/orders/${id}/commit`);
+        toast(t('outbound.toast.committed', { n: orderNo }));
+        closeModal();
+        await loadOutbound();
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+    }
+}
+
+/* 取消出库单 */
+async function cancelOutboundOrder(id, orderNo) {
+    if (!confirm(t('outbound.confirm_cancel', { n: orderNo }))) return;
+    try {
+        await api.post(`/api/outbound/orders/${id}/cancel`);
+        toast(t('outbound.toast.cancelled', { n: orderNo }));
+        closeModal();
+        await loadOutbound();
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+    }
+}
+
 /* ---------- 搜索 ---------- */
 function searchProducts() {
     state.productsKw = document.getElementById('kw-product').value.trim();

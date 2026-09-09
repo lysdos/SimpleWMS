@@ -219,7 +219,7 @@ const Views = {
                         <th>${t('inbound.col.external_no')}</th>
                         <th class="num">${t('inbound.col.items')}</th>
                         <th>${t('inbound.col.op_time')}</th>
-                        <th style="width:100px;">${t('common.actions')}</th>
+                        <th style="width:200px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody id="inbound-recent-tbody">${Views.inboundRecentRows(recentOrders)}</tbody>
                 </table>
@@ -232,17 +232,25 @@ const Views = {
         if (recentOrders.length === 0) {
             return `<tr><td colspan="6" class="empty">${t('inbound.empty')}</td></tr>`;
         }
-        return recentOrders.map(o => `
+        return recentOrders.map(o => {
+            const st = o.status || 'DRAFT';
+            const actionBtns = (st === 'DRAFT')
+                ? `<button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
+                   <button class="btn-link danger" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.cancel')}</button>`
+                : '';
+            return `
             <tr>
                 <td><strong>${escapeHtml(o.orderNo)}</strong></td>
-                <td><span class="pill ${docStatusClass(o.status)}">${t('doc.' + o.status)}</span></td>
+                <td><span class="pill ${docStatusClass(st)}">${t('doc.' + st)}</span></td>
                 <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
                 <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">${t('common.view')}</button>
+                    ${actionBtns}
                 </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     },
 
     /* ================== 4. 出库登记 ================== */
@@ -266,10 +274,12 @@ const Views = {
                 <table class="table">
                     <thead><tr>
                         <th>${t('outbound.col.order_no')}</th>
+                        <th style="width:90px;">${t('outbound.col.status')}</th>
+                        <th>${t('outbound.col.external_no')}</th>
                         <th>${t('outbound.col.customer')}</th>
                         <th class="num">${t('outbound.col.items')}</th>
                         <th>${t('outbound.col.op_time')}</th>
-                        <th style="width:100px;">${t('common.actions')}</th>
+                        <th style="width:200px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody id="outbound-recent-tbody">${Views.outboundRecentRows(recentOrders)}</tbody>
                 </table>
@@ -280,18 +290,28 @@ const Views = {
     outboundRecentRows(recentOrders) {
         recentOrders = recentOrders || [];
         if (recentOrders.length === 0) {
-            return `<tr><td colspan="5" class="empty">${t('outbound.empty')}</td></tr>`;
+            return `<tr><td colspan="7" class="empty">${t('outbound.empty')}</td></tr>`;
         }
-        return recentOrders.map(o => `
+        return recentOrders.map(o => {
+            const st = o.status || 'DRAFT';
+            const actionBtns = (st === 'DRAFT')
+                ? `<button class="btn-link" onclick="commitOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
+                   <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.cancel')}</button>`
+                : '';
+            return `
             <tr>
                 <td><strong>${escapeHtml(o.orderNo)}</strong></td>
+                <td><span class="pill ${docStatusClass(st)}">${t('doc.' + st)}</span></td>
+                <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td>${escapeHtml(o.customer || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
                 <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">${t('common.view')}</button>
+                    ${actionBtns}
                 </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     },
 
     /* 卡片 tab 渲染 */
