@@ -2,8 +2,24 @@
 #  SimpleWMS  -  docker-compose
 #  项目名 (container 前缀): simplewms
 #  服务: mysql + backend + frontend
-#  启动: docker compose up -d --build
-#  停止: docker compose down
+#
+#  首次启动:
+#    1) cp .env.example .env  (修改里面的密码与 JWT_SECRET)
+#    2) openssl rand -base64 48  填到 .env 的 JWT_SECRET
+#    3) docker compose --env-file .env up -d --build
+#
+#  日常启停:
+#    docker compose --env-file .env up -d     (启动)
+#    docker compose down                      (停止,数据保留)
+#    docker compose down -v                   (停止 + 删数据,慎用 ——
+#                                              改 MYSQL_PASSWORD 后必须走这条)
+#
+#  ⚠️  改 MYSQL_PASSWORD / MYSQL_USER 后:
+#    MySQL 镜像只在 data dir 为空(首次启动)时用 env 创建/重置用户,
+#    已存在的 mysql-data volume 不会更新。需 docker compose down -v 重置。
+#
+#  注: 不传 --env-file 时,容器会用 .env.example 里的默认 demo 值,
+#       仅适合本地开发,生产前必须改。
 # =====================================================
 
 name: simplewms
@@ -17,10 +33,11 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
-      MYSQL_ROOT_PASSWORD: rootpass
+      # 密码从 .env 读(没 .env 时用 demo 默认值,生产务必覆盖)
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
       MYSQL_DATABASE: simple_wms
-      MYSQL_USER: wms
-      MYSQL_PASSWORD: wmspass
+      MYSQL_USER: ${MYSQL_USER:-wms}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-wmspass}
       # 让 utf8mb4 默认生效
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
@@ -56,7 +73,8 @@ services:
       dockerfile: docker/Dockerfile.backend
     image: simplewms-backend:1.0.0
     container_name: simplewms-backend
-    restart: unless-stopped
+    # 失败最多重启 5 次,避免密码错时无限重启吃资源
+    restart: on-failure:5
     depends_on:
       mysql:
         condition: service_healthy
@@ -64,21 +82,24 @@ services:
       TZ: Asia/Shanghai
       # 关键:切到 mysql profile,DB host 用 docker 服务名
       SPRING_PROFILES_ACTIVE: mysql
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: wms
-      SPRING_DATASOURCE_PASSWORD: wmspass
+      # 连接信息从 .env 读(没 .env 时用默认 demo 值,方便开发)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-wms}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-wmspass}
       SPRING_SQL_INIT_MODE: always
       SPRING_SQL_INIT_CONTINUE_ON_ERROR: true
       # JVM 调优
       JAVA_OPTS: "-Xms256m -Xmx512m"
-      # 用户与角色 bootstrap
-      ADMIN_USERNAME: admin
-      ADMIN_PASSWORD: change-me-now
-      JWT_SECRET: change-this-jwt-secret-in-production-32bytes!
-      JWT_TTL_HOURS: "24"
+      # 用户与角色 bootstrap(生产前改成 .env 注入,别用默认值)
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-now}
+      # JWT 密钥强制从 .env 读,空值会拒启动
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (32+ bytes)}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
     ports:
-      # 暴露给宿主机,便于直接 curl 测试 API(原 8080 被 Windows Hyper-V 预留,改 9090)
-      - "9090:8080"
+      # 仅本机可访问(127.0.0.1 绑定,局域网/外网摸不到)
+      # 原 8080 被 Windows Hyper-V 预留,改 9090
+      - "127.0.0.1:9090:8080"
     networks:
       - simplewms-net
 

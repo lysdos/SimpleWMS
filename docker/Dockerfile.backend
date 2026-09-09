@@ -34,8 +34,9 @@ ENV LANG=C.UTF-8 \
 
 EXPOSE 8080
 
-# 健康检查:调一下仪表盘接口
+# 健康检查:用 curl 探活(应用已起就能连上,401 也算 OK)。
+# 2xx 视为健康,4xx/5xx/连接失败都视为不健康(应用还没起来)。
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:8080/api/dashboard/stats >/dev/null 2>&1 || exit 1
+    CMD curl -fsS -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me | grep -qE '^[24][0-9][0-9]$' || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
