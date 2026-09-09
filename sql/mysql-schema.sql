@@ -104,3 +104,25 @@ CREATE TABLE IF NOT EXISTS outbound_order_item (
     KEY idx_outbound_item_order (order_id),
     KEY idx_outbound_item_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+--  权限:把 simple_wms 库的所有权限给 wms 业务用户
+--
+--  MySQL 8 镜像在 .env 里写 MYSQL_USER / MYSQL_PASSWORD 时
+--  会自动 CREATE USER,但**不会自动 GRANT 任何库**,本脚本末尾
+--  补一刀把权限补上。这样即便将来加 IP 白名单 / 改认证插件,
+--  业务用户也能正常连接。
+--
+--  限制范围:
+--    - 库:只给 simple_wms,不给 information_schema/mysql 等
+--    - 主机:'%' 表示任意主机(容器外按 docker 网络 IP 访问);
+--      生产可改为 '172.22.0.%' 之类精确网段
+--
+--  改 .env 里 MYSQL_PASSWORD 时:
+--    - MySQL 镜像只会在**首次启动(空 data dir)**时建用户并应用新密码
+--    - 已存在的 volume 不会更新用户密码,需要 docker compose down -v 重置
+--    - 所以本脚本不再 CREATE USER,只 GRANT(用户由镜像创建,密码以 .env 为准)
+-- ============================================================
+
+GRANT ALL PRIVILEGES ON simple_wms.* TO 'wms'@'%';
+FLUSH PRIVILEGES;

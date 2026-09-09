@@ -1,15 +1,18 @@
 # 切到 MySQL 模式启动:
 #   java -jar simple-wms.jar --spring.profiles.active=mysql
 # 或设置环境变量 SPRING_PROFILES_ACTIVE=mysql
+#
+# 连接信息(url / username / password)统一从环境变量 / 启动参数传入,
+# 这里不写死,避免和 docker-compose env 冲突。约定:
+#   SPRING_DATASOURCE_URL       jdbc:mysql://<host>:3306/<db>?...
+#   SPRING_DATASOURCE_USERNAME  <user>
+#   SPRING_DATASOURCE_PASSWORD  <pass>
 
 spring:
   datasource:
-    # 关键:连接建立后立即 SET NAMES utf8mb4,强制 client/connection/results 都是 utf8mb4
-    # (MySQL 8 在 docker 镜像里默认 character_set_client=latin1,会导致中文 mojibake)
-    url: jdbc:mysql://localhost:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password: root
+    # 关键:连接建立后立刻 SET NAMES utf8mb4,强制 client/connection/results 都是 utf8mb4
+    # (MySQL 8 在 docker 镜像里默认 character_set_client=latin1,会导致中文 mojibake)
     hikari:
       connection-init-sql: "SET NAMES utf8mb4"
   sql:
