@@ -78,5 +78,56 @@ CREATE TABLE IF NOT EXISTS outbound_order_item (
     KEY idx_outbound_item_product (product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 4. 确认
+-- 4. 给 inbound_order / outbound_order 补 status 列(老库)
+--    状态机: DRAFT=草稿 / COMMITTED=已提交 / CANCELLED=已取消
+--    老数据默认值 DRAFT,与 InboundOrder.STATUS_DRAFT 保持一致
+--    同时给 status 加索引,方便按状态筛选
+
+-- 4.1 inbound_order.status
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = 'simple_wms'
+      AND TABLE_NAME   = 'inbound_order'
+      AND COLUMN_NAME  = 'status'
+);
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = 'simple_wms'
+      AND TABLE_NAME   = 'inbound_order'
+      AND INDEX_NAME   = 'idx_inbound_order_status'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE inbound_order ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT ''DRAFT'' AFTER item_count',
+    'SELECT "inbound_order.status already exists" AS msg');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl := IF(@idx_exists = 0,
+    'ALTER TABLE inbound_order ADD KEY idx_inbound_order_status (status)',
+    'SELECT "idx_inbound_order_status already exists" AS msg');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 4.2 outbound_order.status
+SET @col_exists := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = 'simple_wms'
+      AND TABLE_NAME   = 'outbound_order'
+      AND COLUMN_NAME  = 'status'
+);
+SET @idx_exists := (
+    SELECT COUNT(*) FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = 'simple_wms'
+      AND TABLE_NAME   = 'outbound_order'
+      AND INDEX_NAME   = 'idx_outbound_order_status'
+);
+SET @ddl := IF(@col_exists = 0,
+    'ALTER TABLE outbound_order ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT ''DRAFT'' AFTER item_count',
+    'SELECT "outbound_order.status already exists" AS msg');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @ddl := IF(@idx_exists = 0,
+    'ALTER TABLE outbound_order ADD KEY idx_outbound_order_status (status)',
+    'SELECT "idx_outbound_order_status already exists" AS msg');
+PREPARE stmt FROM @ddl; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 5. 确认
 SHOW TABLES;

@@ -55,8 +55,10 @@ CREATE TABLE IF NOT EXISTS inbound_order (
     operator        VARCHAR(64)  NOT NULL,
     total_quantity  INT          NOT NULL DEFAULT 0,
     item_count      INT          NOT NULL DEFAULT 0,
+    status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_inbound_order_created (created_at)
+    KEY idx_inbound_order_created (created_at),
+    KEY idx_inbound_order_status  (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS inbound_order_item (
@@ -85,8 +87,10 @@ CREATE TABLE IF NOT EXISTS outbound_order (
     operator        VARCHAR(64)  NOT NULL,
     total_quantity  INT          NOT NULL DEFAULT 0,
     item_count      INT          NOT NULL DEFAULT 0,
+    status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_outbound_order_created (created_at)
+    KEY idx_outbound_order_created (created_at),
+    KEY idx_outbound_order_status  (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS outbound_order_item (
