@@ -64,4 +64,40 @@ public class InventoryLogDao {
         }
         return 0;
     }
+
+    /**
+     * 统计本出库单某 EPC 的扫码确认次数(SCAN 类型日志)。
+     * 给 UHF scanEpc 用,>0 说明已扫过。
+     */
+    public int countScannedForOutboundEpc(int orderId, String epc) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_log " +
+                "WHERE type = 'SCAN' AND order_id = ? AND remark = ?",
+                Integer.class, orderId, "UHF 扫码确认, epc=" + epc);
+        return n == null ? 0 : n;
+    }
+
+    /**
+     * 统计本出库单某 SKU 的"已扫码确认"件数(SCAN 类型日志条数)。
+     * 注意:每扫一次 SCAN 日志=1 件,这里直接 count。
+     */
+    public int countScannedForOutbound(int orderId, int productId) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_log " +
+                "WHERE type = 'SCAN' AND order_id = ? AND product_id = ?",
+                Integer.class, orderId, productId);
+        return n == null ? 0 : n;
+    }
+
+    /**
+     * 统计本出库单"已扫码确认"的总件数(不区分 SKU)。
+     * 给 commitDraft 服务端校验用:scanned >= locked 才能 commit。
+     */
+    public int countScannedForOutboundAll(int orderId) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_log " +
+                "WHERE type = 'SCAN' AND order_id = ?",
+                Integer.class, orderId);
+        return n == null ? 0 : n;
+    }
 }

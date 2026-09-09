@@ -6,6 +6,7 @@ public class InventoryLog {
     /** 出入库类型 */
     public static final String TYPE_IN  = "IN";   // 入库
     public static final String TYPE_OUT = "OUT";  // 出库
+    public static final String TYPE_SCAN = "SCAN"; // UHF 扫码确认(quantity=0,只标记)
 
     private Integer id;
     private String type;

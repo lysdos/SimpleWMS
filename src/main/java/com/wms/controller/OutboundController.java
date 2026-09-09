@@ -158,6 +158,16 @@ public class OutboundController {
         return ApiResponse.ok(outboundService.commitDraft(id));
     }
 
+    /**
+     * 老 DRAFT 单补全锁定(给方案 A 上线前已存在的草稿单用):
+     *  按 FIFO 把每条明细对应的 SKU 库存锁到 RESERVED。
+     *  库存不足会抛 IllegalStateException,事务回滚。
+     */
+    @PostMapping("/orders/{id}/reserve")
+    public ApiResponse<OutboundOrder> reserve(@PathVariable int id) {
+        return ApiResponse.ok(outboundService.reserveDraft(id));
+    }
+
     /** 取消草稿单(DRAFT → CANCELLED) */
     @PostMapping("/orders/{id}/cancel")
     public ApiResponse<Void> cancel(@PathVariable int id) {

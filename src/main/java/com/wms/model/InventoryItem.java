@@ -17,6 +17,8 @@ public class InventoryItem {
     public static final String STATUS_TRANSFERRED  = "TRANSFERRED";
     /** 待入库 — 仅作 24 位码占位(remaining=0);入库单 commit 后变为 IN_STOCK */
     public static final String STATUS_PENDING      = "PENDING";
+    /** DRAFT 出库单已锁定但未 commit;取消时回退到 IN_STOCK,commit 后变为 OUT */
+    public static final String STATUS_RESERVED     = "RESERVED";
 
     private Integer id;
     private String code;                // 24 位编码,UNIQUE

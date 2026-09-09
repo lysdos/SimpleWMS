@@ -65,7 +65,7 @@ public class OutboundService {
             return o;
         }
 
-        // 新建 DRAFT 单 + 写 DRAFT 明细(不调 adjustQuantity、不写 inventory_log)
+        // 新建 DRAFT 单 + 写 DRAFT 明细 + 按方案 A 立刻锁定 N 个 inventory_item (RESERVED)
         OutboundOrder o=new OutboundOrder();
         o.setOrderNo(genOrderNo());
         o.setCustomer(blank(customer));
@@ -84,13 +84,44 @@ public class OutboundService {
             it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
             it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());
             orderDao.insertItem(it);
+            // ====== 方案 A:建单立刻锁定 EPC ======
+            String loc = blank(p.getLocation()) == null ? "默认库位" : p.getLocation();
+            itemDao.reserveForOutbound(p.getId(), loc, b.quantity, id);
         }
         o=orderDao.findOrderById(id);o.setItems(orderDao.findItemsByOrderId(id));
         return o;
     }
     @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String operator){if(operator==null||operator.isBlank())operator="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setOperator(operator);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
     @Transactional public OutboundOrder scanCodeToDraft(int orderId,String code){OutboundOrder o=requireDraft(orderId);InventoryItem inv=itemDao.findByCode(code);if(inv==null)throw new IllegalArgumentException("码不存在");if(InventoryItem.STATUS_OUT.equals(inv.getStatus()))throw new IllegalStateException("已出库");if(InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus()))throw new IllegalStateException("已报废");if(!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus()))throw new IllegalStateException("库存状态不可出库");Product p=productDao.findById(inv.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(orderId);OutboundOrderItem line=lines.stream().filter(x->x.getProductId().equals(inv.getProductId())).findFirst().orElse(null);if(line==null){line=new OutboundOrderItem();line.setOrderId(orderId);line.setProductId(p.getId());line.setSku(p.getSku());line.setProductName(p.getName());line.setQuantity(1);line.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());line.setLocation(blank(p.getLocation()));line.setBeforeQty(p.getQuantity());line.setAfterQty(p.getQuantity()-1);orderDao.insertItem(line);}else{orderDao.updateItemQuantity(line.getId(),line.getQuantity()+1);}orderDao.refreshAggregates(orderId);return getOrder(orderId);}
-    @Transactional public OutboundOrder commitDraft(int id){OutboundOrder o=requireDraft(id);List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);if(o.getTotalQuantity()==null||o.getTotalQuantity()<=0)throw new IllegalStateException("草稿单不能为空");String operator=o.getOperator();if(operator==null||operator.isBlank())operator="操作员";for(OutboundOrderItem x:lines){Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));String loc=blank(p.getLocation())==null?"默认库位":p.getLocation();if((itemDao.sumRemaining(p.getId(),loc)==null?0:itemDao.sumRemaining(p.getId(),loc))<x.getQuantity())throw new IllegalStateException("库存不足");int before=p.getQuantity();if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");itemDao.consumeForOutbound(p.getId(),loc,x.getQuantity(),id);int after=before-x.getQuantity();persistOutboundLog(x,operator,id,before,after);}orderDao.updateStatus(id,OutboundOrder.STATUS_COMMITTED);return getOrder(id);}
+    @Transactional public OutboundOrder commitDraft(int id){
+        OutboundOrder o=requireDraft(id);
+        List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);
+        if(o.getTotalQuantity()==null||o.getTotalQuantity()<=0)throw new IllegalStateException("草稿单不能为空");
+        // ====== 方案 A:commit 时不重新挑码,直接把所有 RESERVED 单元 → OUT ======
+        List<com.wms.dao.InventoryItemDao.ConsumeRecord> records = itemDao.commitReservations(id);
+        if (records.isEmpty()) {
+            throw new IllegalStateException("草稿单未锁定任何 inventory_item,请先调 /orders/{id}/reserve 补全锁定");
+        }
+        // ====== 服务端校验:所有 RESERVED 单元都必须被 SCAN 日志确认过 ======
+        int scannedCount = logDao.countScannedForOutboundAll(id);
+        int lockedCount = records.stream().mapToInt(r -> r.quantity).sum();
+        if (scannedCount < lockedCount) {
+            // 回滚:把已经改 OUT 的重新退回去
+            // 注:commitReservations 已经在本事务里执行,这里抛异常会回滚
+            throw new IllegalStateException("还有 " + (lockedCount - scannedCount) + " 件未扫码确认,不能提交(已扫 " + scannedCount + " / 锁定 " + lockedCount + ")");
+        }
+        String operator=o.getOperator();
+        if(operator==null||operator.isBlank())operator="操作员";
+        for(OutboundOrderItem x:lines){
+            Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));
+            int before=p.getQuantity();
+            if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");
+            int after=before-x.getQuantity();
+            persistOutboundLog(x,operator,id,before,after);
+        }
+        orderDao.updateStatus(id,OutboundOrder.STATUS_COMMITTED);
+        return getOrder(id);
+    }
 
     /** 写一条出库流水(OUT),commitDraft 时调用 */
     private void persistOutboundLog(OutboundOrderItem it,String operator,int orderId,int before,int after){
@@ -107,7 +138,34 @@ public class OutboundService {
         log.setOrderId(orderId);
         logDao.insert(log);
     }
-    @Transactional public void cancelDraft(int id){OutboundOrder o=requireDraft(id);orderDao.deleteItemsByOrderId(id);orderDao.updateStatus(id,OutboundOrder.STATUS_CANCELLED);}
+    @Transactional public void cancelDraft(int id){
+        OutboundOrder o=requireDraft(id);
+        // ====== 方案 A:取消时把所有 RESERVED 单元 → IN_STOCK,清 outbound_order_id ======
+        itemDao.releaseReservations(id);
+        orderDao.deleteItemsByOrderId(id);
+        orderDao.updateStatus(id,OutboundOrder.STATUS_CANCELLED);
+    }
+
+    /**
+     * 老 DRAFT 单补全锁定:把已建但未锁的草稿行,按 FIFO 锁定 N 个 RESERVED 单元。
+     * 适用于方案 A 上线前已存在的 DRAFT 单(如 OUT-20260909162933-717)。
+     */
+    @Transactional
+    public OutboundOrder reserveDraft(int id){
+        OutboundOrder o = requireDraft(id);
+        List<OutboundOrderItem> lines = orderDao.findItemsByOrderId(id);
+        if (lines.isEmpty()) throw new IllegalStateException("草稿单无明细行");
+        for (OutboundOrderItem x : lines) {
+            // 已经锁过的就跳过(以 outbound_order_id 匹配)
+            Integer alreadyLocked = itemDao.countReservedForOrder(id, x.getProductId(), x.getLocation());
+            int need = x.getQuantity() - (alreadyLocked == null ? 0 : alreadyLocked);
+            if (need > 0) {
+                String loc = blank(x.getLocation()) == null ? "默认库位" : x.getLocation();
+                itemDao.reserveForOutbound(x.getProductId(), loc, need, id);
+            }
+        }
+        return getOrder(id);
+    }
 
     // ====== RFID / UHF 出库扫码集成 ======
     // 8 字节 EPC(16 hex) <-> inventory_item.code 后 8 字节(24 字符 code = 16 字符时间戳 + 8 字符 EPC)
@@ -124,12 +182,12 @@ public class OutboundService {
     }
 
     /**
-     * UHF-Rader 扫到一个 EPC,前端调用此接口:
-     *  1) 验证 EPC 在 IN_STOCK 库存里存在
-     *  2) 验证 EPC 所属 SKU 在出库单明细里
-     *  3) 调 consumeForOutbound 扣 1 件 + 写 OUT 流水
-     *  4) 已 OUT 的 EPC 重复扫 → 报"已扫过"
-     *  5) 不在任何出库单里的 EPC → 报"不在出库单中"
+     * UHF-Rader 扫到一个 EPC,前端调用此接口(方案 A:严格 1:1,只接受本单 RESERVED 码):
+     *  1) 验证 EPC = 24 hex(12 字节 UHF Gen2)
+     *  2) 查 inventory_item 必须是 status=RESERVED 且 outbound_order_id=本单
+     *     - 不在 RESERVED 集合 → 报错(可能是别的单的码、IN_STOCK、OUT、SCRAPPED 等)
+     *  3) 命中后只是"扫码确认",不扣库存、不写流水(等 commit 统一处理)
+     *  4) 重复扫同一个码 → 报"已扫过"(同一码只能确认一次)
      */
     @Transactional
     public ScanResult scanEpc(int orderId, String epc, String operator) {
@@ -137,11 +195,9 @@ public class OutboundService {
             return ScanResult.fail("EPC 不能为空");
         }
         epc = epc.trim().toUpperCase();
-        // 12 字节 EPC = 24 hex(标准 UHF Gen2 EPC = 96 bit),与 inventory_item.code(VARCHAR(24))等长
         if (epc.length() != 24) {
             return ScanResult.fail("EPC 长度必须是 24 位十六进制(12 字节 = 96 bit UHF Gen2),收到 " + epc.length() + " 位: " + epc);
         }
-        // 全 hex 字符
         for (int i = 0; i < epc.length(); i++) {
             char c = epc.charAt(i);
             if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) {
@@ -152,62 +208,57 @@ public class OutboundService {
         OutboundOrder o = requireDraft(orderId);
         if (operator == null || operator.isBlank()) operator = o.getOperator();
 
-        // 1) 查 inventory_item(RIGHT(code, 24) = EPC, status=IN_STOCK)
-        InventoryItem inv = itemDao.findByEpcAndStatus(epc, InventoryItem.STATUS_IN_STOCK);
+        // 方案 A:只接受"本单 RESERVED"的码
+        InventoryItem inv = itemDao.findReservedByEpcForOrder(epc, orderId);
         if (inv == null) {
-            // 不在库 或 不在 IN_STOCK
+            // 给出更具体的错误原因
             InventoryItem any = itemDao.findByEpc(epc);
             if (any == null) {
                 return ScanResult.fail("EPC 不在系统库存中: " + epc);
             }
-            if (InventoryItem.STATUS_OUT.equals(any.getStatus())) {
-                return ScanResult.fail("EPC 已出库: " + epc);
+            switch (any.getStatus()) {
+                case InventoryItem.STATUS_RESERVED:
+                    return ScanResult.fail("EPC 已被其他出库单锁定(" + any.getOutboundOrderId() + "): " + epc);
+                case InventoryItem.STATUS_OUT:
+                    return ScanResult.fail("EPC 已出库: " + epc);
+                case InventoryItem.STATUS_SCRAPPED:
+                    return ScanResult.fail("EPC 已报废: " + epc);
+                case InventoryItem.STATUS_TRANSFERRED:
+                    return ScanResult.fail("EPC 已调拨: " + epc);
+                case InventoryItem.STATUS_PENDING:
+                    return ScanResult.fail("EPC 未入库(状态 PENDING): " + epc);
+                case InventoryItem.STATUS_IN_STOCK:
+                    return ScanResult.fail("EPC 在库但未被本出库单锁定(请先调 /orders/{id}/reserve 补全): " + epc);
+                default:
+                    return ScanResult.fail("EPC 库存状态不可出库: " + any.getStatus());
             }
-            if (InventoryItem.STATUS_SCRAPPED.equals(any.getStatus())) {
-                return ScanResult.fail("EPC 已报废: " + epc);
-            }
-            return ScanResult.fail("EPC 库存状态不可出库: " + any.getStatus());
         }
 
-        // 2) 验证 SKU 在出库单明细里
-        List<OutboundOrderItem> lines = orderDao.findItemsByOrderId(orderId);
-        OutboundOrderItem target = lines.stream()
-                .filter(x -> x.getProductId().equals(inv.getProductId()))
-                .findFirst().orElse(null);
-        if (target == null) {
-            return ScanResult.fail("EPC 属于 SKU " + inv.getSku() + ",不在本出库单中");
+        // 校验通过,记录扫码日志(不扣库存,等 commit)
+        int scannedCount = logDao.countScannedForOutboundEpc(orderId, epc);
+        if (scannedCount > 0) {
+            return ScanResult.fail("EPC 已扫过(本单): " + epc);
         }
-
-        // 3) 验证 SKU 总数还没扫完(target.quantity = 已扫 + 待扫)
-        //    累加方式:每扫一个就 target.quantity + 1
-        int before = target.getQuantity();
-        orderDao.updateItemQuantity(target.getId(), before + 1);
-        // 4) 扣 1 件 inventory_item + 写 OUT 流水
-        String loc = blank(inv.getLocationCode()) == null ? "默认库位" : inv.getLocationCode();
-        int productBefore = productDao.findById(inv.getProductId()).map(Product::getQuantity).orElse(0);
-        itemDao.consumeForOutboundByEpc(epc, orderId);
-        productDao.adjustQuantity(inv.getProductId(), -1);
-        int productAfter = productBefore - 1;
-        // 5) 写 OUT 流水(按 -1 记)
+        // 写一条"扫码确认"日志(quantity=0,只是标记)
         InventoryLog log = new InventoryLog();
-        log.setType(InventoryLog.TYPE_OUT);
+        log.setType(InventoryLog.TYPE_SCAN);
         log.setProductId(inv.getProductId());
         log.setSku(inv.getSku());
         log.setProductName(inv.getProductName());
-        log.setQuantity(1);
-        log.setBeforeQty(productBefore);
-        log.setAfterQty(productAfter);
-        log.setRemark("UHF 扫码出库, epc=" + epc);
+        log.setQuantity(0);
+        log.setBeforeQty(0);
+        log.setAfterQty(0);
+        log.setRemark("UHF 扫码确认, epc=" + epc);
         log.setOperator(operator);
         log.setOrderId(orderId);
         logDao.insert(log);
 
-        // 6) 刷主单聚合
-        orderDao.refreshAggregates(orderId);
-
-        return ScanResult.ok(target.getId(), inv.getSku(),
-                inv.getCode().length() >= 8 ? inv.getCode().substring(inv.getCode().length() - 8) : inv.getCode(),
-                before + 1, orderId);
+        // 已扫/还差统计
+        int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId(), inv.getLocationCode());
+        int already = logDao.countScannedForOutbound(orderId, inv.getProductId());
+        return ScanResult.ok(inv.getId(), inv.getSku(), epc, already, orderId)
+                .withReservedCount(totalReserved)
+                .withStillNeeded(Math.max(0, totalReserved - already));
     }
 
     private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new IllegalArgumentException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}

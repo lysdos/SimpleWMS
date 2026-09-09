@@ -106,13 +106,28 @@ public class InventoryItemDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    /** EPC + 状态同时匹配(给 RFID 出库用,只挑 IN_STOCK) */
+    /** EPC + 状态同时匹配(给 RFID 出库用,挑 RESERVED 已锁定的) */
     public InventoryItem findByEpcAndStatus(String epc, String status) {
         if (epc == null || epc.isBlank()) return null;
         String e = epc.trim().toUpperCase();
         List<InventoryItem> list = jdbc.query(
                 "SELECT * FROM inventory_item WHERE RIGHT(code, ?) = ? AND status = ? ORDER BY id ASC LIMIT 1",
                 ROW, e.length(), e, status);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * UHF 扫码用:按 EPC 找"属于该出库单已锁定(RESERVED)的 unit"
+     * @return 命中且属于该单 → unit;否则 null
+     */
+    public InventoryItem findReservedByEpcForOrder(String epc, int outboundOrderId) {
+        if (epc == null || epc.isBlank()) return null;
+        String e = epc.trim().toUpperCase();
+        List<InventoryItem> list = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE RIGHT(code, ?) = ? AND status = 'RESERVED' AND outbound_order_id = ? " +
+                "ORDER BY id ASC LIMIT 1",
+                ROW, e.length(), e, outboundOrderId);
         return list.isEmpty() ? null : list.get(0);
     }
 
@@ -128,16 +143,15 @@ public class InventoryItemDao {
     }
 
     /**
-     * 拉取出库单期望扫码的 inventory_item 清单(状态 IN_STOCK,SKU 属于出库单明细)。
+     * 拉取出库单**已锁定**的 inventory_item 清单(状态 RESERVED 且 outbound_order_id=本单)。
+     * 这是 UHF 扫码端应该扫的清单,不是全 SKU 的 IN_STOCK 池。
      * 同时统计"已扫过"和"还差多少" — 简单起见用 inventory_log.type='OUT' AND order_id 计数。
      */
     public List<com.wms.model.ExpectedEpc> findExpectedEpcsForOutbound(int outboundOrderId) {
-        // inventory_item 状态仍是 IN_STOCK 且属于该出库单 SKU 的所有 unit
         List<com.wms.model.ExpectedEpc> result = new java.util.ArrayList<>();
         List<InventoryItem> units = jdbc.query(
                 "SELECT * FROM inventory_item " +
-                "WHERE status = 'IN_STOCK' " +
-                "AND product_id IN (SELECT product_id FROM outbound_order_item WHERE order_id = ?) " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ? " +
                 "ORDER BY id ASC",
                 ROW, outboundOrderId);
         for (InventoryItem u : units) {
@@ -315,6 +329,138 @@ public class InventoryItemDao {
         public final int inventoryItemId;
         public final int quantity;
         public ConsumeRecord(int id, int qty) { this.inventoryItemId = id; this.quantity = qty; }
+    }
+
+    // ====== DRAFT 出库单 EPC 锁定(方案 A:建单立刻锁) ======
+
+    /**
+     * 为 DRAFT 出库单按 FIFO 锁定 N 个 inventory_item(整件一物一码)。
+     * 锁定后状态 = RESERVED,outbound_order_id 写上。
+     * 优先 remaining=1 的标准单元,不足时退到 remaining>1 的老数据(整批锁)。
+     * @return 锁定的(行数,总件数)
+     */
+    public ReserveResult reserveForOutbound(int productId, String locationCode, int needQty, int outboundOrderId) {
+        ReserveResult result = new ReserveResult();
+        if (needQty <= 0) return result;
+
+        // 1) remaining=1 标准单元
+        List<InventoryItem> units = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining = 1 " +
+                "ORDER BY id ASC",
+                ROW, productId, locationCode);
+        int left = needQty;
+        for (InventoryItem it : units) {
+            if (left <= 0) break;
+            int n = jdbc.update(
+                    "UPDATE inventory_item SET status = ?, " +
+                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    InventoryItem.STATUS_RESERVED, outboundOrderId, it.getId());
+            if (n > 0) { result.rows++; result.units += 1; left--; }
+        }
+        if (left <= 0) return result;
+
+        // 2) remaining>1 老数据(整批锁,remaining 不动,等 commit 时再扣)
+        List<InventoryItem> legacy = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining > 1 " +
+                "ORDER BY id ASC",
+                ROW, productId, locationCode);
+        for (InventoryItem it : legacy) {
+            if (left <= 0) break;
+            int take = Math.min(left, it.getRemaining());
+            int n = jdbc.update(
+                    "UPDATE inventory_item SET status = ?, " +
+                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    InventoryItem.STATUS_RESERVED, outboundOrderId, it.getId());
+            if (n > 0) {
+                result.rows++;
+                result.units += take;  // 老数据:一件 unit 可能贡献多个数量
+                left -= take;
+            }
+        }
+        if (left > 0) {
+            // 库存不足,需要回滚已锁定的(调用方需在事务里感知异常)
+            throw new IllegalStateException("库存不足:需要 " + needQty + " 件,只能锁 " + (needQty - left) + " 件");
+        }
+        return result;
+    }
+
+    /**
+     * 取消 DRAFT 出库单:把所有 RESERVED 状态、属于该单的 inventory_item 退回 IN_STOCK。
+     */
+    public int releaseReservations(int outboundOrderId) {
+        // 整件单元:RESERVED → IN_STOCK,清 outbound_order_id
+        // 老数据(remaining>1)单元:RESERVED → IN_STOCK,清 outbound_order_id
+        return jdbc.update(
+                "UPDATE inventory_item " +
+                "SET status = 'IN_STOCK', outbound_order_id = NULL, " +
+                "    updated_at = CURRENT_TIMESTAMP " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ?",
+                outboundOrderId);
+    }
+
+    /**
+     * 提交 DRAFT 出库单:把 RESERVED 单元正式设为 OUT,remaining 减 1(老数据整批扣减)。
+     * 库存(product.quantity)由 Service 层用 adjustQuantity 减。
+     */
+    public List<ConsumeRecord> commitReservations(int outboundOrderId) {
+        // 1) 整件一物一码:RESERVED → OUT, remaining=0
+        List<ConsumeRecord> out = new ArrayList<>();
+        List<InventoryItem> units = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ? AND remaining = 1 " +
+                "ORDER BY id ASC",
+                ROW, outboundOrderId);
+        for (InventoryItem u : units) {
+            jdbc.update(
+                    "UPDATE inventory_item SET status = ?, remaining = 0, " +
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    InventoryItem.STATUS_OUT, u.getId());
+            out.add(new ConsumeRecord(u.getId(), 1));
+        }
+        // 2) 老数据(remaining>1):按 create 时的 take 数已占,这里整批扣 → OUT
+        List<InventoryItem> legacy = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ? AND remaining > 1 " +
+                "ORDER BY id ASC",
+                ROW, outboundOrderId);
+        for (InventoryItem u : legacy) {
+            int take = u.getRemaining();  // 整批都归本单
+            jdbc.update(
+                    "UPDATE inventory_item SET status = ?, remaining = 0, " +
+                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    InventoryItem.STATUS_OUT, u.getId());
+            out.add(new ConsumeRecord(u.getId(), take));
+        }
+        return out;
+    }
+
+    /** 锁定结果 */
+    public static class ReserveResult {
+        public int rows = 0;   // 锁定的 unit 行数
+        public int units = 0;  // 锁定的总件数(老数据一件可能算多个)
+    }
+
+    /**
+     * 统计"出库单已锁定的、按 product_id+location 划分的件数"。
+     * 给老 DRAFT 单 reserveDraft 补全时,计算"还差几件"用。
+     * 老数据(remaining>1)按整批贡献 1 个 unit,return 时按 remaining 算件数。
+     */
+    public Integer countReservedForOrder(int outboundOrderId, int productId, String location) {
+        // 整件单元:每行 1 件
+        Integer a = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_item " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ? " +
+                "  AND product_id = ? AND location_code = ? AND remaining = 1",
+                Integer.class, outboundOrderId, productId, location);
+        // 老数据:每行算 remaining 件
+        Integer b = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(remaining), 0) FROM inventory_item " +
+                "WHERE status = 'RESERVED' AND outbound_order_id = ? " +
+                "  AND product_id = ? AND location_code = ? AND remaining > 1",
+                Integer.class, outboundOrderId, productId, location);
+        return (a == null ? 0 : a) + (b == null ? 0 : b);
     }
 
     /** 报废 */
