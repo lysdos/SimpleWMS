@@ -140,10 +140,15 @@ CREATE TABLE IF NOT EXISTS outbound_order (
     total_quantity  INT          NOT NULL DEFAULT 0,
     item_count      INT          NOT NULL DEFAULT 0,
     status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
+    uhf_dispatched_at  TIMESTAMP  NULL DEFAULT NULL,
+    uhf_dispatched_by  VARCHAR(64) NULL DEFAULT NULL,
+    uhf_device_code    VARCHAR(64) NULL DEFAULT NULL,
+    uhf_claimed_at     TIMESTAMP  NULL DEFAULT NULL,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_outbound_order_no (order_no),
     KEY idx_outbound_order_created (created_at),
-    KEY idx_outbound_order_status  (status)
+    KEY idx_outbound_order_status  (status),
+    KEY idx_outbound_order_uhf_dispatched (uhf_dispatched_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS outbound_order_item (

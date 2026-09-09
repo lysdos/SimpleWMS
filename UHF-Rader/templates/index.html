@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UHF RFID 出库扫码终端</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 1280px; margin: 0 auto; }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
+        .header h1 { font-size: 20px; color: #f1f5f9; }
+        .header .badge {
+            padding: 4px 10px; border-radius: 4px; font-size: 12px;
+            background: #334155; color: #cbd5e1;
+        }
+        .header .badge.online { background: #16a34a; color: white; }
+        .header .badge.offline { background: #dc2626; color: white; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+        .card {
+            background: #1e293b;
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .card h2 { font-size: 15px; color: #f1f5f9; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .card h2 .dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; }
+        .field { display: flex; gap: 8px; margin-bottom: 10px; }
+        .field input, .field select {
+            flex: 1;
+            padding: 8px 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            color: #e2e8f0;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .field input:focus, .field select:focus { outline: none; border-color: #3b82f6; }
+        .btn {
+            padding: 8px 14px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .btn:disabled { background: #475569; cursor: not-allowed; }
+        .btn.success { background: #16a34a; }
+        .btn.danger  { background: #dc2626; }
+        .btn.warn    { background: #f59e0b; }
+        .btn + .btn { margin-left: 8px; }
+
+        .orders { max-height: 280px; overflow-y: auto; }
+        .order-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 10px; border-radius: 6px; cursor: pointer;
+            font-size: 12px;
+        }
+        .order-row:hover { background: #334155; }
+        .order-row.selected { background: #1d4ed8; color: white; }
+        .order-row .no { color: #60a5fa; font-weight: 600; }
+        .order-row.selected .no { color: #fef3c7; }
+        .order-row .qty { color: #94a3b8; }
+        .order-row.selected .qty { color: #cbd5e1; }
+
+        #scanList { max-height: 460px; overflow-y: auto; }
+        .scan-row {
+            display: grid;
+            grid-template-columns: 100px 1fr auto;
+            gap: 8px;
+            align-items: center;
+            padding: 8px 10px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            font-size: 12px;
+            background: #0f172a;
+        }
+        .scan-row.matched   { border-left: 3px solid #16a34a; }
+        .scan-row.unmatched { border-left: 3px solid #dc2626; background: #1f1014; }
+        .scan-row .epc { color: #60a5fa; font-family: monospace; }
+        .scan-row .sku { color: #f1f5f9; font-size: 12px; }
+        .scan-row .reason { color: #fca5a5; font-size: 11px; }
+        .scan-row .time { color: #94a3b8; font-size: 11px; }
+        .scan-row .matched-tag { background: #16a34a; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+        .scan-row .unmatched-tag { background: #dc2626; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+
+        .empty { color: #64748b; text-align: center; padding: 20px; font-size: 12px; }
+        .info-line { color: #94a3b8; font-size: 11px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>📡 UHF RFID 出库扫码终端</h1>
+        <span id="readerBadge" class="badge offline">读卡器未连</span>
+        <span id="wmsBadge"   class="badge offline">WMS 未登录</span>
+        <span style="flex:1;"></span>
+        <span class="badge" id="readerInfo">--</span>
+    </div>
+
+    <div class="grid">
+        <!-- 左:出库单选择 -->
+        <div class="card">
+            <h2><span class="dot"></span> 选择 DRAFT 出库单</h2>
+            <div class="field">
+                <input id="kw" placeholder="搜索单号 / 客户..." />
+                <button class="btn" onclick="loadOrders()">刷新</button>
+            </div>
+            <div id="orders" class="orders">
+                <div class="empty">加载中...</div>
+            </div>
+            <div class="info-line" id="selectedInfo">当前未选单</div>
+        </div>
+
+        <!-- 右:扫码实时事件 -->
+        <div class="card">
+            <h2><span class="dot"></span> 扫码实时事件 (EPC 24 hex = 12 字节 UHF Gen2)</h2>
+            <div class="field">
+                <button id="btnStart" class="btn success" onclick="startRead()">▶ 开始扫码</button>
+                <button id="btnStop"  class="btn danger"  onclick="stopRead()" disabled>⏹ 停止</button>
+                <button id="btnClear" class="btn warn"    onclick="clearScanned()">🗑 清空</button>
+                <span style="flex:1;"></span>
+                <span class="info-line" id="statInfo">已扫 0</span>
+            </div>
+            <div class="field" style="margin-top:6px;">
+                <input id="manualEpc" maxlength="24" placeholder="手动输入/粘贴 24 位 EPC(回车扫码)"
+                       style="font-family:monospace;letter-spacing:1px;"
+                       onkeydown="if(event.key==='Enter'){manualScan();event.preventDefault();}" />
+                <button class="btn" onclick="manualScan()">手动扫码</button>
+            </div>
+            <div id="scanList">
+                <div class="empty">选择出库单后开始扫码</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 不用 SocketIO,改用 JS 轮询 -->
+<script>
+let selectedOrderId = null;
+let selectedOrderNo = null;
+let scanResults = [];   // [{epc, sku, matched, reason, ts}]
+let _dispatchAutoSelectArmed = false;  // 只在第一次连上时尝试自动认领一次
+
+// 启动时拉一次读卡器状态 + 拉 WMS 出库单 + 拉 WMS 登录状态
+async function init() {
+    await refreshBadges();
+    await loadOrders();
+    await pollScanResults();
+    setInterval(refreshBadges, 3000);     // 3s 刷新徽标
+    setInterval(pollScanResults, 1500);   // 1.5s 刷新扫码状态
+}
+init();
+
+async function refreshBadges() {
+    try {
+        const r = await fetch('/api/wms/reader-info').then(r => r.json());
+        const d = r.data || {};
+        const rb = document.getElementById('readerBadge');
+        rb.textContent = d.connected ? '读卡器已连' : '读卡器未连';
+        rb.className = 'badge ' + (d.connected ? 'online' : 'offline');
+        document.getElementById('readerInfo').textContent = d.host + ':' + d.port;
+
+        const ws = await fetch('/api/wms/state').then(r => r.json());
+        const wb = document.getElementById('wmsBadge');
+        wb.textContent = ws.data && ws.data.loggedIn ? 'WMS 已登录' : 'WMS 未登录';
+        wb.className = 'badge ' + (ws.data && ws.data.loggedIn ? 'online' : 'offline');
+    } catch (e) { /* ignore */ }
+}
+
+async function loadOrders() {
+    const kw = document.getElementById('kw').value || '';
+    const r = await fetch('/api/wms/draft-orders?keyword=' + encodeURIComponent(kw)).then(r => r.json());
+    const orders = (r.data || []);
+    const box = document.getElementById('orders');
+    if (!orders.length) { box.innerHTML = '<div class="empty">没有 DRAFT 出库单</div>'; return; }
+    box.innerHTML = orders.map(o => `
+        <div class="order-row ${o.id === selectedOrderId ? 'selected' : ''}" data-id="${o.id}" data-no="${o.orderNo}" onclick="selectOrder(${o.id}, '${o.orderNo}')">
+            <div>
+                <span class="no">${o.orderNo}</span>
+                <span style="margin-left:8px;">${o.customer || '-'}</span>
+            </div>
+            <div class="qty">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</div>
+        </div>
+    `).join('');
+}
+
+async function selectOrder(id, no) {
+    selectedOrderId = id;
+    selectedOrderNo = no;
+    scanResults = [];
+    document.getElementById('selectedInfo').innerHTML = '已选: <b>' + no + '</b>';
+    document.getElementById('scanList').innerHTML = '<div class="empty">点击「开始扫码」读取 RFID 标签</div>';
+    document.querySelectorAll('.order-row').forEach(r => {
+        r.classList.toggle('selected', parseInt(r.dataset.id) === id);
+    });
+    await fetch('/api/wms/select-order', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({orderId: id})
+    });
+    await pollScanResults();
+}
+
+// 注:旧的 refreshState 已合并进 pollScanResults,前端只保留一个轮询入口。
+
+function renderScan() {
+    const list = [...scanResults].reverse();  // 最新在最上面
+    const box = document.getElementById('scanList');
+    if (!list.length) { box.innerHTML = '<div class="empty">暂无扫码记录</div>'; return; }
+    box.innerHTML = list.map(s => `
+        <div class="scan-row ${s.matched ? 'matched' : 'unmatched'}">
+            <div>
+                <div class="epc">${s._epc || s.epc || '?'}</div>
+                <div class="time">${s._ts || ''}</div>
+            </div>
+            <div>
+                ${s.matched
+                    ? '<div class="sku">' + (s.sku || '-') + ' <span class="matched-tag">✓ 匹配</span></div><div class="info-line">累计 ' + (s.scannedQty || 0) + ' 件</div>'
+                    : '<div class="sku">— <span class="unmatched-tag">✗ 报警</span></div><div class="reason">' + (s.reason || '?') + '</div>'}
+            </div>
+            <div></div>
+        </div>
+    `).join('');
+}
+
+// 接收扫码实时事件 — 通过 /api/wms/state 轮询拉取(每 1.5s)
+function pollScanResults() {
+    return fetch('/api/wms/state').then(r => r.json()).then(r => {
+        const d = (r.data || {});
+        const newScanned = d.scanned || [];
+        // 只在数量或最后一条变化时刷新
+        if (newScanned.length !== scanResults.length ||
+            (newScanned.length && newScanned[newScanned.length-1]._epc !== (scanResults[scanResults.length-1]||{})._epc)) {
+            // 检测新条目,播提示音
+            const oldEpcs = new Set(scanResults.map(s => s._epc));
+            for (const s of newScanned) {
+                if (!oldEpcs.has(s._epc)) {
+                    try { s.matched ? beepSuccess() : beepFail(); } catch (e) {}
+                }
+            }
+            scanResults = newScanned;
+            renderScan();
+            document.getElementById('statInfo').textContent =
+                '已扫 ' + d.scannedCount + ' (匹配 ' + scanResults.filter(s => s.matched).length +
+                ' / 不匹配 ' + scanResults.filter(s => !s.matched).length + ')';
+        }
+        // 自动认领:首次连上时,如果有派单且没选单 → 自动选第一个
+        if (!selectedOrderId && d.loggedIn && !_dispatchAutoSelectArmed) {
+            _dispatchAutoSelectArmed = true;
+            autoClaimFirstDispatch();
+        }
+    }).catch(() => {});
+}
+
+async function autoClaimFirstDispatch() {
+    // 直接调后端 /api/outbound/dispatches?deviceCode=...
+    // 但 UHF 终端本身没有 token,只能通过 bridge 拿
+    const r = await fetch('/api/wms/draft-orders').then(r => r.json()).catch(() => ({}));
+    const orders = r.data || [];
+    if (orders.length) {
+        const o = orders[0];
+        await selectOrder(o.id, o.orderNo);
+    }
+}
+
+async function startRead() {
+    if (!selectedOrderId) { alert('请先选择 DRAFT 出库单'); return; }
+    const r = await fetch('/command/start_read', {method: 'POST'});
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+    } else {
+        alert('启动失败: ' + d.error);
+    }
+}
+async function stopRead() {
+    const r = await fetch('/command/stop_read', {method: 'POST'});
+    const d = await r.json();
+    if (d.success) {
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+    }
+}
+function clearScanned() {
+    scanResults = [];
+    renderScan();
+    document.getElementById('statInfo').textContent = '已扫 0';
+}
+
+// ===== 声音告警(共享 AudioContext,避免反复创建) =====
+let _audioCtx = null;
+function _ensureCtx() {
+    if (!_audioCtx) {
+        try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { return null; }
+    }
+    // 浏览器策略:用户没交互前 ctx 可能是 suspended,需要 resume
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    return _audioCtx;
+}
+function beep(freq, dur, type) {
+    const ctx = _ensureCtx();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.value = 0.18;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start();
+    setTimeout(() => { try { osc.stop(); } catch (e) {} }, dur);
+}
+function beepSuccess() {
+    // 扫对:短促 800Hz 100ms "叮"
+    beep(800, 100, 'sine');
+}
+function beepFail() {
+    // 扫错:1200Hz 高音 3 短 + 1 长(模仿报警蜂鸣)
+    beep(1200, 150, 'square');
+    setTimeout(() => beep(1200, 150, 'square'), 200);
+    setTimeout(() => beep(1200, 150, 'square'), 400);
+    setTimeout(() => beep(1200, 400, 'square'), 600);
+}
+
+// ===== 手动扫码(无读卡器时也能演示) =====
+async function manualScan() {
+    if (!selectedOrderId) { alert('请先选择 DRAFT 出库单'); return; }
+    const input = document.getElementById('manualEpc');
+    const epc = (input.value || '').trim().toUpperCase();
+    if (!epc) { alert('请输入 24 位 EPC'); return; }
+    if (epc.length !== 24) { beepFail(); alert('EPC 长度必须 24 位,当前 ' + epc.length); return; }
+    // 通过后端直接 scan-epc(走和读卡器一样的路径,确保状态一致)
+    const r = await fetch('/api/wms/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ epc: epc })
+    }).then(r => r.json());
+    if (r.code === 0 && r.data) {
+        const sr = Object.assign({}, r.data, { _epc: epc, _ts: new Date().toLocaleTimeString() });
+        scanResults.push(sr);
+        if (scanResults.length > 100) scanResults.shift();
+        renderScan();
+        if (sr.matched) {
+            beepSuccess();
+            input.value = '';
+        } else {
+            beepFail();
+        }
+    } else {
+        beepFail();
+        alert('后端错误: ' + (r.message || 'unknown'));
+    }
+}
+</script>
+</body>
+</html>

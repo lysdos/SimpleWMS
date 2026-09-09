@@ -119,6 +119,37 @@ services:
     networks:
       - simplewms-net
 
+  # ---------- 4. UHF RFID 读卡器适配器 ----------
+  #   - 复用 UHF-Rader/ 目录下的 Flask + TCP 客户端
+  #   - 内置 wms_bridge.py:从 WMS 后端拉出库单期望清单 + 推扫码结果
+  #   - Web UI:http://127.0.0.1:5001  (避免和 WMS frontend:9080 冲突,绑本机)
+  uhf-rader:
+    build:
+      context: ./UHF-Rader
+      dockerfile: Dockerfile
+    image: simplewms-uhf-rader:1.0.0
+    container_name: simplewms-uhf-rader
+    restart: on-failure:5
+    depends_on:
+      - backend
+    environment:
+      TZ: Asia/Shanghai
+      # WMS 后端地址(容器网络服务名)
+      WMS_BASE_URL: http://backend:8080
+      # 登录 WMS 的账号(必须与 .env 里的 ADMIN_USERNAME/ADMIN_PASSWORD 一致)
+      WMS_USERNAME: ${WMS_USERNAME:-admin}
+      WMS_PASSWORD: ${WMS_PASSWORD:-admin123}
+      # 读卡器 TCP(根据现场实际改)
+      READER_HOST: ${UHF_READER_HOST:-192.168.1.209}
+      READER_PORT: ${UHF_READER_PORT:-5000}
+      # 设备号(UHF-Rader 通过此标识 WMS 系统中的设备)
+      DEFAULT_DEVICE_CODE: ${UHF_DEVICE_CODE:-MOCK-UHF-001}
+    ports:
+      # Web UI 本机访问
+      - "127.0.0.1:5001:5000"
+    networks:
+      - simplewms-net
+
 # ---------- 卷 & 网络 ----------
 volumes:
   mysql-data:

@@ -22,6 +22,11 @@ public class OutboundOrder {
     private LocalDateTime createdAt;
     private String status;
     private List<OutboundOrderItem> items;
+    // ===== UHF 派单字段 =====
+    private LocalDateTime uhfDispatchedAt;
+    private String uhfDispatchedBy;
+    private String uhfDeviceCode;
+    private LocalDateTime uhfClaimedAt;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -45,6 +50,15 @@ public class OutboundOrder {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public List<OutboundOrderItem> getItems() { return items; }
     public void setItems(List<OutboundOrderItem> items) { this.items = items; }
+
+    public LocalDateTime getUhfDispatchedAt() { return uhfDispatchedAt; }
+    public void setUhfDispatchedAt(LocalDateTime uhfDispatchedAt) { this.uhfDispatchedAt = uhfDispatchedAt; }
+    public String getUhfDispatchedBy() { return uhfDispatchedBy; }
+    public void setUhfDispatchedBy(String uhfDispatchedBy) { this.uhfDispatchedBy = uhfDispatchedBy; }
+    public String getUhfDeviceCode() { return uhfDeviceCode; }
+    public void setUhfDeviceCode(String uhfDeviceCode) { this.uhfDeviceCode = uhfDeviceCode; }
+    public LocalDateTime getUhfClaimedAt() { return uhfClaimedAt; }
+    public void setUhfClaimedAt(LocalDateTime uhfClaimedAt) { this.uhfClaimedAt = uhfClaimedAt; }
 
     /** 整单估算金额(出库价值,按当时单价) */
     public BigDecimal estimateTotalAmount() {

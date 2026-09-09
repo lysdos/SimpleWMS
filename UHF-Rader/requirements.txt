@@ -1,0 +1,9 @@
+Flask==2.3.0
+Werkzeug==2.3.7
+Flask-SocketIO==5.3.6
+python-socketio==5.11.0
+python-engineio==4.8.0
+paho-mqtt==1.6.1
+# 注意:故意不带 eventlet/gevent。Flask-SocketIO 检测不到时自动用 threading 模式,
+# 不会出现 eventlet monkey-patch + 多线程死锁的问题。代价是 SocketIO 走 long-polling,
+# 演示场景够用。

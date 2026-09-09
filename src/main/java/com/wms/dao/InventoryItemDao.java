@@ -93,6 +93,61 @@ public class InventoryItemDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /**
+     * EPC 长度由调用方传入(标准 24 hex = 12 字节 UHF Gen2,与 inventory_item.code 等长)。
+     * 在 inventory_item.code 末 N 位里查找,命中后返回该 unit(任意状态)。
+     */
+    public InventoryItem findByEpc(String epc) {
+        if (epc == null || epc.isBlank()) return null;
+        String e = epc.trim().toUpperCase();
+        List<InventoryItem> list = jdbc.query(
+                "SELECT * FROM inventory_item WHERE RIGHT(code, ?) = ? ORDER BY id ASC LIMIT 1",
+                ROW, e.length(), e);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /** EPC + 状态同时匹配(给 RFID 出库用,只挑 IN_STOCK) */
+    public InventoryItem findByEpcAndStatus(String epc, String status) {
+        if (epc == null || epc.isBlank()) return null;
+        String e = epc.trim().toUpperCase();
+        List<InventoryItem> list = jdbc.query(
+                "SELECT * FROM inventory_item WHERE RIGHT(code, ?) = ? AND status = ? ORDER BY id ASC LIMIT 1",
+                ROW, e.length(), e, status);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /** 按 EPC 把 unit 标记为 OUT(剩余置 0),扣 1 件 */
+    public int consumeForOutboundByEpc(String epc, int outboundOrderId) {
+        if (epc == null || epc.isBlank()) return 0;
+        String e = epc.trim().toUpperCase();
+        return jdbc.update(
+                "UPDATE inventory_item SET status = 'OUT', remaining = 0, " +
+                "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE RIGHT(code, ?) = ? AND status = 'IN_STOCK'",
+                outboundOrderId, e.length(), e);
+    }
+
+    /**
+     * 拉取出库单期望扫码的 inventory_item 清单(状态 IN_STOCK,SKU 属于出库单明细)。
+     * 同时统计"已扫过"和"还差多少" — 简单起见用 inventory_log.type='OUT' AND order_id 计数。
+     */
+    public List<com.wms.model.ExpectedEpc> findExpectedEpcsForOutbound(int outboundOrderId) {
+        // inventory_item 状态仍是 IN_STOCK 且属于该出库单 SKU 的所有 unit
+        List<com.wms.model.ExpectedEpc> result = new java.util.ArrayList<>();
+        List<InventoryItem> units = jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE status = 'IN_STOCK' " +
+                "AND product_id IN (SELECT product_id FROM outbound_order_item WHERE order_id = ?) " +
+                "ORDER BY id ASC",
+                ROW, outboundOrderId);
+        for (InventoryItem u : units) {
+            result.add(new com.wms.model.ExpectedEpc(
+                    u.getProductId(), u.getSku(), u.getProductName(),
+                    u.getCode(), 0, 1));
+        }
+        return result;
+    }
+
     /** 列出某入库单产生的所有库存单元 */
     public List<InventoryItem> findByInboundOrder(int orderId) {
         return jdbc.query(

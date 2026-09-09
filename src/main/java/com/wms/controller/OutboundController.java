@@ -1,9 +1,11 @@
 package com.wms.controller;
 
 import com.wms.model.ApiResponse;
+import com.wms.model.ExpectedEpc;
 import com.wms.model.InventoryLog;
 import com.wms.model.OutboundOrder;
 import com.wms.model.OutboundOrderItem;
+import com.wms.model.ScanResult;
 import com.wms.service.OutboundService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -121,6 +123,35 @@ public class OutboundController {
         return ApiResponse.ok(outboundService.scanCodeToDraft(id, code));
     }
 
+    // ====== UHF RFID 出库扫码集成 ======
+    /**
+     * 拉取出库单期望扫码清单。
+     * UHF-Rader 调此接口,获取"应该扫哪些 EPC"。前端用此弹窗列出。
+     */
+    @GetMapping("/orders/{id}/expect")
+    public ApiResponse<List<ExpectedEpc>> loadExpected(
+            @PathVariable int id) {
+        return ApiResponse.ok(outboundService.loadExpectedEpcs(id));
+    }
+
+    /**
+     * UHF-Rader 扫到 EPC 后调用此接口,后端:
+     *  1) 校验 EPC 存在且 IN_STOCK
+     *  2) 校验 EPC 所属 SKU 在出库单明细里(不在 → 不报警 success=false)
+     *  3) 调 consumeForOutboundByEpc 扣 1 件 + 写 OUT 流水
+     * body: { "epc": "FE019178", "operator": "admin" 可选 }
+     */
+    @PostMapping("/orders/{id}/scan-epc")
+    public ApiResponse<ScanResult> scanEpc(
+            @PathVariable int id,
+            @RequestBody Map<String, Object> body,
+            HttpServletRequest req) {
+        String epc = asString(body.get("epc"));
+        String operator = asString(body.get("operator"));
+        if (operator == null || operator.isBlank()) operator = currentOperator(req);
+        return ApiResponse.ok(outboundService.scanEpc(id, epc, operator));
+    }
+
     /** 提交草稿单(DRAFT → COMMITTED) */
     @PostMapping("/orders/{id}/commit")
     public ApiResponse<OutboundOrder> commit(@PathVariable int id) {
@@ -132,6 +163,44 @@ public class OutboundController {
     public ApiResponse<Void> cancel(@PathVariable int id) {
         outboundService.cancelDraft(id);
         return ApiResponse.ok(null);
+    }
+
+    // ====== UHF RFID 出库单派单 ======
+
+    /**
+     * 前台 WMS 下发出库单到指定 UHF 设备。
+     * body: { "deviceCode": "MOCK-UHF-001" }
+     * 只有 DRAFT 状态、未被下发过的出库单可下发。
+     */
+    @PostMapping("/orders/{id}/dispatch")
+    public ApiResponse<OutboundOrder> dispatch(@PathVariable int id, @RequestBody Map<String, Object> body) {
+        String deviceCode = asString(body.get("deviceCode"));
+        return ApiResponse.ok(outboundService.dispatchToUhf(id, deviceCode, "admin"));
+    }
+
+    /**
+     * UHF 设备拉取"待认领的派单"列表。
+     * query: ?deviceCode=XXX&limit=20
+     *  - deviceCode 不传 = 拉全部未认领的派单(任意设备可认领)
+     *  - deviceCode 传具体值 = 只拉发给该设备的单
+     */
+    @GetMapping("/dispatches")
+    public ApiResponse<List<OutboundOrder>> listDispatches(
+            @RequestParam(required = false) String deviceCode,
+            @RequestParam(defaultValue = "50") int limit) {
+        int lim = (limit <= 0 || limit > 200) ? 50 : limit;
+        return ApiResponse.ok(outboundService.listDispatched(deviceCode, lim));
+    }
+
+    /**
+     * UHF 设备认领一个派单(锁定该单到本设备)。
+     * query: ?deviceCode=XXX
+     */
+    @PostMapping("/dispatches/{id}/claim")
+    public ApiResponse<OutboundOrder> claimDispatch(
+            @PathVariable int id,
+            @RequestParam String deviceCode) {
+        return ApiResponse.ok(outboundService.claimDispatch(id, deviceCode));
     }
 
     /** 出库单导出 CSV(明细) */

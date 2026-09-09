@@ -488,6 +488,7 @@ const Views = {
                 <div>${t('outbound_order.print_time')}:<span id="order-print-time"></span></div>
             </div>
         </div>
+        ${this._uhfPanelHtml(o)}
         <div class="form-row" style="margin-top:16px;justify-content:flex-end;">
             <button class="btn btn-sm" onclick="printOutboundOrder()">🖨 ${t('common.print')}</button>
             <a class="btn btn-sm" href="/api/outbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
@@ -495,6 +496,48 @@ const Views = {
                 <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.commit')}</button>
                 <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.cancel')}</button>
             ` : ''}
+        </div>`;
+    },
+
+    /**
+     * UHF 派单 + 扫码面板(只在 DRAFT 单时显示)。
+     * 演示口径:EPC = inventory_item.code(24 字符)。
+     * 生产口径:UHF 读卡器 12 字节 EPC,需要在入库时与 code 关联后存 inventory_item.epc。
+     */
+    _uhfPanelHtml(o) {
+        if (o.status !== 'DRAFT') return '';
+        const dispatched = !!o.uhfDispatchedAt;
+        const claimed    = !!o.uhfClaimedAt;
+        const device     = o.uhfDeviceCode || 'MOCK-UHF-001';
+        let statusBadge = `<span class="badge" style="background:#e5e7eb;color:#374151;">未下发</span>`;
+        if (dispatched && !claimed) statusBadge = `<span class="badge" style="background:#fef3c7;color:#92400e;">已下发 · 等待 UHF 认领</span>`;
+        if (dispatched && claimed)  statusBadge = `<span class="badge" style="background:#d1fae5;color:#065f46;">已下发 · 已认领 · 扫码中</span>`;
+        return `
+        <div class="uhf-panel" style="margin-top:16px;padding:14px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="font-weight:600;">📡 UHF 出库扫码 ${statusBadge}
+                    <span style="color:#6b7280;font-weight:normal;font-size:12px;margin-left:8px;">目标设备: ${escapeHtml(device)}</span>
+                </div>
+                ${!dispatched ? `
+                    <button class="btn btn-sm btn-primary" onclick="dispatchToUhf(${o.id}, '${escapeHtml(device)}')">📤 下发到 UHF</button>
+                ` : ''}
+            </div>
+            ${dispatched ? `
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                    <input id="uhf-scan-input-${o.id}" type="text" maxlength="24"
+                        placeholder="扫描或输入 24 位 EPC / 编码"
+                        style="flex:1;padding:8px 10px;font-family:monospace;font-size:14px;letter-spacing:1px;border:1px solid #d1d5db;border-radius:6px;"
+                        onkeydown="if(event.key==='Enter'){uhfScanCode(${o.id});event.preventDefault();}" />
+                    <button class="btn btn-sm btn-primary" onclick="uhfScanCode(${o.id})">扫码</button>
+                    <button class="btn btn-sm" onclick="clearUhfScanResult(${o.id})">清空</button>
+                </div>
+                <div id="uhf-scan-result-${o.id}" style="margin-top:10px;min-height:24px;"></div>
+                <div style="margin-top:6px;color:#6b7280;font-size:12px;">
+                    ℹ 严格 1:1 匹配:扫到的 24 位编码必须在本出库单的某条 inventory_item.code 里,否则声音告警 + 红色提示。
+                </div>
+            ` : `
+                <div style="color:#6b7280;font-size:13px;">点击右上角"下发到 UHF"后,UHF 终端会拉取此单并进入扫码模式。也可以在前台直接扫码完成出库。</div>
+            `}
         </div>`;
     },
 
