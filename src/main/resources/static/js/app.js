@@ -918,8 +918,9 @@ async function transferInventory(id, code, currentLoc) {
 
 /* ---------- 新增入库/出库单 弹窗 ---------- */
 async function openNewOrderModal(type) {
-    await ensureProducts();
-    await ensureSuppliers();
+    // 强制拉一次最新 product / supplier(避免下拉里"在库"数字滞后)
+    state.products = await api.get('/api/products');
+    state.suppliers = await api.get('/api/suppliers');
     document.getElementById('modal-title').textContent = type === 'IN' ? t('inbound.modal.title.new') : t('outbound.modal.title.new');
     document.getElementById('modal-body').innerHTML = Views.newOrderModal(type, state.products, state.suppliers);
     document.getElementById('modal-mask').hidden = false;
