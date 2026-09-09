@@ -217,11 +217,20 @@ function gotoStockCheckPage(p) {
 
 function openNewStockCheckModal() {
     showModal(t('stock_check.modal.title.new'), Views.newStockCheckForm(), async () => {
-        const scope    = document.getElementById('nsc-scope').value;
-        const keyword  = document.getElementById('nsc-keyword').value.trim();
-        const remark   = document.getElementById('nsc-remark').value.trim();
-        if (scope !== 'ALL' && !keyword) {
-            toast(t('stock_check.err.no_keyword'), 'error');
+        const scope   = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
+        const kwInput = document.getElementById('nsc-keyword');
+        const sel     = document.getElementById('nsc-location-select');
+        let keyword = '';
+        if (scope === 'SKU')      keyword = (kwInput.value || '').trim();
+        else if (scope === 'LOCATION') keyword = sel ? sel.value : '';
+        const remark  = document.getElementById('nsc-remark').value.trim();
+
+        if (scope === 'SKU' && !keyword) {
+            toast(t('stock_check.err.sku_empty'), 'error');
+            return false;
+        }
+        if (scope === 'LOCATION' && !keyword) {
+            toast(t('stock_check.err.loc_empty'), 'error');
             return false;
         }
         try {
@@ -232,6 +241,50 @@ function openNewStockCheckModal() {
             openStockCheckDetail(c.id);
         } catch (e) { toast(e.message, 'error'); return false; }
     });
+
+    // 模式 radio 联动:ALL 隐藏输入,SKU 显示输入框,LOCATION 显示库位下拉
+    const radios   = document.querySelectorAll('input[name="nsc-scope"]');
+    const wrap     = document.getElementById('nsc-keyword-wrap');
+    const lbl      = document.getElementById('nsc-keyword-label');
+    const kwInput  = document.getElementById('nsc-keyword');
+
+    function paintScopeUi() {
+        const cur = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
+        // 卡片高亮
+        document.querySelectorAll('.nsc-scope-opt').forEach(el => {
+            const v = el.querySelector('input').value;
+            el.style.borderColor = (v === cur) ? 'var(--c-primary)' : 'var(--divider)';
+            el.style.background  = (v === cur) ? '#E8F0FF' : 'transparent';
+        });
+        if (cur === 'ALL') {
+            wrap.style.display = 'none';
+            kwInput.value = '';
+        } else if (cur === 'SKU') {
+            wrap.style.display = '';
+            // 文字输入框
+            wrap.innerHTML = `
+                <label id="nsc-keyword-label">${t('stock_check.scope.sku')}</label>
+                <input id="nsc-keyword" class="input" placeholder="${t('stock_check.kw.sku')}">
+            `;
+        } else if (cur === 'LOCATION') {
+            wrap.style.display = '';
+            // 库位下拉
+            api.get('/api/locations').then(locs => {
+                const opts = (locs || []).map(l =>
+                    `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)} · ${escapeHtml(l.name)}</option>`).join('');
+                wrap.innerHTML = `
+                    <label id="nsc-keyword-label">${t('stock_check.scope.location')}</label>
+                    <select id="nsc-location-select" class="select" style="width:100%;">
+                        <option value="">-- ${t('stock_check.kw.location')} --</option>
+                        ${opts}
+                    </select>
+                `;
+            }).catch(e => toast(e.message, 'error'));
+        }
+    }
+    radios.forEach(r => r.addEventListener('change', paintScopeUi));
+    paintScopeUi();
+}
     const sel = document.getElementById('nsc-scope');
     const kw = document.getElementById('nsc-keyword');
     const kwLabel = document.getElementById('nsc-keyword-label');

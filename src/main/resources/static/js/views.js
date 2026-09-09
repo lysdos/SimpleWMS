@@ -1009,26 +1009,30 @@ const Views = {
     },
 
     newStockCheckForm() {
+        // 三种模式:ALL=全部在库 / SKU=按 SKU 模糊 / LOCATION=按库位(下拉选)
         return `
-        <div class="form-row">
-            <div class="form-field" style="flex:1;">
-                <label>${t('stock_check.scope.sku_label')}<span class="req">*</span></label>
-                <select id="nsc-scope" class="select" style="width:100%;">
-                    <option value="ALL">${t('stock_check.scope.all')}</option>
-                    <option value="SKU">${t('stock_check.scope.sku')}</option>
-                    <option value="LOCATION">${t('stock_check.scope.location')}</option>
-                </select>
-            </div>
-            <div class="form-field" style="flex:2;">
-                <label id="nsc-keyword-label">${t('stock_check.scope.keyword')}</label>
-                <input id="nsc-keyword" class="input" placeholder="${t('stock_check.kw_placeholder')}" disabled>
-            </div>
+        <div class="form-row" style="gap:8px;margin-bottom:12px;">
+            <label style="font-size:13px;color:var(--c-text-2);min-width:64px;">${t('stock_check.scope_label')}</label>
+            <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--c-primary);border-radius:8px;cursor:pointer;background:#E8F0FF;">
+                <input type="radio" name="nsc-scope" value="ALL" checked>
+                <span style="font-size:13px;">${t('stock_check.scope.all')}</span>
+            </label>
+            <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="nsc-scope" value="SKU">
+                <span style="font-size:13px;">${t('stock_check.scope.sku')}</span>
+            </label>
+            <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="nsc-scope" value="LOCATION">
+                <span style="font-size:13px;">${t('stock_check.scope.location')}</span>
+            </label>
         </div>
-        <div class="form-row">
-            <div class="form-field" style="flex:1;">
-                <label>${t('stock_check.remark_label')}</label>
-                <input id="nsc-remark" class="input" placeholder="${t('stock_check.remark_placeholder')}">
-            </div>
+        <div class="form-field" id="nsc-keyword-wrap" style="display:none;">
+            <label id="nsc-keyword-label">${t('stock_check.scope.keyword')}</label>
+            <input id="nsc-keyword" class="input" placeholder="">
+        </div>
+        <div class="form-field">
+            <label>${t('stock_check.remark_label')}</label>
+            <input id="nsc-remark" class="input" placeholder="${t('stock_check.remark_placeholder')}">
         </div>
         <div style="font-size:12px;color:var(--c-text-3);margin-top:8px;">
             ${t('stock_check.tip')}
