@@ -24,18 +24,36 @@ import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
+import sys
 import urllib.request
 import urllib.error
 
-# 复用 app.py 的状态
+# 复用 app.py 的配置常量(值型,import 一份无妨)
 try:
-    from app import (
-        READER_HOST, READER_PORT,
-        tag_list, tag_list_lock, is_connected, is_reading
-    )
+    from app import READER_HOST, READER_PORT
 except ImportError:
     print("[WMS-Bridge] FATAL: 必须和 app.py 在同目录运行(共享 tag_list 等内部对象)")
     raise
+
+
+def _live_app():
+    """返回「真正持有运行期状态」的 app 模块。
+
+    ⚠️ 两个坑,都踩过:
+    1) `python app.py` 启动时模块名是 __main__;而本文件里 `import app`
+       会让 Python 把 app.py **再执行一遍**,产生一个独立的 `app` 模块,
+       它有自己的空 tag_list / is_reading=False。扫码泵若读那份,就永远
+       看不到读卡线程写入的标签(表现为:/tags 有数据、后端却收不到
+       scan-epc 请求)。
+    2) is_reading / is_connected 是模块级标量,app.py 用 `global x; x=...`
+       重新绑定,`from app import is_reading` 会固化旧值(永远 False)。
+
+    所以运行期统一从这里取模块,再取属性。
+    """
+    m = sys.modules.get('__main__')
+    if m is not None and hasattr(m, 'tag_list') and hasattr(m, 'is_reading'):
+        return m                      # app.py 作为脚本运行(生产/容器路径)
+    return sys.modules.get('app')      # app.py 被当模块 import
 
 
 def _wms_base():
@@ -237,8 +255,13 @@ def scan_pump_loop():
     last_pushed = set()
     while True:
         try:
-            with tag_list_lock:
-                current = list(tag_list)
+            # 每轮都取一次「有状态的那个模块」(见 _live_app 注释:__main__ vs app)
+            appm = _live_app()
+            if appm is None:
+                time.sleep(0.3)
+                continue
+            with appm.tag_list_lock:
+                current = list(appm.tag_list)
             with state.lock:
                 cur_order_id = state.selected_order_id
             if cur_order_id and current:
@@ -249,7 +272,8 @@ def scan_pump_loop():
                         epc = (item.get("epc") or "").strip().upper()
                         if not epc or epc in last_pushed:
                             continue
-                        if not is_reading:
+                        # 运行期读取(见 _live_app 注释:from-import 的标量会固化旧值)
+                        if not appm.is_reading:
                             continue
                         result = scan_epc(cur_order_id, epc)
                         result["_epc"] = epc
