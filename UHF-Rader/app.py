@@ -145,15 +145,19 @@ def _parse_tag_entries(payload):
     if n < 14:
         return []
     dev_id = payload[0] | (payload[1] << 8)
+    # 双天线:一帧里的两组 EPC 就是「1 号天线」「2 号天线」各自读到的标签。
+    # 现场实测两槽位的 EPC 集合互不相交(槽1 全是 0000000035003… 的标签,
+    # 槽2 全是 E2803821… 的标签),未读到的槽位是全 0(下面过滤掉)。
+    # 不要再从 payload[2] 取"天线号" —— 那是 EPC 的第一个字节。
     if n == 34:
-        entries = [(payload[2:14], payload[2]), (payload[14:26], payload[14])]
+        entries = [(payload[2:14], 1), (payload[14:26], 2)]
     elif n == 35:
-        entries = [(payload[3:15], payload[2]), (payload[16:28], payload[15])]
+        entries = [(payload[3:15], 1), (payload[16:28], 2)]
     else:
-        entries = [(payload[2:14], None)]
+        entries = [(payload[2:14], 1)]
 
     out = []
-    for epc_bin, ant_byte in entries:
+    for epc_bin, ant_slot in entries:
         if len(epc_bin) < 12:
             continue
         epc = epc_bin.hex().upper()
@@ -162,7 +166,7 @@ def _parse_tag_entries(payload):
             continue
         if epc_bin.count(0) > 8:
             continue
-        ant = str((ant_byte & 0x0F)) if ant_byte is not None else '1'
+        ant = str(ant_slot)
         rssi = -(payload[27] & 0x7F) if 27 < n else 0
         count = 1
         if 28 + 1 < n:
@@ -520,6 +524,12 @@ def api_wms_scan():
         return jsonify({'code': -1, 'message': 'orderId 无效'}), 400
     if not oid:
         return jsonify({'code': -1, 'message': '请先选择出库单'}), 400
+    # 该 EPC 本单已命中过:直接回缓存的成功结果,不要再去后端撞"已扫过(本单)"
+    # (循环读卡/手动重扫都不应把已确认的结果"重置")
+    with wms_bridge.state.lock:
+        prev = wms_bridge.state.scanned_cache.get(epc)
+    if prev and prev.get('matched'):
+        return jsonify({'code': 0, 'data': prev, 'cached': True})
     result = wms_bridge.scan_epc(oid, epc)
     # 与读卡器扫码泵(scan_pump_loop)一致:手动结果写入 scanned_cache,
     # 前端 /api/wms/state 轮询才不会把它当成"新数据已清空"覆盖掉。

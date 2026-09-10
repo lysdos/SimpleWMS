@@ -246,7 +246,14 @@ public class OutboundService {
         // 校验通过,记录扫码日志(不扣库存,等 commit)
         int scannedCount = logDao.countScannedForOutboundEpc(orderId, epc);
         if (scannedCount > 0) {
-            return ScanResult.fail("EPC 已扫过(本单): " + epc);
+            // 本单已确认过这个码:不是错误,按"已扫"返回(幂等)。
+            // 读卡器循环读卡 / 终端重启后重扫都会走到这里,不能当成报警,
+            // 否则界面上的 ✓ 与"已扫 N/共 M"会被打回。
+            int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId(), inv.getLocationCode());
+            int already = logDao.countScannedForOutbound(orderId, inv.getProductId());
+            return ScanResult.already(inv.getId(), inv.getSku(), epc, already, orderId)
+                    .withReservedCount(totalReserved)
+                    .withStillNeeded(Math.max(0, totalReserved - already));
         }
         // 写一条"扫码确认"日志(quantity=0,只是标记)
         InventoryLog log = new InventoryLog();

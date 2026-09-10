@@ -704,6 +704,17 @@ let _currentUser = null; // 当前登录的 WMS 用户
 let _dispatchAutoSelectArmed = false; // 首次自动认领只做一次
 let _bootstrapped = false;            // onLoginSuccess 幂等,防重复轮询
 let _sessionPromise = null;
+// 服务端记录的「本单已命中 EPC」全量集合。读卡器是循环读卡的,活动流水
+// (d.scanned,只有最近 30 条)会被未匹配标签刷屏,若用它算 ✓ 会把已确认的
+// 记录挤出去、进度看起来被"重置";所以进度一律以这个全量集合为准。
+let serverMatched = [];
+
+// 已确认命中的 EPC 集合 = 服务端全量 ∪ 本地刚扫到的
+function confirmedEpcs() {
+    const s = new Set(serverMatched.map(x => x._epc || x.epc));
+    for (const r of scanResults) if (r.matched) s.add(r._epc || r.epc);
+    return s;
+}
 
 // 建立本地会话 cookie(CSRF 防护用),登录/轮询前先调用一次。
 // force=true 时丢弃缓存强制重建(服务重启后旧 cookie 会失效)。
@@ -863,7 +874,7 @@ function renderSelectedInfo() {
 }
 
 function setStatText() {
-    const ok = scanResults.filter(s => s.matched).length;
+    const ok = confirmedEpcs().size;   // 本单已命中(以服务端全量集合为准)
     const bad = scanResults.filter(s => !s.matched).length;
     document.getElementById('statInfo').textContent = t('scan.stat', { scanned: scanResults.length, ok: ok, bad: bad });
 }
@@ -903,6 +914,7 @@ async function selectOrder(id, no) {
     selectedOrderId = id;
     selectedOrderNo = no;
     scanResults = [];
+    serverMatched = [];
     renderSelectedInfo();
     document.getElementById('scanList').innerHTML = '<div class="empty">' + t('scanList.selectHint') + '</div>';
     document.querySelectorAll('.order-row').forEach(r => {
@@ -938,7 +950,7 @@ function renderExpectedList() {
     if (!expectedEpcs.length) { panel.style.display = 'none'; return; }
     panel.style.display = '';
     totalEl.textContent = expectedEpcs.length;
-    const scannedSet = new Set(scanResults.filter(s => s.matched).map(s => s._epc || s.epc));
+    const scannedSet = confirmedEpcs();
     scannedEl.textContent = scannedSet.size;
     list.innerHTML = expectedEpcs.map(e => {
         const code = e.code || e.epc;
@@ -958,7 +970,7 @@ function updateCommitButton() {
     const btn = document.getElementById('btnCommit');
     const hint = document.getElementById('commitHint');
     const total = expectedEpcs.length;
-    const scanned = new Set(scanResults.filter(s => s.matched).map(s => s._epc || s.epc)).size;
+    const scanned = confirmedEpcs().size;
     if (total === 0) { bar.style.display = 'none'; return; }
     bar.style.display = '';
     const left = total - scanned;
@@ -999,6 +1011,8 @@ function pollScanResults() {
     return apiFetch('/api/wms/state').then(r => r.json()).then(r => {
         const d = (r.data || {});
         const newScanned = d.scanned || [];
+        // 服务端"本单已命中"全量集合:进度以此为准,不受 30 条流水窗口影响
+        serverMatched = d.matched || [];
         if (newScanned.length !== scanResults.length ||
             (newScanned.length && newScanned[newScanned.length-1]._epc !== (scanResults[scanResults.length-1]||{})._epc)) {
             const oldEpcs = new Set(scanResults.map(s => s._epc));
@@ -1010,6 +1024,9 @@ function pollScanResults() {
             scanResults = newScanned;
             renderScan();
             setStatText();
+        } else {
+            // 流水窗口没变,但命中集合可能已增长 → 仍需刷新期望列表/提交条
+            renderExpectedList();
         }
         if (!selectedOrderId && d.loggedIn && !_dispatchAutoSelectArmed) {
             _dispatchAutoSelectArmed = true;
@@ -1051,6 +1068,7 @@ async function clearScanned() {
     // 先清服务端 scanned_cache,再清本地:避免轮询把刚清掉的记录又带回来
     try { await apiFetch('/api/wms/scan-clear', { method: 'POST' }); } catch (e) {}
     scanResults = [];
+    serverMatched = [];
     renderScan();
     setStatText();
 }
@@ -1136,6 +1154,7 @@ async function doCommit() {
             selectedOrderId = null;
             selectedOrderNo = null;
             scanResults = [];
+            serverMatched = [];
             expectedEpcs = [];
             document.getElementById('expectedPanel').style.display = 'none';
             document.getElementById('commitBar').style.display = 'none';

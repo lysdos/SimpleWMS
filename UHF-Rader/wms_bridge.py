@@ -98,6 +98,10 @@ class BridgeState:
         self.expected_epcs: List[dict] = []
         # 已扫过的 EPC(本地 cache,跨刷新)
         self.scanned_cache: Dict[str, dict] = {}  # epc -> ScanResult
+        # 本单已"命中确认"的 EPC(只增不减,不受活动流水窗口/容量上限影响)
+        # 循环读卡时活动流水会被未匹配标签刷屏,若只靠 scanned_cache 的
+        # 最近 N 条来算 ✓,已匹配的记录会被挤出去,进度看起来就"被重置"了。
+        self.matched_epcs: Dict[str, dict] = {}   # epc -> ScanResult(matched=True)
         # 锁
         self.lock = threading.Lock()
 
@@ -241,11 +245,19 @@ def cache_scan(epc, result, order_id=None):
     with state.lock:
         if order_id is not None and state.selected_order_id != order_id:
             return False
+        prev = state.scanned_cache.get(epc)
+        # 循环读卡:同一个 EPC 会被反复读到。只要**命中过一次**,就不能再被
+        # 后续的"已扫过(本单)/不匹配"覆盖 —— 否则界面上的 ✓ 和"已扫 N/共 M"
+        # 会被打回原形(用户反馈的"第二次扫描又重置")。
+        if prev and prev.get("matched") and not result.get("matched"):
+            return False
         if epc in state.scanned_cache:
             del state.scanned_cache[epc]
         state.scanned_cache[epc] = result
         while len(state.scanned_cache) > MAX_SCANNED:
             state.scanned_cache.pop(next(iter(state.scanned_cache)))
+        if result.get("matched"):
+            state.matched_epcs[epc] = result
     return True
 
 # ==================== 后台:tag_list → WMS ====================
@@ -289,6 +301,14 @@ def scan_pump_loop():
                         # 运行期读取(见 _live_app 注释:from-import 的标量会固化旧值)
                         if not appm.is_reading:
                             continue
+                        # 已经命中过本单的 EPC 不再重复上报:读卡器是循环读卡的,
+                        # 同一标签会被反复读到;重复上报只会拿到"已扫过(本单)"的
+                        # 拒绝结果,既浪费请求又可能把界面上的 ✓ 冲掉。
+                        with state.lock:
+                            cached = state.scanned_cache.get(epc)
+                        if cached and cached.get("matched"):
+                            last_pushed.add(epc)
+                            continue
                         result = scan_epc(cur_order_id, epc)
                         result["_epc"] = epc
                         result["_ts"] = item.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -315,6 +335,7 @@ def select_order(order_id):
     with state.lock:
         state.selected_order_id = order_id
         state.scanned_cache.clear()
+        state.matched_epcs.clear()
     # 换单后现场同一批标签要能重新推给新单(否则被泵的去重集合挡掉)
     reset_pump_seen()
     if order_id is None:
@@ -332,6 +353,7 @@ def clear_scans():
     """
     with state.lock:
         state.scanned_cache.clear()
+        state.matched_epcs.clear()
     reset_pump_seen()
     log.info("[CLEAR] scanned_cache cleared (pump de-dup reset)")
 
@@ -346,6 +368,7 @@ def logout():
         state.selected_order_no = None
         state.expected_epcs = []
         state.scanned_cache.clear()
+        state.matched_epcs.clear()
     log.info("[LOGOUT] token & order state cleared")
 
 def get_state_snapshot():
@@ -359,7 +382,11 @@ def get_state_snapshot():
             "selectedOrderNo": state.selected_order_no,
             "expectedCount": len(state.expected_epcs),
             "scannedCount": len(state.scanned_cache),
-            "scanned": list(state.scanned_cache.values())[-30:],  # 最近 30 条
+            "scanned": list(state.scanned_cache.values())[-30:],  # 最近 30 条(活动流水)
+            # 本单已命中的全部 EPC —— 界面用它算 ✓ 与"已扫 N/共 M",
+            # 不受上面 30 条流水窗口的影响(循环读卡不会被冲掉进度)
+            "matched": list(state.matched_epcs.values()),
+            "matchedCount": len(state.matched_epcs),
             "deviceCode": DEVICE_CODE,
         }
 
