@@ -41,10 +41,13 @@ services:
       # 让 utf8mb4 默认生效
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
-    # ports:
-      # 原映射 "3306:3306" 因 Windows Hyper-V 端口预留被拒绝绑定
-      # 后端通过 docker 网络服务名 mysql:3306 访问,无需宿主机映射
-      # 如需 Navicat/DBeaver 调试,改为其他端口如 "3307:3306"
+    ports:
+      # 容器 3306 -> 宿主机 13306(对外,局域网可用 Navicat/DBeaver 直连)
+      # 用 13306 而非 3306:Windows 上 3306 常被 Hyper-V 预留,绑不上。
+      # 后端容器仍走 docker 网络服务名 mysql:3306,不受影响。
+      # ⚠️ 数据库暴露到局域网,请确保 MYSQL_ROOT_PASSWORD / MYSQL_PASSWORD
+      #    是强口令;只本机调试可改为 "127.0.0.1:13306:3306"。
+      - "13306:3306"
     volumes:
       # 数据持久化(删容器数据不丢)
       - mysql-data:/var/lib/mysql
