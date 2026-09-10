@@ -249,12 +249,26 @@ def cache_scan(epc, result, order_id=None):
     return True
 
 # ==================== 后台:tag_list → WMS ====================
+# 扫码泵的"已推送"去重集合。必须是可重置的模块级状态:
+# 之前是 scan_pump_loop 的局部变量,导致「清空」和「切换出库单」之后
+# 现场仍在读的同一批标签被永久跳过 —— 界面清空后再也扫不回来,只能重启
+# 容器。现在由 reset_pump_seen() 在清空/换单时一并重置。
+_PUMP_SEEN = {"last_seen": 0, "last_pushed": set()}
+
+def reset_pump_seen():
+    """清空扫码泵的去重集合,让现场标签可以重新推送。
+
+    在「清空」和「切换出库单」时调用(否则同一批标签永远不会再出现)。
+    """
+    _PUMP_SEEN["last_seen"] = 0
+    _PUMP_SEEN["last_pushed"].clear()
+
 def scan_pump_loop():
     """监听 tag_list 新增,把每个新 EPC 推给 WMS。"""
-    last_seen = 0
-    last_pushed = set()
     while True:
         try:
+            last_seen = _PUMP_SEEN["last_seen"]
+            last_pushed = _PUMP_SEEN["last_pushed"]
             # 每轮都取一次「有状态的那个模块」(见 _live_app 注释:__main__ vs app)
             appm = _live_app()
             if appm is None:
@@ -290,7 +304,7 @@ def scan_pump_loop():
                             log.info("[SCAN] ✓ %s sku=%s scannedQty=%d", epc, result.get("sku"), result.get("scannedQty"))
                         else:
                             log.warning("[SCAN] ✗ %s reason=%s", epc, result.get("reason"))
-                    last_seen = len(current)
+                    _PUMP_SEEN["last_seen"] = len(current)
         except Exception as e:
             log.exception("[SCAN-PUMP] error")
         time.sleep(0.3)
@@ -301,6 +315,8 @@ def select_order(order_id):
     with state.lock:
         state.selected_order_id = order_id
         state.scanned_cache.clear()
+    # 换单后现场同一批标签要能重新推给新单(否则被泵的去重集合挡掉)
+    reset_pump_seen()
     if order_id is None:
         state.expected_epcs = []
         return True
@@ -309,10 +325,15 @@ def select_order(order_id):
     return True
 
 def clear_scans():
-    """清空已扫记录(前端「清空」按钮),不清选单、不影响期望清单。"""
+    """清空已扫记录(前端「清空」按钮),不清选单、不影响期望清单。
+
+    注意也要重置扫码泵的去重集合:否则现场仍在读的同一批标签会被泵
+    「已推送过」跳过,清空后再也扫不回来(必须重启容器)。
+    """
     with state.lock:
         state.scanned_cache.clear()
-    log.info("[CLEAR] scanned_cache cleared")
+    reset_pump_seen()
+    log.info("[CLEAR] scanned_cache cleared (pump de-dup reset)")
 
 def logout():
     """登出:清空 WMS token / 当前用户 / 作业状态(选单 + 期望 + 已扫)。"""

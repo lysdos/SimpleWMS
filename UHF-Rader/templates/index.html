@@ -574,6 +574,8 @@ const I18N_DICT = {
     // 状态
     'reader.conn':         { 'zh-CN':'读卡器已连', 'en-US':'Reader connected' },
     'reader.disc':         { 'zh-CN':'读卡器未连', 'en-US':'Reader offline' },
+    'reader.reading':      { 'zh-CN':'读卡中', 'en-US':'Reading' },
+    'reader.idle':         { 'zh-CN':'未读卡', 'en-US':'Idle' },
     'wms.logged':          { 'zh-CN':'WMS 已登录', 'en-US':'WMS online' },
     'wms.not':             { 'zh-CN':'WMS 未登录', 'en-US':'WMS not signed in' },
 
@@ -835,7 +837,10 @@ async function refreshBadges() {
         const r = await apiFetch('/api/wms/reader-info').then(r => r.json());
         const d = r.data || {};
         const rb = document.getElementById('readerBadge');
-        rb.textContent = d.connected ? t('reader.conn') : t('reader.disc');
+        // 连接状态 + 读卡状态一起显示(用户反馈:看不到读卡器是否在"读")
+        rb.textContent = d.connected
+            ? t('reader.conn') + ' · ' + (d.reading ? t('reader.reading') : t('reader.idle'))
+            : t('reader.disc');
         rb.className = 'badge ' + (d.connected ? 'online' : 'offline');
         document.getElementById('readerInfo').textContent = d.host + ':' + d.port;
         syncReadButtons(d.reading);
