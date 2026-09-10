@@ -58,7 +58,9 @@ services:
       # character_set_client=latin1,导致中文 INSERT/SELECT 出现 mojibake
       - --init-connect=SET NAMES utf8mb4
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
+      # 重要:硬编码 -prootpass 会让改了 MYSQL_ROOT_PASSWORD 的部署永远 unhealthy,
+      # backend (depends_on: service_healthy) 起不来首启即死锁。改用 sh -c 从 env 拼命令。
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -114,8 +116,10 @@ services:
     depends_on:
       - backend
     ports:
-      # 用户访问入口(原 8081:80,但 8081 也落在 Hyper-V 预留 8033-8132 内,改 9080)
-      - "9080:80"
+      # 用户访问入口(原 8081:80,但 8081 也落在 Hyper-V 预留 8033-8132 内,改 9080)。
+      # 与 backend / uhf-rader 一样只绑本机回环,TLS 留给前置反代。
+      # 需要对外暴露时改为 "9080:80" 并部署 nginx/Traefik/Caddy。
+      - "127.0.0.1:9080:80"
     networks:
       - simplewms-net
 
@@ -136,9 +140,10 @@ services:
       TZ: Asia/Shanghai
       # WMS 后端地址(容器网络服务名)
       WMS_BASE_URL: http://backend:8080
-      # 登录 WMS 的账号(必须与 .env 里的 ADMIN_USERNAME/ADMIN_PASSWORD 一致)
-      WMS_USERNAME: ${WMS_USERNAME:-admin}
-      WMS_PASSWORD: ${WMS_PASSWORD:-admin123}
+      # 登录 WMS 的账号(必须与 .env 里的 ADMIN_USERNAME/ADMIN_PASSWORD 一致);
+      # 不再给弱默认,缺 WMS_PASSWORD 时 bridge 启动会直接失败提示设置。
+      WMS_USERNAME: ${WMS_USERNAME:?WMS_USERNAME must be set in .env}
+      WMS_PASSWORD: ${WMS_PASSWORD:?WMS_PASSWORD must be set in .env}
       # 读卡器 TCP(根据现场实际改)
       READER_HOST: ${UHF_READER_HOST:-192.168.1.209}
       READER_PORT: ${UHF_READER_PORT:-5000}

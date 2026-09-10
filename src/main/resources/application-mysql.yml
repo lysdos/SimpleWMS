@@ -20,3 +20,8 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       continue-on-error: true
+  # 关闭 H2 控制台:MySQL profile 不应暴露内置 H2 servlet
+  # (曾被 nginx 反代到 /h2-console,造成远端可用的通用 JDBC 控制台)
+  h2:
+    console:
+      enabled: false

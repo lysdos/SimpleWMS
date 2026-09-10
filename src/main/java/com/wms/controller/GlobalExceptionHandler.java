@@ -57,8 +57,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> ex(Exception e) {
+        // 服务端留全量堆栈,只对客户端回一句通用提示——避免把 SQL/驱动
+        // 细节(表名/列/连接字符串)外漏给低权限或匿名调用方。
         e.printStackTrace();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.fail(500, "服务器异常: " + e.getMessage()));
+                .body(ApiResponse.fail(500, "服务器异常,请稍后重试"));
     }
 }

@@ -3,266 +3,543 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UHF RFID 出库扫码终端</title>
+    <title>SimpleWMS · UHF RFID 出库扫码终端</title>
     <style>
+        /* ============================================================
+           SimpleWMS 统一视觉(UHF 出库扫码终端)
+           复用 WMS 前端 css/app.css 的设计令牌:主蓝 #2563eb,浅色办公风,
+           圆角 6-12px,柔和阴影,统一字体;无任何外部依赖。
+           ============================================================ */
+        :root {
+            /* 品牌色 */
+            --c-brand:        #2563eb;
+            --c-brand-hover:  #1d4ed8;
+            --c-brand-soft:   #eff6ff;
+            --c-brand-tint:   rgba(37,99,235,0.08);
+            --c-success:      #10b981;
+            --c-success-deep: #047857;
+            --c-warn:         #f59e0b;
+            --c-danger:       #ef4444;
+            --c-danger-deep:  #b91c1c;
+            /* 中性色 */
+            --c-bg:           #f5f7fa;
+            --c-bg-elev:      #ffffff;
+            --c-bg-soft:      #f8fafc;
+            --c-border:       #e5e7eb;
+            --c-border-soft:  #eef2f7;
+            --c-text:         #1f2937;
+            --c-text-2:       #4b5563;
+            --c-text-3:       #6b7280;
+            --c-text-4:       #9ca3af;
+            /* 圆角 */
+            --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 16px;
+            /* 阴影 */
+            --sh-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+            --sh-md: 0 1px 3px rgba(15,23,42,.05), 0 4px 12px rgba(15,23,42,.06);
+            --sh-lg: 0 8px 24px rgba(15,23,42,.10), 0 4px 8px rgba(15,23,42,.04);
+            /* 排版 */
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                         "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+            --font-mono: ui-monospace, "Cascadia Mono", "JetBrains Mono",
+                         "SF Mono", Consolas, "Liberation Mono", monospace;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
-            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            min-height: 100vh;
-            padding: 16px;
+            font-family: var(--font-sans);
+            background: var(--c-bg);
+            color: var(--c-text);
+            font-size: 14px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
-        .container { max-width: 1280px; margin: 0 auto; }
+        button { font-family: inherit; }
+        :focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; border-radius: 4px; }
 
-        .header {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 16px 20px;
-            margin-bottom: 16px;
+        /* ============================================================
+           顶部 Header(与 WMS 主界面一致)
+           ============================================================ */
+        .app-header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 0 24px; height: 60px;
+            background: var(--c-bg-elev);
+            border-bottom: 1px solid var(--c-border);
+            box-shadow: 0 1px 0 rgba(15,23,42,.02);
+            position: sticky; top: 0; z-index: 40;
         }
-        .header h1 { font-size: 20px; color: #f1f5f9; }
-        .header .badge {
-            padding: 4px 10px; border-radius: 4px; font-size: 12px;
-            background: #334155; color: #cbd5e1;
+        .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .brand .logo {
+            width: 34px; height: 34px; flex: 0 0 auto;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, var(--c-brand), #60a5fa);
+            border-radius: var(--r-md);
+            font-size: 18px;
+            box-shadow: 0 4px 10px rgba(37,99,235,.30);
         }
-        .header .badge.online { background: #16a34a; color: white; }
-        .header .badge.offline { background: #dc2626; color: white; }
+        .brand .title { font-size: 17px; font-weight: 600; color: var(--c-text); letter-spacing: .5px; white-space: nowrap; }
+        .brand .subtitle { font-size: 12px; color: var(--c-text-3); margin-left: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+        .header-status { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+        .meta-chip {
+            font-family: var(--font-mono);
+            font-size: 12px; color: var(--c-text-3);
+            background: var(--c-bg); border: 1px solid var(--c-border);
+            border-radius: 999px; padding: 3px 10px;
+            white-space: nowrap;
+        }
+        .user-pill {
+            padding: 5px 12px;
+            background: var(--c-brand-soft);
+            border-radius: 999px;
+            font-size: 13px; color: var(--c-brand);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        /* 状态徽标(JS 会设 className = 'badge online' | 'badge offline') */
+        .badge {
+            display: inline-block; padding: 3px 11px;
+            border-radius: 999px; font-size: 12px;
+            font-weight: 500; white-space: nowrap;
+            border: 1px solid var(--c-border);
+            background: var(--c-bg); color: var(--c-text-2);
+        }
+        .badge.online  { background: #ecfdf5; color: var(--c-success-deep); border-color: #a7f3d0; }
+        .badge.offline { background: #fef2f2; color: var(--c-danger-deep);   border-color: #fecaca; }
+        #userInfo.badge { background: var(--c-brand-soft); color: var(--c-brand); border: none; }
+
+        /* 语言切换(与 WMS 一致的分段控件) */
+        .lang-switch {
+            display: inline-flex;
+            background: var(--c-bg);
+            border: 1px solid var(--c-border);
+            border-radius: 999px;
+            padding: 2px;
+            gap: 0;
+        }
+        .lang-switch button {
+            background: none; border: none; cursor: pointer;
+            padding: 3px 12px; font-size: 12.5px;
+            color: var(--c-text-3); border-radius: 999px;
+            transition: all .18s; font-weight: 500; line-height: 1.5;
+        }
+        .lang-switch button:hover { color: var(--c-text); }
+        .lang-switch button.active {
+            background: var(--c-bg-elev);
+            color: var(--c-brand);
+            box-shadow: var(--sh-sm);
+        }
+
+        /* ============================================================
+           登录屏(整屏渐变,与 WMS login 一致;登录后 JS 隐藏本层)
+           ============================================================ */
+        .login-view {
+            position: fixed; inset: 0; z-index: 100;
+            display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #3b82f6 100%);
+            overflow: hidden;
+        }
+        .login-view::before, .login-view::after {
+            content: ''; position: absolute; border-radius: 50%;
+            background: rgba(255,255,255,.06); pointer-events: none;
+        }
+        .login-view::before { width: 480px; height: 480px; top: -120px; right: -80px; }
+        .login-view::after  { width: 360px; height: 360px; bottom: -100px; left: -60px; }
+
+        .login-card {
+            background: var(--c-bg-elev);
+            padding: 38px 36px 28px;
+            border-radius: var(--r-xl);
+            width: 430px; max-width: 92vw;
+            box-shadow: var(--sh-lg);
+            text-align: center;
+            position: relative; z-index: 1;
+        }
+        .login-card .logo-icon {
+            width: 60px; height: 60px;
+            margin: 0 auto 14px;
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border-radius: var(--r-lg);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px;
+            box-shadow: 0 8px 20px rgba(37,99,235,.30);
+        }
+        .login-card h1 { margin: 0 0 4px; font-size: 22px; color: var(--c-text); letter-spacing: .5px; }
+        .login-card .subtitle { color: var(--c-text-3); margin: 0 0 24px; font-size: 13px; }
+        .login-card .field { margin-bottom: 15px; text-align: left; }
+        .login-card label { display: block; font-size: 13px; color: var(--c-text-2); font-weight: 500; margin-bottom: 6px; }
+        .login-card input {
+            display: block; width: 100%;
+            padding: 11px 14px; border: 1px solid var(--c-border); border-radius: var(--r-md);
+            font-size: 14px; font-family: inherit; background: #fff;
+            transition: border-color .18s, box-shadow .18s;
+        }
+        .login-card input:focus { outline: none; border-color: var(--c-brand); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
+        .login-card .btn-primary { width: 100%; margin-top: 4px; padding: 11px 0; font-size: 15px; }
+        .login-card .hint {
+            margin-top: 16px; text-align: left;
+            background: var(--c-bg); border: 1px solid var(--c-border-soft);
+            border-radius: var(--r-md); padding: 10px 12px;
+            font-size: 11.5px; line-height: 1.7; color: var(--c-text-3);
+        }
+        .login-card .login-err { color: var(--c-danger); margin-top: 12px; font-size: 13px; min-height: 0; text-align: left; }
+        .login-card .lang-row { margin-top: 14px; display: flex; justify-content: center; }
+
+        /* ============================================================
+           主工作区
+           ============================================================ */
+        .view { max-width: 1360px; margin: 0 auto; padding: 24px; }
+        .page-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+        .page-head h2 { margin: 0; font-size: 20px; font-weight: 600; color: var(--c-text); }
+        .page-head .desc { color: var(--c-text-3); font-size: 13px; margin-top: 4px; }
+
+        .work-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.15fr); gap: 18px; align-items: start; }
+        @media (max-width: 1020px) { .work-grid { grid-template-columns: 1fr; } }
 
         .card {
-            background: #1e293b;
-            border-radius: 12px;
-            padding: 16px;
+            background: var(--c-bg-elev);
+            border-radius: var(--r-lg);
+            padding: 18px 20px 20px;
+            box-shadow: var(--sh-sm);
+            border: 1px solid var(--c-border-soft);
+            margin-bottom: 0;
         }
-        .card h2 { font-size: 15px; color: #f1f5f9; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-        .card h2 .dot { width: 8px; height: 8px; border-radius: 50%; background: #3b82f6; }
-        .field { display: flex; gap: 8px; margin-bottom: 10px; }
-        .field input, .field select {
-            flex: 1;
-            padding: 8px 10px;
-            background: #0f172a;
-            border: 1px solid #334155;
-            color: #e2e8f0;
-            border-radius: 6px;
-            font-size: 13px;
-            font-family: inherit;
+        .card-title {
+            font-size: 15px; font-weight: 600; margin-bottom: 14px;
+            padding-bottom: 12px; border-bottom: 1px solid var(--c-border-soft);
+            color: var(--c-text);
+            display: flex; align-items: center; gap: 8px;
         }
-        .field input:focus, .field select:focus { outline: none; border-color: #3b82f6; }
-        .btn {
-            padding: 8px 14px;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 13px;
-            font-family: inherit;
-            cursor: pointer;
-        }
-        .btn:disabled { background: #475569; cursor: not-allowed; }
-        .btn.success { background: #16a34a; }
-        .btn.danger  { background: #dc2626; }
-        .btn.warn    { background: #f59e0b; }
-        .btn + .btn { margin-left: 8px; }
+        .card-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-brand); }
+        .card-title .title-extra { margin-left: auto; font-weight: 500; color: var(--c-text-3); font-size: 12.5px; }
 
-        .orders { max-height: 280px; overflow-y: auto; }
+        /* 表单 / 工具条 */
+        .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .toolbar .grow { flex: 1; }
+        .field { display: flex; gap: 8px; align-items: center; }
+        input[type=text], input:not([type]), input[type=password] {
+            flex: 1;
+            padding: 8px 12px; font-size: 14px;
+            border: 1px solid var(--c-border); border-radius: var(--r-md);
+            background: #fff; outline: none; color: var(--c-text);
+            font-family: inherit;
+            transition: border-color .18s, box-shadow .18s;
+        }
+        input:focus { border-color: var(--c-brand); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+
+        /* 按钮(WMS 同款) */
+        .btn {
+            padding: 8px 16px; font-size: 14px;
+            background: var(--c-bg-elev); color: var(--c-text-2);
+            border: 1px solid var(--c-border); border-radius: var(--r-md);
+            cursor: pointer; transition: all .18s;
+            display: inline-flex; align-items: center; gap: 5px;
+            font-weight: 500; white-space: nowrap; line-height: 1.4;
+        }
+        .btn:hover { background: var(--c-bg); border-color: var(--c-text-4); color: var(--c-text); }
+        .btn:disabled, .btn[disabled] { opacity: .5; cursor: not-allowed; }
+        .btn-primary { background: var(--c-brand); color: #fff; border-color: var(--c-brand); }
+        .btn-primary:hover { background: var(--c-brand-hover); border-color: var(--c-brand-hover); color: #fff; }
+        .btn-success { background: var(--c-success); color: #fff; border-color: var(--c-success); }
+        .btn-success:hover { background: #059669; border-color: #059669; color: #fff; }
+        .btn-danger { background: var(--c-danger); color: #fff; border-color: var(--c-danger); }
+        .btn-danger:hover { background: #dc2626; border-color: #dc2626; color: #fff; }
+        .btn-warn { background: var(--c-warn); color: #fff; border-color: var(--c-warn); }
+        .btn-warn:hover { background: #d97706; border-color: #d97706; color: #fff; }
+        .btn-sm { padding: 5px 12px; font-size: 12.5px; }
+
+        /* 出库单列表 */
+        .orders { max-height: 250px; overflow-y: auto; border: 1px solid var(--c-border-soft); border-radius: var(--r-md); }
         .order-row {
             display: flex; justify-content: space-between; align-items: center;
-            padding: 8px 10px; border-radius: 6px; cursor: pointer;
-            font-size: 12px;
+            padding: 10px 12px; cursor: pointer;
+            font-size: 13px; border-bottom: 1px solid var(--c-border-soft);
+            transition: background .15s;
         }
-        .order-row:hover { background: #334155; }
-        .order-row.selected { background: #1d4ed8; color: white; }
-        .order-row .no { color: #60a5fa; font-weight: 600; }
-        .order-row.selected .no { color: #fef3c7; }
-        .order-row .qty { color: #94a3b8; }
-        .order-row.selected .qty { color: #cbd5e1; }
+        .order-row:last-child { border-bottom: 0; }
+        .order-row:hover { background: var(--c-bg-soft); }
+        .order-row.selected { background: var(--c-brand-soft); }
+        .order-row.selected::before {
+            content: ''; width: 4px; align-self: stretch; border-radius: 2px;
+            background: var(--c-brand); margin-right: 4px;
+        }
+        .order-row .no { color: var(--c-brand); font-weight: 600; font-family: var(--font-mono); font-size: 12.5px; }
+        .order-row.selected .no { color: var(--c-brand-hover); }
+        .order-row .customer { color: var(--c-text-2); margin-left: 10px; }
+        .order-row .qty { color: var(--c-text-3); font-size: 12px; white-space: nowrap; }
 
-        #scanList { max-height: 460px; overflow-y: auto; }
+        .selected-info {
+            display: flex; align-items: center; gap: 6px;
+            margin-top: 10px; padding: 8px 12px;
+            background: var(--c-bg); border: 1px dashed var(--c-border);
+            border-radius: var(--r-md);
+            font-size: 13px; color: var(--c-text-2);
+        }
+        .selected-info b { color: var(--c-brand); font-family: var(--font-mono); font-weight: 600; }
+        .empty { text-align: center; color: var(--c-text-4); padding: 24px 12px; font-size: 13px; }
+
+        /* 期望扫码 EPC 清单 */
+        .expect-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--c-text-2); margin: 14px 0 8px; }
+        .expect-head .stat { margin-left: auto; font-weight: 500; white-space: nowrap; }
+        .expect-head .stat b { color: var(--c-success-deep); }
+        .expect-head .done { color: var(--c-success-deep); }
+        .expected-list { max-height: 200px; overflow-y: auto; border: 1px solid var(--c-border-soft); border-radius: var(--r-md); padding: 4px; }
+        .epc-item {
+            display: grid; grid-template-columns: 18px minmax(0,1fr);
+            gap: 8px; align-items: center; padding: 5px 8px;
+            font-family: var(--font-mono); font-size: 11.5px; color: var(--c-text-2);
+            border-radius: var(--r-sm);
+        }
+        .epc-item > :nth-child(3) { display: none; }
+        .epc-item:hover { background: var(--c-bg-soft); }
+        .epc-item .sku { color: var(--c-text-3); font-family: var(--font-sans); margin-left: 8px; font-size: 11px; }
+        .epc-item.scanned { color: var(--c-success-deep); background: #f0fdf4; }
+        .epc-item .check { color: var(--c-text-4); font-weight: 700; }
+        .epc-item.scanned .check { color: var(--c-success); }
+
+        /* 扫码实时列表 */
+        #statInfo { font-size: 13px; color: var(--c-text-3); white-space: nowrap; }
+        .scan-summary { font-size: 13px; color: var(--c-text-2); }
+        .manual-row { margin: 4px 0 12px; }
+        #manualEpc { font-family: var(--font-mono); letter-spacing: 1px; font-size: 15px; padding: 10px 12px; }
+        #manualEpc::placeholder { font-family: var(--font-sans); letter-spacing: 0; font-size: 12.5px; color: var(--c-text-4); }
+
+        #scanList { max-height: 430px; overflow-y: auto; }
         .scan-row {
             display: grid;
-            grid-template-columns: 100px 1fr auto;
-            gap: 8px;
-            align-items: center;
-            padding: 8px 10px;
-            border-radius: 6px;
-            margin-bottom: 4px;
-            font-size: 12px;
-            background: #0f172a;
+            grid-template-columns: minmax(230px, .9fr) minmax(0, 1.1fr);
+            gap: 14px; align-items: center;
+            padding: 9px 12px; margin-bottom: 6px;
+            border-radius: var(--r-md);
+            font-size: 12.5px;
+            background: var(--c-bg-soft);
+            border: 1px solid var(--c-border-soft);
+            border-left-width: 3px;
+            animation: row-in .18s ease-out;
         }
-        .scan-row.matched   { border-left: 3px solid #16a34a; }
-        .scan-row.unmatched { border-left: 3px solid #dc2626; background: #1f1014; }
-        .scan-row .epc { color: #60a5fa; font-family: monospace; }
-        .scan-row .sku { color: #f1f5f9; font-size: 12px; }
-        .scan-row .reason { color: #fca5a5; font-size: 11px; }
-        .scan-row .time { color: #94a3b8; font-size: 11px; }
-        .scan-row .matched-tag { background: #16a34a; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-        .scan-row .unmatched-tag { background: #dc2626; color: white; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-
-        .empty { color: #64748b; text-align: center; padding: 20px; font-size: 12px; }
-        .info-line { color: #94a3b8; font-size: 11px; margin-top: 8px; }
-
-        /* 登录卡 */
-        .login-card { max-width: 460px; margin: 40px auto; padding: 24px; }
-        .login-card .field { margin-bottom: 12px; }
-        .login-card .row { display: flex; gap: 8px; align-items: center; }
-        .login-card .small { font-size: 11px; color: #94a3b8; margin-top: 6px; }
-
-        /* 期望 EPC 列表(每项 1 行) */
-        .expected-list { max-height: 220px; overflow-y: auto; margin-top: 8px;
-                         background: #0f172a; border-radius: 6px; padding: 6px; }
-        .epc-item {
-            display: grid; grid-template-columns: 18px 1fr auto;
-            gap: 8px; align-items: center; padding: 4px 6px;
-            font-family: monospace; font-size: 11px; color: #cbd5e1;
-            border-radius: 4px;
+        .scan-row > :nth-child(3) { display: none; } /* 兼容 JS 输出的空占位列 */
+        @keyframes row-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+        .scan-row.matched   { border-left-color: var(--c-success); background: #f7fdf9; }
+        .scan-row.unmatched { border-left-color: var(--c-danger);  background: #fff7f7; }
+        .scan-row .epc { color: var(--c-brand-hover); font-family: var(--font-mono); font-size: 12.5px; word-break: break-all; }
+        .scan-row .time { color: var(--c-text-4); font-size: 11px; margin-top: 1px; font-family: var(--font-sans); }
+        .scan-row .sku { color: var(--c-text); font-size: 12.5px; }
+        .scan-row .reason { color: var(--c-danger-deep); font-size: 11.5px; line-height: 1.4; }
+        .scan-row .info-line { color: var(--c-text-3); font-size: 11.5px; margin-top: 2px; }
+        .tag {
+            display: inline-block; padding: 1px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; margin-left: 4px;
         }
-        .epc-item.scanned  { color: #4ade80; background: rgba(22,163,74,0.15); }
-        .epc-item .check   { color: #475569; font-weight: 700; }
-        .epc-item.scanned .check { color: #16a34a; }
+        .matched-tag   { background: #d1fae5; color: var(--c-success-deep); }
+        .unmatched-tag { background: #fee2e2; color: var(--c-danger-deep); }
 
-        /* 提交按钮(大,绿色,只读安全色) */
+        /* 提交出库条(JS 会设 className = 'commit-bar ready' | 'commit-bar notready') */
         .commit-bar {
-            display: flex; align-items: center; gap: 12px;
-            padding: 12px; border-radius: 8px;
-            background: #1e293b; margin-top: 12px;
+            display: flex; align-items: center; gap: 14px;
+            margin-top: 12px; padding: 12px 14px;
+            border-radius: var(--r-lg);
+            border: 1px solid var(--c-border-soft);
         }
-        .commit-bar .ready    { background: #14532d; border: 1px solid #16a34a; }
-        .commit-bar .notready { background: #1f2937; border: 1px solid #334155; color: #94a3b8; }
+        .commit-bar.notready { background: var(--c-bg-soft); }
+        .commit-bar.ready {
+            background: #f0fdf4; border-color: #bbf7d0;
+            box-shadow: 0 0 0 1px rgba(16,185,129,.08);
+        }
+        #commitHint { flex: 1; font-size: 13.5px; color: var(--c-text-2); }
+        .commit-bar.ready #commitHint { color: var(--c-success-deep); font-weight: 600; }
         .commit-btn {
-            padding: 12px 20px; font-size: 15px; font-weight: 600;
-            background: #16a34a; color: white; border: none; border-radius: 6px;
-            cursor: pointer;
+            padding: 10px 24px; font-size: 15px; font-weight: 600;
+            background: var(--c-success); color: #fff;
+            border: none; border-radius: var(--r-md);
+            cursor: pointer; transition: all .18s;
+            white-space: nowrap;
         }
-        .commit-btn:disabled { background: #475569; color: #94a3b8; cursor: not-allowed; }
+        .commit-btn:hover:not(:disabled) { background: #059669; box-shadow: 0 4px 10px rgba(16,185,129,.25); }
+        .commit-btn:disabled { background: var(--c-text-3); color: #fff; opacity: .55; cursor: not-allowed; }
 
-        /* 模态结果对话框 */
+        /* 结果弹窗 */
         .modal-mask {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-            display: none; align-items: center; justify-content: center; z-index: 100;
+            position: fixed; inset: 0; background: rgba(15,23,42,.5);
+            display: none; align-items: center; justify-content: center;
+            z-index: 200; padding: 20px;
+            animation: mask-in .2s;
         }
+        @keyframes mask-in { from { opacity: 0; } to { opacity: 1; } }
         .modal-mask.show { display: flex; }
         .modal-box {
-            background: #1e293b; border-radius: 12px; padding: 24px;
-            max-width: 460px; width: 90%; text-align: center;
+            background: var(--c-bg-elev);
+            border-radius: var(--r-lg);
+            border: 1px solid var(--c-border-soft);
+            box-shadow: var(--sh-lg);
+            padding: 24px;
+            max-width: 460px; width: 100%;
+            text-align: center;
+            animation: modal-in .22s;
         }
-        .modal-box h3 { font-size: 18px; margin-bottom: 12px; }
-        .modal-box .ok  { color: #4ade80; }
-        .modal-box .err { color: #fca5a5; }
-        .modal-box pre { background: #0f172a; padding: 10px; border-radius: 6px;
-                         font-size: 12px; text-align: left; max-height: 200px; overflow: auto;
-                         margin: 12px 0; }
+        @keyframes modal-in { from { transform: translateY(-12px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+        .modal-box h3 { font-size: 18px; margin-bottom: 12px; color: var(--c-text); }
+        .modal-box .ok  { color: var(--c-success-deep); font-weight: 600; font-size: 15px; white-space: pre-line; }
+        .modal-box .err { color: var(--c-danger-deep);  font-weight: 600; font-size: 15px; white-space: pre-line; }
+        .modal-box pre {
+            background: var(--c-bg); padding: 10px; border-radius: var(--r-md);
+            font-size: 12px; text-align: left; max-height: 200px; overflow: auto;
+            margin: 12px 0; border: 1px solid var(--c-border-soft);
+        }
+        .modal-box .actions { margin-top: 18px; }
+
+        /* 响应式 */
+        @media (max-width: 720px) {
+            .app-header { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px; }
+            .brand .subtitle { display: none; }
+            .view { padding: 16px; }
+            .scan-row { grid-template-columns: 1fr; gap: 4px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; }
+        }
     </style>
 </head>
 <body>
-<div class="container">
 
-    <!-- ===== 顶部状态条 ===== -->
-    <div class="header">
-        <h1>📡 UHF RFID 出库扫码终端</h1>
+<!-- ===== 登录屏(整屏渐变,登录成功后 JS 隐藏) ===== -->
+<div id="loginView" class="login-view">
+    <div class="login-card">
+        <div class="logo-icon">📦</div>
+        <h1>SimpleWMS</h1>
+        <p class="subtitle" data-i18n="login.subtitle">UHF RFID 出库扫码终端 · 登录 WMS 后台</p>
+        <div class="field">
+            <label for="loginWmsUrl" data-i18n="login.wmsUrl">WMS 地址(独立部署才填)</label>
+            <input id="loginWmsUrl" data-i18n-placeholder="login.wmsUrl.ph" placeholder="http://192.168.1.100:9090 等" />
+        </div>
+        <div class="field">
+            <label for="loginUser" data-i18n="login.username">账号</label>
+            <input id="loginUser" data-i18n-placeholder="login.username.ph" placeholder="WMS 用户名"
+                   autocomplete="username"
+                   onkeydown="if(event.key==='Enter'){doLogin();event.preventDefault();}" />
+        </div>
+        <div class="field">
+            <label for="loginPass" data-i18n="login.password">密码</label>
+            <input id="loginPass" type="password" data-i18n-placeholder="login.password.ph" placeholder="WMS 密码"
+                   autocomplete="current-password"
+                   onkeydown="if(event.key==='Enter'){doLogin();event.preventDefault();}" />
+        </div>
+        <button class="btn btn-primary" data-i18n="login.submit" onclick="doLogin()">登 录</button>
+        <div class="login-err" id="loginError"></div>
+        <div class="hint" data-i18n-html="login.hint"></div>
+        <div class="lang-row">
+            <div class="lang-switch">
+                <button type="button" data-lang="zh-CN">中文</button>
+                <button type="button" data-lang="en-US">English</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 顶部 Header(与 WMS 主界面一致) ===== -->
+<header class="app-header">
+    <div class="brand">
+        <span class="logo">📦</span>
+        <span class="title">SimpleWMS</span>
+        <span class="subtitle" data-i18n="brand.subtitle">UHF RFID 出库扫码终端</span>
+    </div>
+    <div class="header-status">
         <span id="readerBadge" class="badge offline">读卡器未连</span>
         <span id="wmsBadge"   class="badge offline">WMS 未登录</span>
-        <span style="flex:1;"></span>
-        <span id="userInfo" class="badge" style="display:none;"></span>
-        <button id="btnLogout" class="btn warn" style="display:none;" onclick="logout()">退出</button>
-        <span class="badge" id="readerInfo">--</span>
+        <span id="userInfo" class="badge user-pill" style="display:none;"></span>
+        <div class="lang-switch" style="display:none;" id="hdrLang">
+            <button type="button" data-lang="zh-CN">中文</button>
+            <button type="button" data-lang="en-US">English</button>
+        </div>
+        <button id="btnLogout" class="btn btn-sm" data-i18n="logout.btn" style="display:none;" onclick="logout()">退出</button>
+        <span class="meta-chip" id="readerInfo">--</span>
     </div>
+</header>
 
-    <!-- ===== 登录界面(WMS URL + 账号) ===== -->
-    <div id="loginView" class="card login-card">
-        <h2><span class="dot"></span> 登录 WMS 后台</h2>
-        <div class="field">
-            <label style="width:90px;color:#94a3b8;">WMS 地址</label>
-            <input id="loginWmsUrl" placeholder="例如 http://192.168.1.100:9090" />
-        </div>
-        <div class="field">
-            <label style="width:90px;color:#94a3b8;">账号</label>
-            <input id="loginUser" placeholder="WMS 用户名" autocomplete="username" />
-        </div>
-        <div class="field">
-            <label style="width:90px;color:#94a3b8;">密码</label>
-            <input id="loginPass" type="password" placeholder="WMS 密码" autocomplete="current-password" />
-        </div>
-        <div class="row" style="margin-top:8px;">
-            <button class="btn success" style="flex:1;" onclick="doLogin()">登录</button>
-        </div>
-        <div class="small">
-            ℹ 第一次部署?把 WMS 所在机器的 IP 填到上面(同局域网用 IP,本机用 localhost)。<br>
-            配置会保存在浏览器里,下次自动填。
-        </div>
-    </div>
+<div class="view">
 
     <!-- ===== 主界面(登录后才显示) ===== -->
     <div id="mainView" style="display:none;">
+        <div class="page-head">
+            <div>
+                <h2 data-i18n="main.title">出库扫码作业</h2>
+                <div class="desc" data-i18n="main.desc">选择出库单 → 扫码确认 EPC(读卡器 / 手动)→ 全部匹配后提交出库</div>
+            </div>
+        </div>
 
-        <div class="grid">
+        <div class="work-grid">
             <!-- 左:出库单选择 + 期望 EPC 列表 -->
             <div class="card">
-                <h2><span class="dot"></span> 选择 DRAFT 出库单</h2>
-                <div class="field">
-                    <input id="kw" placeholder="搜索单号 / 客户..." />
-                    <button class="btn" onclick="loadOrders()">刷新</button>
+                <div class="card-title">
+                    <span class="dot"></span>
+                    <span data-i18n="card.orders.title">选择出库单</span>
+                    <span class="title-extra" data-i18n="card.orders.extra">DRAFT 待作业</span>
+                </div>
+                <div class="toolbar">
+                    <div class="field grow">
+                        <input id="kw" data-i18n-placeholder="orders.kw.ph" placeholder="搜索单号 / 客户...">
+                        <button class="btn" data-i18n="common.refresh" onclick="loadOrders()">刷新</button>
+                    </div>
                 </div>
                 <div id="orders" class="orders">
-                    <div class="empty">加载中...</div>
+                    <div class="empty" data-i18n="orders.loading">加载中...</div>
                 </div>
-                <div class="info-line" id="selectedInfo">当前未选单</div>
+                <div class="selected-info" id="selectedInfo">当前未选单</div>
 
                 <!-- 已选单时显示"期望 EPC 列表" -->
-                <div id="expectedPanel" style="display:none;margin-top:10px;">
-                    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;">
-                        <span>📋 期望扫码(<span id="expectedTotal">0</span>)</span>
-                        <span style="flex:1;"></span>
-                        <span style="color:#4ade80;">✓ 已扫 <span id="expectedScanned">0</span></span>
+                <div id="expectedPanel" style="display:none;">
+                    <div class="expect-head">
+                        <span><span data-i18n="expected.title">📋 期望扫码</span>(<span id="expectedTotal">0</span>)</span>
+                        <span class="stat"><span class="done"><span data-i18n="expected.done">✓ 已扫</span> <b id="expectedScanned">0</b></span></span>
                     </div>
                     <div id="expectedList" class="expected-list">
-                        <div class="empty" style="padding:8px;">无</div>
+                        <div class="empty" data-i18n="common.none" style="padding:10px;">无</div>
                     </div>
                 </div>
             </div>
 
-            <!-- 右:扫码实时事件 -->
+            <!-- 右:扫码作业 -->
             <div class="card">
-                <h2><span class="dot"></span> 扫码实时事件 (EPC 24 hex = 12 字节 UHF Gen2)</h2>
-                <div class="field">
-                    <button id="btnStart" class="btn success" onclick="startRead()">▶ 开始扫码</button>
-                    <button id="btnStop"  class="btn danger"  onclick="stopRead()" disabled>⏹ 停止</button>
-                    <button id="btnClear" class="btn warn"    onclick="clearScanned()">🗑 清空</button>
-                    <span style="flex:1;"></span>
-                    <span class="info-line" id="statInfo">已扫 0 / 共 0</span>
+                <div class="card-title">
+                    <span class="dot"></span>
+                    <span data-i18n="card.scan.title">扫码确认</span>
+                    <span class="title-extra" data-i18n="card.scan.extra">EPC 24 hex = 12 字节 UHF Gen2</span>
                 </div>
-                <div class="field" style="margin-top:6px;">
-                    <input id="manualEpc" maxlength="24" placeholder="手动输入/粘贴 24 位 EPC(回车扫码)"
-                           style="font-family:monospace;letter-spacing:1px;"
+                <div class="toolbar scan-toolbar">
+                    <button id="btnStart" class="btn btn-success" data-i18n="scan.start" onclick="startRead()">▶ 开始扫码</button>
+                    <button id="btnStop"  class="btn btn-danger"  data-i18n="scan.stop"  onclick="stopRead()" disabled>⏹ 停止</button>
+                    <button id="btnClear" class="btn"            data-i18n="scan.clear" onclick="clearScanned()">🗑 清空</button>
+                    <div class="grow"></div>
+                    <span class="scan-summary" id="statInfo">已扫 0 / 共 0</span>
+                </div>
+                <div class="field manual-row">
+                    <input id="manualEpc" maxlength="24" data-i18n-placeholder="manual.ph"
+                           placeholder="手动输入 / 粘贴 24 位 EPC,回车即扫"
                            onkeydown="if(event.key==='Enter'){manualScan();event.preventDefault();}" />
-                    <button class="btn" onclick="manualScan()">手动扫码</button>
+                    <button class="btn btn-primary" data-i18n="manual.btn" onclick="manualScan()">手动扫码</button>
                 </div>
                 <div id="scanList">
-                    <div class="empty">选择出库单后开始扫码</div>
+                    <div class="empty" data-i18n="scanList.emptyStart">选择出库单后,用读卡器或手动扫码开始</div>
                 </div>
 
-                <!-- 提交出库按钮:全部扫完才显示 -->
+                <!-- 提交出库条:全部扫完才允许(JS 切换 ready/notready) -->
                 <div id="commitBar" class="commit-bar notready" style="display:none;">
-                    <span id="commitHint" style="flex:1;font-size:13px;">还需扫 0 件</span>
-                    <button id="btnCommit" class="commit-btn" disabled onclick="doCommit()">✓ 提交出库</button>
+                    <span id="commitHint">还需扫 0 件</span>
+                    <button id="btnCommit" class="commit-btn" data-i18n="commit.btn" disabled onclick="doCommit()">✓ 提交出库</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 提交结果模态 -->
+    <!-- 提交结果弹窗 -->
     <div id="resultModal" class="modal-mask">
         <div class="modal-box">
-            <h3 id="resultTitle">提交结果</h3>
-            <div id="resultBody" class="ok">提交成功</div>
+            <h3 id="resultTitle" data-i18n="modal.title">提交结果</h3>
+            <div id="resultBody" class="ok">…</div>
             <pre id="resultDetail" style="display:none;"></pre>
-            <div style="margin-top:16px;">
-                <button class="btn" onclick="closeResultModal()">关闭</button>
+            <div class="actions">
+                <button class="btn btn-primary" data-i18n="modal.close" onclick="closeResultModal()">关闭</button>
             </div>
         </div>
     </div>
@@ -270,52 +547,211 @@
 
 <!-- 不用 SocketIO,改用 JS 轮询 -->
 <script>
+/* ============================================================
+   轻量 i18n(与 WMS js/i18n.js 同策略:字典 + localStorage,key = wms.lang)
+   ============================================================ */
+const I18N_DICT = {
+    // 登录屏
+    'login.subtitle':      { 'zh-CN':'UHF RFID 出库扫码终端 · 登录 WMS 后台', 'en-US':'UHF RFID Outbound Terminal · Sign in to WMS' },
+    'login.wmsUrl':        { 'zh-CN':'WMS 地址(独立部署才填)', 'en-US':'WMS URL (standalone only)' },
+    'login.wmsUrl.ph':     { 'zh-CN':'例如 http://192.168.1.100:9090,本地 Docker 部署留空', 'en-US':'e.g. http://192.168.1.100:9090 — leave blank for Docker' },
+    'login.username':      { 'zh-CN':'账号', 'en-US':'Username' },
+    'login.username.ph':   { 'zh-CN':'WMS 用户名', 'en-US':'WMS username' },
+    'login.password':      { 'zh-CN':'密码', 'en-US':'Password' },
+    'login.password.ph':   { 'zh-CN':'WMS 密码', 'en-US':'WMS password' },
+    'login.submit':        { 'zh-CN':'登 录', 'en-US':'Sign In' },
+    'login.empty':         { 'zh-CN':'请填写账号和密码', 'en-US':'Enter your username and password' },
+    'login.fail':          { 'zh-CN':'登录失败: {msg}', 'en-US':'Sign-in failed: {msg}' },
+    'login.netErr':        { 'zh-CN':'登录失败: 网络错误 - {msg}', 'en-US':'Sign-in failed: network error - {msg}' },
+    'login.hint':          { 'zh-CN':'ℹ Docker 部署:WMS 地址留空即可,终端自动连内置 backend。<br>独立部署(非 Docker):填 WMS 所在机器地址,如 http://192.168.1.100:9090。<br>使用 WMS 后台账号,登录信息保存在本浏览器。',
+                             'en-US':'ℹ Docker: leave WMS URL blank — the terminal auto-connects to the built-in backend.<br>Standalone (not in Docker): enter the WMS address, e.g. http://192.168.1.100:9090.<br>Use your WMS account; it is remembered in this browser.' },
+
+    // 顶部
+    'brand.subtitle':      { 'zh-CN':'UHF RFID 出库扫码终端', 'en-US':'UHF RFID Outbound Terminal' },
+    'logout.btn':          { 'zh-CN':'退出', 'en-US':'Sign out' },
+    'logout.confirm':      { 'zh-CN':'确定退出?', 'en-US':'Sign out?' },
+
+    // 状态
+    'reader.conn':         { 'zh-CN':'读卡器已连', 'en-US':'Reader connected' },
+    'reader.disc':         { 'zh-CN':'读卡器未连', 'en-US':'Reader offline' },
+    'wms.logged':          { 'zh-CN':'WMS 已登录', 'en-US':'WMS online' },
+    'wms.not':             { 'zh-CN':'WMS 未登录', 'en-US':'WMS not signed in' },
+
+    // 主区
+    'main.title':          { 'zh-CN':'出库扫码作业', 'en-US':'Outbound Scanning' },
+    'main.desc':           { 'zh-CN':'选择出库单 → 扫码确认 EPC(读卡器 / 手动)→ 全部匹配后提交出库',
+                             'en-US':'Select an order → scan EPCs (reader / manual) → submit when all match' },
+    'main.noOrder':        { 'zh-CN':'当前未选单', 'en-US':'No order selected' },
+    'main.currentOrder':   { 'zh-CN':'当前订单:', 'en-US':'Current order:' },
+    'card.orders.title':   { 'zh-CN':'选择出库单', 'en-US':'Select outbound order' },
+    'card.orders.extra':   { 'zh-CN':'DRAFT 待作业', 'en-US':'DRAFT · pending' },
+    'orders.loading':      { 'zh-CN':'加载中...', 'en-US':'Loading...' },
+    'orders.empty':        { 'zh-CN':'没有 DRAFT 出库单', 'en-US':'No DRAFT outbound orders' },
+    'orders.kw.ph':        { 'zh-CN':'搜索单号 / 客户...', 'en-US':'Search order / customer...' },
+    'orders.qty':          { 'zh-CN':'{rows} 行 / {qty} 件', 'en-US':'{rows} lines / {qty} pcs' },
+    'common.refresh':      { 'zh-CN':'刷新', 'en-US':'Refresh' },
+    'common.none':         { 'zh-CN':'无', 'en-US':'None' },
+
+    'expected.title':      { 'zh-CN':'📋 期望扫码', 'en-US':'📋 Expected EPCs' },
+    'expected.done':       { 'zh-CN':'✓ 已扫', 'en-US':'✓ Scanned' },
+
+    'card.scan.title':     { 'zh-CN':'扫码确认', 'en-US':'Scan & confirm' },
+    'card.scan.extra':     { 'zh-CN':'EPC 24 hex = 12 字节 UHF Gen2', 'en-US':'EPC 24 hex = 12-byte UHF Gen2' },
+    'scan.start':          { 'zh-CN':'▶ 开始扫码', 'en-US':'▶ Start reading' },
+    'scan.stop':           { 'zh-CN':'⏹ 停止', 'en-US':'⏹ Stop' },
+    'scan.clear':          { 'zh-CN':'🗑 清空', 'en-US':'🗑 Clear' },
+    'scan.stat':           { 'zh-CN':'已扫 {scanned} (匹配 {ok} / 不匹配 {bad})',
+                             'en-US':'Scanned {scanned} (match {ok} / alert {bad})' },
+    'scan.stat0':          { 'zh-CN':'已扫 0', 'en-US':'Scanned 0' },
+    'manual.ph':           { 'zh-CN':'手动输入 / 粘贴 24 位 EPC,回车即扫', 'en-US':'Type / paste 24-digit EPC, press Enter to scan' },
+    'manual.btn':          { 'zh-CN':'手动扫码', 'en-US':'Manual scan' },
+    'manual.noOrder':      { 'zh-CN':'请先选择 DRAFT 出库单', 'en-US':'Select a DRAFT outbound order first' },
+    'manual.needEpc':      { 'zh-CN':'请输入 24 位 EPC', 'en-US':'Enter a 24-digit EPC' },
+    'manual.badLen':       { 'zh-CN':'EPC 长度必须 24 位,当前 {n}', 'en-US':'EPC must be 24 digits, got {n}' },
+    'manual.fail':         { 'zh-CN':'扫码失败: {msg}', 'en-US':'Scan failed: {msg}' },
+    'scanList.empty0':     { 'zh-CN':'暂无扫码记录', 'en-US':'No scan records yet' },
+    'scanList.emptyStart': { 'zh-CN':'选择出库单后,用读卡器或手动扫码开始', 'en-US':'Pick an order, then scan with the reader or manually' },
+    'scanList.selectHint': { 'zh-CN':'点击「开始扫码」或手动输入 EPC', 'en-US':'Click Start, or type an EPC manually' },
+    'tag.matched':         { 'zh-CN':'✓ 匹配', 'en-US':'✓ Matched' },
+    'tag.unmatched':       { 'zh-CN':'✗ 报警', 'en-US':'✗ Alert' },
+    'scan.acc':            { 'zh-CN':'累计 {n} 件', 'en-US':'Total {n} pcs' },
+
+    'commit.hintLeft':     { 'zh-CN':'还需扫 {n} 件', 'en-US':'{n} more to scan' },
+    'commit.hintAll':      { 'zh-CN':'全部 {n} 件已扫完,可以提交', 'en-US':'All {n} scanned — ready to submit' },
+    'commit.btn':          { 'zh-CN':'✓ 提交出库', 'en-US':'✓ Submit outbound' },
+    'commit.busy':         { 'zh-CN':'提交中...', 'en-US':'Submitting...' },
+    'commit.confirm':      { 'zh-CN':'确认提交出库单 {no}?\n提交后库存将正式扣减,出库单状态变为 COMMITTED。',
+                             'en-US':'Submit outbound order {no}?\nStock will be deducted and the order set to COMMITTED.' },
+    'start.noOrder':       { 'zh-CN':'请先选择 DRAFT 出库单', 'en-US':'Select a DRAFT outbound order first' },
+    'start.fail':          { 'zh-CN':'启动失败: {msg}', 'en-US':'Start failed: {msg}' },
+
+    'modal.title':         { 'zh-CN':'提交结果', 'en-US':'Result' },
+    'modal.close':         { 'zh-CN':'关闭', 'en-US':'Close' },
+    'result.titleOk':      { 'zh-CN':'✓ 提交成功', 'en-US':'✓ Submitted' },
+    'result.titleFail':    { 'zh-CN':'✗ 提交失败', 'en-US':'✗ Submit failed' },
+    'result.bodyOk':       { 'zh-CN':'出库单 {no} 已正式出库\n共 {qty} 件', 'en-US':'Order {no} shipped out. Total {qty} pcs' },
+    'result.netErr':       { 'zh-CN':'网络错误: {msg}', 'en-US':'Network error: {msg}' },
+};
+
+const I18N = {
+    // 与 WMS 用同一键 'wms.lang';但 localStorage 按 origin 隔离,
+    // 5001(本终端)与 9080/9090(WMS)各自独立记忆,不会真正跨应用共享。
+    key: 'wms.lang',
+    currentLang: 'zh-CN',
+    t(key, params) {
+        const entry = I18N_DICT[key];
+        let str = entry ? (entry[this.currentLang] || entry['zh-CN'] || key) : key;
+        if (params && typeof str === 'string') {
+            str = str.replace(/\{(\w+)\}/g, (m, k) => (params[k] != null ? params[k] : m));
+        }
+        return str;
+    },
+    applyI18n(root) {
+        root = root || document;
+        root.querySelectorAll('[data-i18n]').forEach(el => {
+            const k = el.getAttribute('data-i18n');
+            el.textContent = this.t(k);
+        });
+        root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            el.setAttribute('placeholder', this.t(el.getAttribute('data-i18n-placeholder')));
+        });
+        root.querySelectorAll('[data-i18n-html]').forEach(el => {
+            el.innerHTML = this.t(el.getAttribute('data-i18n-html'));
+        });
+    },
+    setLang(lang) {
+        if (lang !== 'zh-CN' && lang !== 'en-US') lang = 'zh-CN';
+        this.currentLang = lang;
+        try { localStorage.setItem(this.key, lang); } catch (e) {}
+        document.documentElement.setAttribute('lang', lang);
+        document.querySelectorAll('.lang-switch button').forEach(b => {
+            b.classList.toggle('active', b.dataset.lang === lang);
+        });
+        this.applyI18n(document);
+        refreshTexts();  // 重刷 JS 动态文案
+    },
+    init() {
+        let stored = null;
+        try { stored = localStorage.getItem(this.key); } catch (e) {}
+        const nav = (navigator.language || 'zh-CN').toLowerCase();
+        this.currentLang = (stored && (stored === 'en-US' || stored === 'zh-CN')) ? stored : (nav.startsWith('en') ? 'en-US' : 'zh-CN');
+        document.documentElement.setAttribute('lang', this.currentLang);
+        document.querySelectorAll('.lang-switch button').forEach(b => {
+            b.classList.toggle('active', b.dataset.lang === this.currentLang);
+        });
+        this.applyI18n(document);
+    }
+};
+function t(key, params) { return I18N.t(key, params); }
+
+/* 语言切换点击(委托,登录页与顶栏共用) */
+document.addEventListener('click', (e) => {
+    const b = e.target.closest('.lang-switch button[data-lang]');
+    if (b) { I18N.setLang(b.dataset.lang); }
+});
+
+/* ============================================================
+   业务状态
+   ============================================================ */
 let selectedOrderId = null;
 let selectedOrderNo = null;
 let scanResults = [];   // [{epc, sku, matched, reason, ts}]
 let expectedEpcs = [];  // [{code, sku, productName, ...}] 当前单锁定的 EPC 列表
 let _wmsBase = '';      // WMS 后端地址,如 "http://192.168.1.100:9090"
 let _currentUser = null; // 当前登录的 WMS 用户
+let _dispatchAutoSelectArmed = false; // 首次自动认领只做一次
+let _bootstrapped = false;            // onLoginSuccess 幂等,防重复轮询
+let _sessionPromise = null;
 
-// ====== 启动 ======
+// 建立本地会话 cookie(CSRF 防护用),登录/轮询前先调用一次
+function ensureSession() {
+    if (!_sessionPromise) {
+        _sessionPromise = fetch('/api/wms/session').then(r => r.json()).catch(() => ({}));
+    }
+    return _sessionPromise;
+}
+
+// HTML 转义:所有插入 innerHTML 的服务端/用户字符串先过这里(防注入)
+function esc(v) {
+    return String(v == null ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ====== 启动(应用已保存语言 / 预填账号 / 尝试静默登录) ======
 async function init() {
-    // 加载本地保存的 WMS URL
+    await ensureSession();   // 先建会话,后续 /api/wms/* 才有 cookie
+    I18N.init();
     const savedUrl = localStorage.getItem('wms_base_url') || '';
     document.getElementById('loginWmsUrl').value = savedUrl;
     if (!savedUrl) {
-        // 提示当前页面地址作为默认猜测
         const guess = location.protocol + '//' + location.hostname + ':9090';
         document.getElementById('loginWmsUrl').placeholder = guess;
     }
-    // 加载上次登录的账号
     const lastUser = localStorage.getItem('wms_last_user') || '';
     document.getElementById('loginUser').value = lastUser;
 
-    // 静默登录:用 localStorage 里的 WMS URL + 上次账号,让 bridge 重新登录
     if (savedUrl && lastUser) {
-        try {
-            // 试一下,如果 bridge 还有 token 就直接进
-            const st = await fetch('/api/wms/state').then(r => r.json());
+        fetch('/api/wms/state').then(r => r.json()).then(st => {
             if (st.data && st.data.loggedIn) {
                 _wmsBase = savedUrl.replace(/\/+$/, '');
                 _currentUser = st.data.user || lastUser;
                 onLoginSuccess(_currentUser, st.data.role || '');
-                return;
             }
-        } catch (e) {}
+        }).catch(() => {});
     }
 }
 
 // ====== 登录(走 bridge 代理避开 CORS) ======
 async function doLogin() {
+    await ensureSession();
     const wms = (document.getElementById('loginWmsUrl').value || '').trim();
     const user = (document.getElementById('loginUser').value || '').trim();
     const pass = document.getElementById('loginPass').value || '';
-    if (!wms) { alert('请填写 WMS 地址'); return; }
-    if (!user || !pass) { alert('请填写账号和密码'); return; }
+    const errEl = document.getElementById('loginError');
+    if (errEl) errEl.textContent = '';
+    if (!user || !pass) { if (errEl) errEl.textContent = t('login.empty'); return; }
     try {
-        // 先把 WMS URL 告诉 bridge(写到 .env 不行,需要运行时注入)
-        // 简单方案:把 URL 编码进 localStorage,登录时通过 query string 传过去
         const r = await fetch('/api/wms/login?wms=' + encodeURIComponent(wms), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -329,22 +765,24 @@ async function doLogin() {
             _currentUser = user;
             onLoginSuccess(user, j.data.role || '');
         } else {
-            alert('登录失败: ' + (j.message || '未知错误'));
+            if (errEl) errEl.textContent = t('login.fail', { msg: j.message || '' });
         }
     } catch (e) {
-        alert('登录失败: 网络错误 - ' + e.message);
+        if (errEl) errEl.textContent = t('login.netErr', { msg: e.message });
     }
 }
 
 function onLoginSuccess(username, role) {
+    if (_bootstrapped) return;   // 幂等:init() 静默登录与手动登录竞态时只走一次
+    _bootstrapped = true;
     document.getElementById('loginView').style.display = 'none';
     document.getElementById('mainView').style.display = '';
     document.getElementById('wmsBadge').className = 'badge online';
-    document.getElementById('wmsBadge').textContent = 'WMS 已登录';
+    document.getElementById('wmsBadge').textContent = t('wms.logged');
     document.getElementById('userInfo').textContent = '👤 ' + username + (role ? ' (' + role + ')' : '');
     document.getElementById('userInfo').style.display = '';
+    document.getElementById('hdrLang').style.display = '';
     document.getElementById('btnLogout').style.display = '';
-    // 启动轮询
     refreshBadges();
     loadOrders();
     pollScanResults();
@@ -352,8 +790,13 @@ function onLoginSuccess(username, role) {
     setInterval(pollScanResults, 1500);
 }
 
-function logout() {
-    if (!confirm('确定退出?')) return;
+async function logout() {
+    if (!confirm(t('logout.confirm'))) return;
+    // 1) 让 bridge 丢弃 WMS token / 作业状态
+    try { await fetch('/api/wms/logout', { method: 'POST' }); } catch (e) {}
+    // 2) 清除本地记住的凭据,init() 不再静默重登
+    try { localStorage.removeItem('wms_base_url'); } catch (e) {}
+    try { localStorage.removeItem('wms_last_user'); } catch (e) {}
     location.reload();
 }
 
@@ -362,15 +805,45 @@ async function refreshBadges() {
         const r = await fetch('/api/wms/reader-info').then(r => r.json());
         const d = r.data || {};
         const rb = document.getElementById('readerBadge');
-        rb.textContent = d.connected ? '读卡器已连' : '读卡器未连';
+        rb.textContent = d.connected ? t('reader.conn') : t('reader.disc');
         rb.className = 'badge ' + (d.connected ? 'online' : 'offline');
         document.getElementById('readerInfo').textContent = d.host + ':' + d.port;
 
         const ws = await fetch('/api/wms/state').then(r => r.json());
         const wb = document.getElementById('wmsBadge');
-        wb.textContent = ws.data && ws.data.loggedIn ? 'WMS 已登录' : 'WMS 未登录';
+        wb.textContent = ws.data && ws.data.loggedIn ? t('wms.logged') : t('wms.not');
         wb.className = 'badge ' + (ws.data && ws.data.loggedIn ? 'online' : 'offline');
     } catch (e) { /* ignore */ }
+}
+
+function renderSelectedInfo() {
+    const el = document.getElementById('selectedInfo');
+    if (!selectedOrderId) { el.textContent = t('main.noOrder'); return; }
+    el.innerHTML = '';
+    el.appendChild(document.createTextNode(t('main.currentOrder') + ' '));
+    const b = document.createElement('b');
+    b.textContent = selectedOrderNo || '';
+    el.appendChild(b);
+}
+
+function setStatText() {
+    const ok = scanResults.filter(s => s.matched).length;
+    const bad = scanResults.filter(s => !s.matched).length;
+    document.getElementById('statInfo').textContent = t('scan.stat', { scanned: scanResults.length, ok: ok, bad: bad });
+}
+
+/* 语言切换后刷新所有 JS 生成的文案 */
+function refreshTexts() {
+    renderSelectedInfo();
+    if (scanResults.length) {
+        renderScan();
+    } else {
+        document.getElementById('scanList').innerHTML =
+            '<div class="empty">' + t(selectedOrderId ? 'scanList.selectHint' : 'scanList.emptyStart') + '</div>';
+        if (selectedOrderId) renderExpectedList(); // 无扫码记录时也要刷新期望计数 + 提交条文案(切语言用)
+    }
+    setStatText();
+    refreshBadges();
 }
 
 async function loadOrders() {
@@ -378,14 +851,14 @@ async function loadOrders() {
     const r = await fetch('/api/wms/draft-orders?keyword=' + encodeURIComponent(kw)).then(r => r.json());
     const orders = (r.data || []);
     const box = document.getElementById('orders');
-    if (!orders.length) { box.innerHTML = '<div class="empty">没有 DRAFT 出库单</div>'; return; }
+    if (!orders.length) { box.innerHTML = '<div class="empty">' + t('orders.empty') + '</div>'; return; }
     box.innerHTML = orders.map(o => `
-        <div class="order-row ${o.id === selectedOrderId ? 'selected' : ''}" data-id="${o.id}" data-no="${o.orderNo}" onclick="selectOrder(${o.id}, '${o.orderNo}')">
+        <div class="order-row ${o.id === selectedOrderId ? 'selected' : ''}" data-id="${o.id}" data-no="${esc(o.orderNo)}" role="button" tabindex="0">
             <div>
-                <span class="no">${o.orderNo}</span>
-                <span style="margin-left:8px;">${o.customer || '-'}</span>
+                <span class="no">${esc(o.orderNo)}</span>
+                <span class="customer">${esc(o.customer || '-')}</span>
             </div>
-            <div class="qty">${o.itemCount || 0} 行 / ${o.totalQuantity || 0} 件</div>
+            <div class="qty">${t('orders.qty', { rows: o.itemCount || 0, qty: o.totalQuantity || 0 })}</div>
         </div>
     `).join('');
 }
@@ -394,18 +867,16 @@ async function selectOrder(id, no) {
     selectedOrderId = id;
     selectedOrderNo = no;
     scanResults = [];
-    document.getElementById('selectedInfo').innerHTML = '已选: <b>' + no + '</b>';
-    document.getElementById('scanList').innerHTML = '<div class="empty">点击「开始扫码」读取 RFID 标签</div>';
+    renderSelectedInfo();
+    document.getElementById('scanList').innerHTML = '<div class="empty">' + t('scanList.selectHint') + '</div>';
     document.querySelectorAll('.order-row').forEach(r => {
         r.classList.toggle('selected', parseInt(r.dataset.id) === id);
     });
-    // 告诉 bridge 选了哪单(给读卡器扫码泵用)
     await fetch('/api/wms/select-order', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({orderId: id})
     });
-    // 拉期望 EPC 列表(从 WMS 直接拉,使用当前用户 token)
     await loadExpectedEpcs();
     await pollScanResults();
 }
@@ -415,13 +886,8 @@ async function loadExpectedEpcs() {
     if (!selectedOrderId) return;
     try {
         const r = await fetch('/api/wms/orders/' + selectedOrderId + '/expect').then(r => r.json());
-        if (r.code === 0) {
-            expectedEpcs = r.data || [];
-            renderExpectedList();
-        } else {
-            expectedEpcs = [];
-            renderExpectedList();
-        }
+        expectedEpcs = (r.code === 0) ? (r.data || []) : [];
+        renderExpectedList();
     } catch (e) {
         expectedEpcs = [];
         renderExpectedList();
@@ -433,13 +899,9 @@ function renderExpectedList() {
     const list = document.getElementById('expectedList');
     const totalEl = document.getElementById('expectedTotal');
     const scannedEl = document.getElementById('expectedScanned');
-    if (!expectedEpcs.length) {
-        panel.style.display = 'none';
-        return;
-    }
+    if (!expectedEpcs.length) { panel.style.display = 'none'; return; }
     panel.style.display = '';
     totalEl.textContent = expectedEpcs.length;
-    // 已扫集合(去重)
     const scannedSet = new Set(scanResults.filter(s => s.matched).map(s => s._epc || s.epc));
     scannedEl.textContent = scannedSet.size;
     list.innerHTML = expectedEpcs.map(e => {
@@ -448,7 +910,7 @@ function renderExpectedList() {
         return `
         <div class="epc-item ${isScanned ? 'scanned' : ''}">
             <span class="check">${isScanned ? '✓' : '·'}</span>
-            <span>${code} <span style="color:#94a3b8;">${e.sku || ''}</span></span>
+            <span>${esc(code)} <span class="sku">${esc(e.sku || '')}</span></span>
             <span></span>
         </div>`;
     }).join('');
@@ -461,44 +923,38 @@ function updateCommitButton() {
     const hint = document.getElementById('commitHint');
     const total = expectedEpcs.length;
     const scanned = new Set(scanResults.filter(s => s.matched).map(s => s._epc || s.epc)).size;
-    if (total === 0) {
-        bar.style.display = 'none';
-        return;
-    }
+    if (total === 0) { bar.style.display = 'none'; return; }
     bar.style.display = '';
     const left = total - scanned;
     if (left <= 0) {
         bar.className = 'commit-bar ready';
-        hint.innerHTML = '<b style="color:#4ade80;">全部 ' + total + ' 件已扫完,可以提交</b>';
+        hint.textContent = t('commit.hintAll', { n: total });
         btn.disabled = false;
     } else {
         bar.className = 'commit-bar notready';
-        hint.textContent = '还需扫 ' + left + ' 件';
+        hint.textContent = t('commit.hintLeft', { n: left });
         btn.disabled = true;
     }
 }
 
-// 注:旧的 refreshState 已合并进 pollScanResults,前端只保留一个轮询入口。
-
 function renderScan() {
-    const list = [...scanResults].reverse();  // 最新在最上面
+    const list = [...scanResults].reverse();
     const box = document.getElementById('scanList');
-    if (!list.length) { box.innerHTML = '<div class="empty">暂无扫码记录</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="empty">' + t('scanList.empty0') + '</div>'; return; }
     box.innerHTML = list.map(s => `
         <div class="scan-row ${s.matched ? 'matched' : 'unmatched'}">
             <div>
-                <div class="epc">${s._epc || s.epc || '?'}</div>
-                <div class="time">${s._ts || ''}</div>
+                <div class="epc">${esc(s._epc || s.epc || '?')}</div>
+                <div class="time">${esc(s._ts || '')}</div>
             </div>
             <div>
                 ${s.matched
-                    ? '<div class="sku">' + (s.sku || '-') + ' <span class="matched-tag">✓ 匹配</span></div><div class="info-line">累计 ' + (s.scannedQty || 0) + ' 件</div>'
-                    : '<div class="sku">— <span class="unmatched-tag">✗ 报警</span></div><div class="reason">' + (s.reason || '?') + '</div>'}
+                    ? '<div class="sku">' + esc(s.sku || '-') + ' <span class="matched-tag">' + t('tag.matched') + '</span></div><div class="info-line">' + t('scan.acc', { n: s.scannedQty || 0 }) + '</div>'
+                    : '<div class="sku">— <span class="unmatched-tag">' + t('tag.unmatched') + '</span></div><div class="reason">' + esc(s.reason || '?') + '</div>'}
             </div>
             <div></div>
         </div>
     `).join('');
-    // 同步期望列表(✓状态)+ 提交按钮
     renderExpectedList();
 }
 
@@ -507,10 +963,8 @@ function pollScanResults() {
     return fetch('/api/wms/state').then(r => r.json()).then(r => {
         const d = (r.data || {});
         const newScanned = d.scanned || [];
-        // 只在数量或最后一条变化时刷新
         if (newScanned.length !== scanResults.length ||
             (newScanned.length && newScanned[newScanned.length-1]._epc !== (scanResults[scanResults.length-1]||{})._epc)) {
-            // 检测新条目,播提示音
             const oldEpcs = new Set(scanResults.map(s => s._epc));
             for (const s of newScanned) {
                 if (!oldEpcs.has(s._epc)) {
@@ -519,11 +973,8 @@ function pollScanResults() {
             }
             scanResults = newScanned;
             renderScan();
-            document.getElementById('statInfo').textContent =
-                '已扫 ' + d.scannedCount + ' (匹配 ' + scanResults.filter(s => s.matched).length +
-                ' / 不匹配 ' + scanResults.filter(s => !s.matched).length + ')';
+            setStatText();
         }
-        // 自动认领:首次连上时,如果有派单且没选单 → 自动选第一个
         if (!selectedOrderId && d.loggedIn && !_dispatchAutoSelectArmed) {
             _dispatchAutoSelectArmed = true;
             autoClaimFirstDispatch();
@@ -532,8 +983,6 @@ function pollScanResults() {
 }
 
 async function autoClaimFirstDispatch() {
-    // 直接调后端 /api/outbound/dispatches?deviceCode=...
-    // 但 UHF 终端本身没有 token,只能通过 bridge 拿
     const r = await fetch('/api/wms/draft-orders').then(r => r.json()).catch(() => ({}));
     const orders = r.data || [];
     if (orders.length) {
@@ -543,14 +992,14 @@ async function autoClaimFirstDispatch() {
 }
 
 async function startRead() {
-    if (!selectedOrderId) { alert('请先选择 DRAFT 出库单'); return; }
+    if (!selectedOrderId) { alert(t('start.noOrder')); return; }
     const r = await fetch('/command/start_read', {method: 'POST'});
     const d = await r.json();
     if (d.success) {
         document.getElementById('btnStart').disabled = true;
         document.getElementById('btnStop').disabled = false;
     } else {
-        alert('启动失败: ' + d.error);
+        alert(t('start.fail', { msg: d.error }));
     }
 }
 async function stopRead() {
@@ -561,10 +1010,12 @@ async function stopRead() {
         document.getElementById('btnStop').disabled = true;
     }
 }
-function clearScanned() {
+async function clearScanned() {
+    // 先清服务端 scanned_cache,再清本地:避免轮询把刚清掉的记录又带回来
+    try { await fetch('/api/wms/scan-clear', { method: 'POST' }); } catch (e) {}
     scanResults = [];
     renderScan();
-    document.getElementById('statInfo').textContent = '已扫 0';
+    setStatText();
 }
 
 // ===== 声音告警(共享 AudioContext,避免反复创建) =====
@@ -574,7 +1025,6 @@ function _ensureCtx() {
         try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
         catch (e) { return null; }
     }
-    // 浏览器策略:用户没交互前 ctx 可能是 suspended,需要 resume
     if (_audioCtx.state === 'suspended') _audioCtx.resume();
     return _audioCtx;
 }
@@ -590,12 +1040,8 @@ function beep(freq, dur, type) {
     osc.start();
     setTimeout(() => { try { osc.stop(); } catch (e) {} }, dur);
 }
-function beepSuccess() {
-    // 扫对:短促 800Hz 100ms "叮"
-    beep(800, 100, 'sine');
-}
+function beepSuccess() { beep(800, 100, 'sine'); }
 function beepFail() {
-    // 扫错:1200Hz 高音 3 短 + 1 长(模仿报警蜂鸣)
     beep(1200, 150, 'square');
     setTimeout(() => beep(1200, 150, 'square'), 200);
     setTimeout(() => beep(1200, 150, 'square'), 400);
@@ -604,11 +1050,11 @@ function beepFail() {
 
 // ===== 手动扫码(无读卡器时也能演示,走 bridge 避开 CORS) =====
 async function manualScan() {
-    if (!selectedOrderId) { alert('请先选择 DRAFT 出库单'); return; }
+    if (!selectedOrderId) { alert(t('manual.noOrder')); return; }
     const input = document.getElementById('manualEpc');
     const epc = (input.value || '').trim().toUpperCase();
-    if (!epc) { alert('请输入 24 位 EPC'); return; }
-    if (epc.length !== 24) { beepFail(); alert('EPC 长度必须 24 位,当前 ' + epc.length); return; }
+    if (!epc) { alert(t('manual.needEpc')); return; }
+    if (epc.length !== 24) { beepFail(); alert(t('manual.badLen', { n: epc.length })); return; }
     const r = await fetch('/api/wms/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -619,63 +1065,78 @@ async function manualScan() {
         scanResults.push(sr);
         if (scanResults.length > 100) scanResults.shift();
         renderScan();
-        if (sr.matched) {
-            beepSuccess();
-            input.value = '';
-        } else {
-            beepFail();
-        }
+        setStatText();
+        if (sr.matched) { beepSuccess(); input.value = ''; }
+        else { beepFail(); }
     } else {
         beepFail();
-        alert('扫码失败: ' + (r.message || 'unknown'));
+        alert(t('manual.fail', { msg: r.message || 'unknown' }));
     }
 }
 
 // ===== 提交出库(全部扫完才允许,走 bridge 避开 CORS) =====
 async function doCommit() {
-    if (!selectedOrderId) { alert('请先选择出库单'); return; }
-    if (!confirm('确认提交出库单 ' + selectedOrderNo + ' ?\n提交后库存将正式扣减,出库单状态变为 COMMITTED。')) return;
+    if (!selectedOrderId) { alert(t('start.noOrder')); return; }
+    if (!confirm(t('commit.confirm', { no: selectedOrderNo }))) return;
     const btn = document.getElementById('btnCommit');
     btn.disabled = true;
-    btn.textContent = '提交中...';
+    btn.textContent = t('commit.busy');
     try {
         const r = await fetch('/api/wms/orders/' + selectedOrderId + '/commit', {
             method: 'POST'
         }).then(r => r.json());
         if (r.code === 0) {
-            showResult(true, '✓ 提交成功', '出库单 ' + selectedOrderNo + ' 已正式出库\n共 ' + (r.data.totalQuantity || 0) + ' 件');
-            // 清空状态
+            showResult(true, t('result.titleOk'), t('result.bodyOk', { no: selectedOrderNo, qty: (r.data.totalQuantity || 0) }));
+            // 通知 bridge 反选:清掉该单的 scanned_cache/期望,派单轮询才能认领下一单,
+            // 否则轮询会把已提交单的扫码记录重新导回界面并逐条响铃。
+            try {
+                await fetch('/api/wms/select-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ orderId: null })
+                });
+            } catch (e) {}
             selectedOrderId = null;
             selectedOrderNo = null;
             scanResults = [];
             expectedEpcs = [];
             document.getElementById('expectedPanel').style.display = 'none';
             document.getElementById('commitBar').style.display = 'none';
-            document.getElementById('selectedInfo').textContent = '当前未选单';
+            renderSelectedInfo();
             loadOrders();
         } else {
-            showResult(false, '✗ 提交失败', r.message || '未知错误');
+            showResult(false, t('result.titleFail'), r.message || '');
         }
     } catch (e) {
-        showResult(false, '✗ 提交失败', '网络错误: ' + e.message);
+        showResult(false, t('result.titleFail'), t('result.netErr', { msg: e.message }));
     } finally {
-        btn.textContent = '✓ 提交出库';
+        btn.textContent = t('commit.btn');
         btn.disabled = false;
     }
 }
 
 function showResult(ok, title, body) {
-    const m = document.getElementById('resultModal');
     document.getElementById('resultTitle').textContent = title;
     const b = document.getElementById('resultBody');
     b.className = ok ? 'ok' : 'err';
     b.textContent = body;
     document.getElementById('resultDetail').style.display = 'none';
-    m.classList.add('show');
+    document.getElementById('resultModal').classList.add('show');
 }
 function closeResultModal() {
     document.getElementById('resultModal').classList.remove('show');
 }
+
+// 出库单行点击(事件委托,代替内联 onclick,避免 orderNo 拼进代码造成注入)
+document.getElementById('orders').addEventListener('click', (e) => {
+    const row = e.target.closest('.order-row');
+    if (!row) return;
+    const id = parseInt(row.dataset.id, 10);
+    if (id) selectOrder(id, row.dataset.no || '');
+});
+
+// ====== 启动 ======
+init();
 </script>
 </body>
 </html>

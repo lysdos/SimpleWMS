@@ -12,9 +12,9 @@ window.UserAdminView = {
                 <td>${u.enabled ? '✅' : '❌'}</td>
                 <td>${u.mustChangePw ? '⚠️' : ''}</td>
                 <td>
-                    <button class="btn-link" onclick="UserAdminView.resetPw(${u.id}, '${escapeHtml(u.username)}')">${t('user.btn.reset_pw')}</button>
+                    <button class="btn-link" onclick="UserAdminView.resetPw(${u.id})">${t('user.btn.reset_pw')}</button>
                     <button class="btn-link" onclick="UserAdminView.toggleEnabled(${u.id}, ${!u.enabled})">${u.enabled ? t('user.btn.disable') : t('user.btn.enable')}</button>
-                    <button class="btn-link danger" ${isSelf ? `disabled title="${t('user.cant_delete_self')}"` : ''} onclick="UserAdminView.deleteUser(${u.id}, '${escapeHtml(u.username)}')">${t('user.btn.delete')}</button>
+                    <button class="btn-link danger" ${isSelf ? `disabled title="${t('user.cant_delete_self')}"` : ''} onclick="UserAdminView.deleteUser(${u.id})">${t('user.btn.delete')}</button>
                 </td>
             </tr>`;
         }).join('');
@@ -61,8 +61,12 @@ window.UserAdminView = {
             } catch (e) { toast(e.message, 'error'); return false; }
         });
     },
-    async resetPw(id, name) {
-        const pw = prompt(t('user.prompt.reset_pw', { n: name }));
+    async resetPw(id) {
+        // 不再接受 name 参数(避免用户名拼进 inline onclick)。从已加载的 state.users
+        // 查显示名;若未加载回退用 ID。
+        const u = (state.users || []).find(x => x.id === id);
+        const label = u ? u.username : ('#' + id);
+        const pw = prompt(t('user.prompt.reset_pw', { n: label }));
         if (!pw) return;
         try {
             await api.post(`/api/users/${id}/password`, { password: pw });
@@ -76,8 +80,10 @@ window.UserAdminView = {
             loadUsers();
         } catch (e) { toast(e.message, 'error'); }
     },
-    async deleteUser(id, name) {
-        confirmModal(t('user.confirm.del', { n: name }), async () => {
+    async deleteUser(id) {
+        const u = (state.users || []).find(x => x.id === id);
+        const label = u ? u.username : ('#' + id);
+        confirmModal(t('user.confirm.del', { n: label }), async () => {
             try {
                 await api.del('/api/users/' + id);
                 toast(t('user.toast.deleted'), 'success');

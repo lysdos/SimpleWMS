@@ -55,6 +55,23 @@ public class UserDao {
         }
     }
 
+    /** 只取状态字段,供过滤器每请求回查(不取 hash 减传输)。 */
+    public Optional<UserStatus> findStatusById(int id) {
+        try {
+            return Optional.ofNullable(jdbc.queryForObject(
+                    "SELECT id, enabled, must_change_pw FROM app_user WHERE id = ?",
+                    (rs, n) -> new UserStatus(rs.getInt("id"),
+                                               rs.getBoolean("enabled"),
+                                               rs.getBoolean("must_change_pw")),
+                    id));
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 轻量状态载体(给 UserStatusFilter 用) */
+    public record UserStatus(int id, boolean enabled, boolean mustChangePw) {}
+
     public List<AppUser> listAll() {
         return jdbc.query(
             "SELECT id, username, password_hash, role, enabled, must_change_pw " +

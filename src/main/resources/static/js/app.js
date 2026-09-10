@@ -465,7 +465,7 @@ async function openStockCheckDetail(id) {
             }
         });
         const exp = document.getElementById('sc-export-btn');
-        if (exp) exp.onclick = () => window.open(`/api/stock-checks/${c.id}/export.csv`, '_blank');
+        if (exp) exp.onclick = () => api.download(`/api/stock-checks/${c.id}/export.csv`, `stock-check-${c.id}.csv`).catch(e => toast(e.message, 'error'));
         const cancelBtn = document.getElementById('sc-cancel-btn');
         if (cancelBtn) cancelBtn.onclick = async () => {
             try {
@@ -551,20 +551,18 @@ function gotoOrderPage(p) {
     loadOrders();
 }
 
-async function viewOrderDetail(orderNo) {
+async function viewOrderDetail(id) {
     const tt = state.orderType || 'IN';
     const base = tt === 'IN' ? '/api/inbound' : '/api/outbound';
-    if (state._viewingOrder === orderNo) return;
-    state._viewingOrder = orderNo;
+    if (state._viewingOrder === id) return;
+    state._viewingOrder = id;
     try {
-        const data = await api.get(`${base}/orders?keyword=${encodeURIComponent(orderNo)}&status=ALL&pageSize=1`);
-        const hit = (data.list || []).find(o => o.orderNo === orderNo);
-        if (!hit) { toast(t('err.not_found'), 'error'); return; }
-        const full = await api.get(`${base}/orders/${hit.id}`);
+        // 不再用 orderNo 拼进 inline onclick;按 ID 直接拉详情
+        const full = await api.get(`${base}/orders/${id}`);
         if (!full || !full.id) { toast(t('err.empty'), 'error'); return; }
         const inventoryPath = tt === 'IN'
-            ? `/api/inventory/items/by-inbound/${hit.id}`
-            : `/api/inventory/items/by-outbound/${hit.id}`;
+            ? `/api/inventory/items/by-inbound/${id}`
+            : `/api/inventory/items/by-outbound/${id}`;
         try {
             const items = await api.get(inventoryPath);
             const map = {};
@@ -625,12 +623,15 @@ async function cancelInboundOrder(id, orderNo) {
     }
 }
 
-/* 提交出库单 */
-async function commitOutboundOrder(id, orderNo) {
-    if (!confirm(t('outbound.confirm_commit', { n: orderNo }))) return;
+/* 提交出库单(只传 ID,显示单号从已加载列表里取;防止 orderNo 被注入 inline onclick) */
+async function commitOutboundOrder(id) {
+    const o = (state.outboundRecentOrders || []).find(x => x.id === id)
+              || (state.outboundOrders || []).find(x => x.id === id);
+    const no = o ? o.orderNo : ('#' + id);
+    if (!confirm(t('outbound.confirm_commit', { n: no }))) return;
     try {
         await api.post(`/api/outbound/orders/${id}/commit`);
-        toast(t('outbound.toast.committed', { n: orderNo }));
+        toast(t('outbound.toast.committed', { n: no }));
         closeModal();
         await loadOutbound();
     } catch (e) {
@@ -639,11 +640,14 @@ async function commitOutboundOrder(id, orderNo) {
 }
 
 /* 取消出库单 */
-async function cancelOutboundOrder(id, orderNo) {
-    if (!confirm(t('outbound.confirm_cancel', { n: orderNo }))) return;
+async function cancelOutboundOrder(id) {
+    const o = (state.outboundRecentOrders || []).find(x => x.id === id)
+              || (state.outboundOrders || []).find(x => x.id === id);
+    const no = o ? o.orderNo : ('#' + id);
+    if (!confirm(t('outbound.confirm_cancel', { n: no }))) return;
     try {
         await api.post(`/api/outbound/orders/${id}/cancel`);
-        toast(t('outbound.toast.cancelled', { n: orderNo }));
+        toast(t('outbound.toast.cancelled', { n: no }));
         closeModal();
         await loadOutbound();
     } catch (e) {
@@ -677,15 +681,15 @@ function _beep(freq, durationMs) {
     }
 }
 
-async function dispatchToUhf(orderId, deviceCode) {
+async function dispatchToUhf(orderId) {
+    // 不再接受 deviceCode 字符串参数(避免把设备号拼进 inline onclick 造成 HTML/JS 逃逸)。
+    // 设备号由后端默认(UHF-Rader .env 的 DEFAULT_DEVICE_CODE)。
+    const deviceCode = 'MOCK-UHF-001';
     try {
-        const resp = await api.post(`/api/outbound/orders/${orderId}/dispatch`,
-            { deviceCode: deviceCode || 'MOCK-UHF-001' });
+        await api.post(`/api/outbound/orders/${orderId}/dispatch`, { deviceCode });
         toast(`已下发到 UHF (${deviceCode})`);
-        // 重新拉详情刷新面板
         if (typeof viewOrderDetail === 'function') {
-            const fresh = await api.get(`/api/outbound/orders/${orderId}`);
-            viewOrderDetail(fresh.data.orderNo, fresh.data);
+            viewOrderDetail(orderId);
         }
     } catch (e) {
         toast(e.message || '下发失败', 'error');
@@ -777,8 +781,11 @@ async function editProduct(id) {
     } catch (e) { toast(e.message, 'error'); }
 }
 
-function delProduct(id, name) {
-    confirmModal(`${t('common.confirm_delete')}「${name}」?${t('common.delete_irreversible')}`, async () => {
+function delProduct(id) {
+    // 仅传 ID,显示名从已加载的 state 里取(避免把商品名拼进 inline onclick 造成 XSS 逃逸)
+    const p = (state.products || []).find(x => x.id === id);
+    const label = p ? p.name : ('#' + id);
+    confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}`, async () => {
         try {
             await api.del('/api/products/' + id);
             toast(t('common.success.delete'), 'success');
@@ -866,8 +873,10 @@ async function editSupplier(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delSupplier(id, name) {
-    confirmModal(`${t('common.confirm_delete')}「${name}」?${t('common.delete_irreversible')}`, async () => {
+function delSupplier(id) {
+    const s = (state.suppliers || []).find(x => x.id === id);
+    const label = s ? s.name : ('#' + id);
+    confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}`, async () => {
         try {
             await api.del('/api/suppliers/' + id);
             toast(t('common.success.delete'), 'success');
@@ -921,8 +930,10 @@ async function editLocation(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delLocation(id, code) {
-    confirmModal(`${t('common.confirm_delete')}「${code}」?${t('common.delete_irreversible')}\n\n${t('location.del_tip')}`, async () => {
+function delLocation(id) {
+    const l = (state.locations || []).find(x => x.id === id);
+    const label = l ? l.code : ('#' + id);
+    confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}\n\n${t('location.del_tip')}`, async () => {
         try {
             await api.del('/api/locations/' + id);
             toast(t('common.success.delete'), 'success');
@@ -1133,8 +1144,8 @@ function readNewOrderItems() {
 async function submitNewOrder() {
     const type = document.getElementById('nw-type').value;
     const items = readNewOrderItems();
-    if (items == null) return;
-    if (items.length === 0) { toast(t('new_order.err.no_items'), 'error'); return; }
+    if (items == null) return false;
+    if (items.length === 0) { toast(t('new_order.err.no_items'), 'error'); return true; }
 
     const body = {
         externalNo: (document.getElementById('nw-external-no') || {}).value?.trim() || '',
@@ -1147,13 +1158,19 @@ async function submitNewOrder() {
         for (const it of items) need.set(it.productId, (need.get(it.productId) || 0) + it.quantity);
         for (const [pid, qty] of need) {
             const p = state.products.find(x => x.id === pid);
-            if (!p) { toast(t('new_order.err.product_missing') + ' id=' + pid, 'error'); return; }
+            if (!p) { toast(t('new_order.err.product_missing') + ' id=' + pid, 'error'); return true; }
             if (p.quantity < qty) {
                 toast(t('new_order.err.stock_low') + `: SKU ${p.sku} ${p.quantity}/${qty}`, 'error');
-                return;
+                return true;
             }
         }
     }
+
+    // 防双击:已提交中则忽略后续点击(showModal 的 keep=true 让按钮在失败时也保留,
+    // 但这里再把按钮置 disabled 直到请求完成,避免用户连续点击 2 次产生重复单)。
+    const okBtn = document.getElementById('modal-ok');
+    if (okBtn && okBtn._inFlight) return true;
+    if (okBtn) { okBtn._inFlight = true; okBtn.disabled = true; okBtn.textContent = t('common.submitting') || t('common.submit') + '…'; }
 
     const url = type === 'IN' ? '/api/inbound/batch' : '/api/outbound/batch';
     try {
@@ -1162,11 +1179,16 @@ async function submitNewOrder() {
         toast(`${type === 'IN' ? t('new_order.toast.in_done') : t('new_order.toast.out_done')}: ${cnt}`, 'success');
         state.products = [];
         await ensureProducts();
-        closeModal();
         if (type === 'IN') openInboundOrderModal(order);
         else              openOutboundOrderModal(order);
         if (type === 'IN') await loadInbound(); else await loadOutbound();
-    } catch (e) { toast(e.message, 'error'); }
+        return false;   // 关闭弹窗
+    } catch (e) {
+        toast(e.message, 'error');
+        // 失败保留弹窗,让用户改正后再提交;恢复按钮
+        if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('common.submit'); }
+        return true;
+    }
 }
 
 function openInboundOrderModal(order) {

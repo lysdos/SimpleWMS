@@ -27,7 +27,12 @@ public class OutboundOrderDao {
     public int insertOrder(OutboundOrder o){String q="INSERT INTO outbound_order (order_no, customer, external_no, remark, operator, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?,?)";KeyHolder h=new GeneratedKeyHolder();jdbc.update(c->{PreparedStatement p=c.prepareStatement(q,new String[]{"id"});p.setString(1,o.getOrderNo());p.setString(2,o.getCustomer());p.setString(3,o.getExternalNo());p.setString(4,o.getRemark());p.setString(5,o.getOperator());p.setInt(6,o.getTotalQuantity()==null?0:o.getTotalQuantity());p.setInt(7,o.getItemCount()==null?0:o.getItemCount());p.setString(8,o.getStatus()==null?OutboundOrder.STATUS_DRAFT:o.getStatus());return p;},h);Number k=h.getKey();if(k==null){Map<String,Object>m=h.getKeys();if(m!=null&&m.get("id")!=null)k=(Number)m.get("id");}return k==null?0:k.intValue();}
     public void insertItem(OutboundOrderItem i){jdbc.update("INSERT INTO outbound_order_item (order_id, product_id, sku, product_name, quantity, unit_price, before_qty, after_qty, location, row_remark) VALUES (?,?,?,?,?,?,?,?,?,?)",i.getOrderId(),i.getProductId(),i.getSku(),i.getProductName(),i.getQuantity(),i.getUnitPrice(),i.getBeforeQty(),i.getAfterQty(),i.getLocation(),i.getRowRemark());}
     public int updateItemQuantity(int itemId,int quantity){return jdbc.update("UPDATE outbound_order_item SET quantity=? WHERE id=?",quantity,itemId);}
-    public int updateStatus(int id,String status){return jdbc.update("UPDATE outbound_order SET status=? WHERE id=?",status,id);}
+    /** 仅当订单仍为 DRAFT 时才推进状态(影响行数 0 = 已被并发/手工修改过,commit/cancel 应放弃) */
+    public int updateStatusFromDraft(int id, String newStatus) {
+        return jdbc.update(
+            "UPDATE outbound_order SET status=? WHERE id=? AND status=?",
+            newStatus, id, OutboundOrder.STATUS_DRAFT);
+    }
     public void refreshAggregates(int id){jdbc.update("UPDATE outbound_order o SET total_quantity=COALESCE((SELECT SUM(quantity) FROM outbound_order_item WHERE order_id=o.id),0),item_count=COALESCE((SELECT COUNT(*) FROM outbound_order_item WHERE order_id=o.id),0) WHERE o.id=?",id);}
     public int deleteItemsByOrderId(int id){return jdbc.update("DELETE FROM outbound_order_item WHERE order_id=?",id);}
     public OutboundOrder findOrderById(int id){List<OutboundOrder>l=jdbc.query("SELECT * FROM outbound_order WHERE id=?",ORDER_ROW,id);return l.isEmpty()?null:l.get(0);}

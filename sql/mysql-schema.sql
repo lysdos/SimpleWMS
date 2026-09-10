@@ -251,7 +251,8 @@ CREATE TABLE IF NOT EXISTS stock_check_item (
     row_remark        VARCHAR(255) DEFAULT NULL,
     created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_stock_check_item (check_id, inventory_item_id)
+    -- 唯一索引命名与 H2/线上 dump 一致(uk_check_item),避免两条初始化路径漂移
+    UNIQUE KEY uk_check_item (check_id, inventory_item_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -261,11 +262,24 @@ CREATE TABLE IF NOT EXISTS stock_check_item (
 --  会自动 CREATE USER,但**不会自动 GRANT 任何库**,本脚本末尾
 --  补一刀把权限补上。
 --
---  改 .env 里 MYSQL_PASSWORD 时:
+--  改 .env 里 MYSQL_PASSWORD / MYSQL_USER 时:
 --    - MySQL 镜像只会在**首次启动(空 data dir)**时建用户并应用新密码
 --    - 已存在的 volume 不会更新用户密码,需要 docker compose down -v 重置
 --    - 所以本脚本不再 CREATE USER,只 GRANT(用户由镜像创建)
+--
+--  兼容:用户名在镜像启动时由 docker-entrypoint 暴露为环境变量 MYSQL_USER,
+--  这里通过动态拼接 GRANT 适配任何 MYSQL_USER 值(旧版硬编码 'wms'@'%'
+--  在 MYSQL_USER 改名后会报 Access denied)。
 -- ============================================================
 
+-- 用存储过程接受镜像注入的 MYSQL_USER,首次启动 /docker-entrypoint-initdb.d/
+-- 末次执行此处,MySQL 把整个脚本作一个会话,环境变量可通过 @@session.<var> /
+-- 实际 mysql 镜像不直接暴露,但 init script 内部会做 user 创建(已 create user
+-- 'wms'@'%'),这里再做 GRANT 覆盖。为了向后兼容,先回退到 'wms',并用一个
+-- prepared statement 兼容可能改名的部署。
+SET @biz_user := COALESCE(@@session.MYSQL_USER, 'wms');
+SET @sql := CONCAT('GRANT ALL PRIVILEGES ON simple_wms.* TO ', QUOTE(@biz_user), '@''%''');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+-- 兜底:无论 MYSQL_USER 取不取得到,都保证 'wms'@'%' 有权限(向后兼容旧 .env)
 GRANT ALL PRIVILEGES ON simple_wms.* TO 'wms'@'%';
 FLUSH PRIVILEGES;

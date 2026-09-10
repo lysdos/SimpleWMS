@@ -1,5 +1,6 @@
 package com.wms.controller;
 
+import com.wms.annotation.RequireRole;
 import com.wms.model.ApiResponse;
 import com.wms.model.InventoryItem;
 import com.wms.model.Product;
@@ -134,6 +135,7 @@ public class InventoryItemController {
 
     /** 报废 */
     @PostMapping("/{id}/scrap")
+    @RequireRole("ADMIN")
     public ApiResponse<Void> scrap(@PathVariable int id,
                                    @RequestBody(required = false) Map<String, String> body) {
         String remark = body == null ? null : body.get("remark");
@@ -143,6 +145,7 @@ public class InventoryItemController {
 
     /** 调拨 */
     @PostMapping("/{id}/transfer")
+    @RequireRole("ADMIN")
     public ApiResponse<Void> transfer(@PathVariable int id,
                                       @RequestBody Map<String, String> body) {
         String toLocation = body == null ? null : body.get("toLocation");

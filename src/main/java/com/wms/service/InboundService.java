@@ -194,7 +194,10 @@ public class InboundService {
         if (operator == null || operator.isBlank()) operator = "操作员";
         activateItemsAndLog(items, operator, orderId);
 
-        orderDao.updateStatus(orderId, InboundOrder.STATUS_COMMITTED);
+        // 关键:状态推进带 WHERE status='DRAFT' 守卫,影响 0 行=并发竞争,事务整体回滚
+        if (orderDao.updateStatusFromDraft(orderId, InboundOrder.STATUS_COMMITTED) == 0) {
+            throw new IllegalStateException("入库单已被并发处理,放弃本次提交");
+        }
         return getOrderWithCodes(orderId);
     }
 
@@ -239,7 +242,9 @@ public class InboundService {
 
         // 3) 主表 aggregates 清零 + status 改 CANCELLED
         orderDao.refreshAggregates(orderId);
-        orderDao.updateStatus(orderId, InboundOrder.STATUS_CANCELLED);
+        if (orderDao.updateStatusFromDraft(orderId, InboundOrder.STATUS_CANCELLED) == 0) {
+            throw new IllegalStateException("入库单已被并发处理,放弃本次取消");
+        }
     }
 
     /**

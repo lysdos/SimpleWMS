@@ -27,7 +27,26 @@ const api = {
     get(url)        { return fetch(url, { headers: this._hdr() }).then(r => this._handle(r)); },
     post(url, body) { return fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) }).then(r => this._handle(r)); },
     put(url, body)  { return fetch(url, { method: 'PUT',  headers: this._hdr(), body: JSON.stringify(body || {}) }).then(r => this._handle(r)); },
-    del(url)        { return fetch(url, { method: 'DELETE', headers: this._hdr() }).then(r => this._handle(r)); }
+    del(url)        { return fetch(url, { method: 'DELETE', headers: this._hdr() }).then(r => this._handle(r)); },
+
+    /** 导出 CSV / 二进制:用 fetch 带 Authorization 头,再以 Blob 触发下载。
+     *  直接 <a href> 或 window.open 顶层导航不会带 Authorization,会 401。 */
+    async download(url, filename) {
+        const res = await fetch(url, { headers: this._hdr() });
+        if (res.status === 401) {
+            Auth.clearToken();
+            if (!location.pathname.endsWith('/login.html')) location.href = '/login.html';
+            throw new Error('未登录');
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename || url.split('/').pop() || 'download';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+    }
 };
 
 /* ---------- Toast ---------- */
@@ -49,9 +68,25 @@ function showModal(title, bodyHtml, onOk) {
     const ok = document.getElementById('modal-ok');
     const newOk = ok.cloneNode(true);
     ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', () => {
-        if (onOk && onOk() === false) return;  // 返回 false 表示不关闭
-        closeModal();
+    // onOk 可能是同步函数(返回 true/false 决定是否关闭)或返回 Promise。
+    // 之前只识别同步 false,Promise 一律被吞 → 校验/网络错误时弹窗也关闭、输入丢失。
+    newOk.addEventListener('click', async () => {
+        if (!onOk) { closeModal(); return; }
+        let keep = false;
+        let resolved = false;
+        try {
+            const ret = onOk();
+            if (ret && typeof ret.then === 'function') {
+                resolved = true;
+                keep = await ret.then(v => v === false, () => true);  // 抛错时 keep=true 不关闭
+            } else {
+                keep = ret === false;
+            }
+        } catch (e) {
+            if (!resolved) toast(e.message || t('err.network'), 'error');
+            keep = true;   // 出错保留弹窗,展示后续错误
+        }
+        if (!keep) closeModal();
     });
 }
 function closeModal() {

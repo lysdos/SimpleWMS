@@ -352,9 +352,11 @@ public class InventoryItemDao {
         int left = needQty;
         for (InventoryItem it : units) {
             if (left <= 0) break;
+            // 关键:UPDATE 带 AND status='IN_STOCK' 守卫,并发预留同一行时只有一个能成功
             int n = jdbc.update(
                     "UPDATE inventory_item SET status = ?, " +
-                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP " +
+                    "WHERE id = ? AND status = 'IN_STOCK'",
                     InventoryItem.STATUS_RESERVED, outboundOrderId, it.getId());
             if (n > 0) { result.rows++; result.units += 1; left--; }
         }
@@ -369,9 +371,11 @@ public class InventoryItemDao {
         for (InventoryItem it : legacy) {
             if (left <= 0) break;
             int take = Math.min(left, it.getRemaining());
+            // 同上加守卫,防两个 DRAFT 并发把同一老数据行预留两次
             int n = jdbc.update(
                     "UPDATE inventory_item SET status = ?, " +
-                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP " +
+                    "WHERE id = ? AND status = 'IN_STOCK'",
                     InventoryItem.STATUS_RESERVED, outboundOrderId, it.getId());
             if (n > 0) {
                 result.rows++;

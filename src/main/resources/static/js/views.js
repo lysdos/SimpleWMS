@@ -154,7 +154,7 @@ const Views = {
                     <td class="num">¥${formatMoney((p.unitPrice||0)*p.quantity)}</td>
                     <td class="actions">
                         <button class="btn-link" onclick="editProduct(${p.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delProduct(${p.id}, '${escapeHtml(p.name)}')">${t('common.delete')}</button>
+                        <button class="btn-link danger" onclick="delProduct(${p.id})">${t('common.delete')}</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -246,7 +246,7 @@ const Views = {
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
                 <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
-                    <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">${t('common.view')}</button>
+                    <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
                 </td>
             </tr>`;
@@ -295,8 +295,8 @@ const Views = {
         return recentOrders.map(o => {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
-                ? `<button class="btn-link" onclick="commitOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
-                   <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.cancel')}</button>`
+                ? `<button class="btn-link" onclick="commitOutboundOrder(${o.id})">${t('common.commit')}</button>
+                   <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id})">${t('common.cancel')}</button>`
                 : '';
             return `
             <tr>
@@ -307,7 +307,7 @@ const Views = {
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
                 <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
-                    <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">${t('common.view')}</button>
+                    <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
                 </td>
             </tr>`;
@@ -493,8 +493,8 @@ const Views = {
             <button class="btn btn-sm" onclick="printOutboundOrder()">🖨 ${t('common.print')}</button>
             <a class="btn btn-sm" href="/api/outbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
             ${o.status === 'DRAFT' ? `
-                <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.commit')}</button>
-                <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelOutboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('outbound_order.btn.cancel')}</button>
+                <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitOutboundOrder(${o.id})">${t('outbound_order.btn.commit')}</button>
+                <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelOutboundOrder(${o.id})">${t('outbound_order.btn.cancel')}</button>
             ` : ''}
         </div>`;
     },
@@ -519,7 +519,7 @@ const Views = {
                     <span style="color:#6b7280;font-weight:normal;font-size:12px;margin-left:8px;">目标设备: ${escapeHtml(device)}</span>
                 </div>
                 ${!dispatched ? `
-                    <button class="btn btn-sm btn-primary" onclick="dispatchToUhf(${o.id}, '${escapeHtml(device)}')">📤 下发到 UHF</button>
+                    <button class="btn btn-sm btn-primary" onclick="dispatchToUhf(${o.id})">📤 下发到 UHF</button>
                 ` : ''}
             </div>
             ${dispatched ? `
@@ -563,7 +563,7 @@ const Views = {
                     : `<span class="badge out">${t('orders.badge.out')}</span>`;
                 const partner = (type === 'IN')
                     ? (o.externalNo ? `[${t('orders.col.external_no')}] ${escapeHtml(o.externalNo)}` : '—')
-                    : (o.customer || '-');
+                    : escapeHtml(o.customer || '-');
                 return `
                 <tr>
                     <td>${o.id}</td>
@@ -576,7 +576,7 @@ const Views = {
                     <td>${escapeHtml(o.operator || '')}</td>
                     <td>${formatDate(o.createdAt)}</td>
                     <td class="actions">
-                        <button class="btn-link" onclick="viewOrderDetail('${o.orderNo}')">${t('common.view')}</button>
+                        <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -817,7 +817,7 @@ const Views = {
                     <td>${s.enabled === false ? `<span class="badge low">${t('supplier.status.disabled')}</span>` : `<span class="badge ok">${t('supplier.status.enabled')}</span>`}</td>
                     <td class="actions">
                         <button class="btn-link" onclick="editSupplier(${s.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delSupplier(${s.id}, '${escapeHtml(s.name)}')">${t('common.delete')}</button>
+                        <button class="btn-link danger" onclick="delSupplier(${s.id})">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         return `
@@ -910,7 +910,7 @@ const Views = {
                     <td>${l.enabled === false ? `<span class="badge low">${t('location.status.disabled')}</span>` : `<span class="badge ok">${t('location.status.enabled')}</span>`}</td>
                     <td class="actions">
                         <button class="btn-link" onclick="editLocation(${l.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delLocation(${l.id}, '${escapeHtml(l.code)}')">${t('common.delete')}</button>
+                        <button class="btn-link danger" onclick="delLocation(${l.id})">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         return `
@@ -999,7 +999,7 @@ const Views = {
                     <td>${formatDate(c.createdAt)}</td>
                     <td class="actions">
                         <button class="btn-link" onclick="openStockCheckDetail(${c.id})">${t('common.view')}</button>
-                        ${c.status === 'COMMITTED' ? `<a class="btn-link" href="/api/stock-checks/${c.id}/export.csv">${t('common.export')}</a>` : ''}
+                        ${c.status === 'COMMITTED' ? `<button class="btn-link" onclick="api.download('/api/stock-checks/${c.id}/export.csv','stock-check-${c.id}.csv').catch(e=>toast(e.message,'error'))">${t('common.export')}</button>` : ''}
                     </td>
                 </tr>`).join('');
         return `

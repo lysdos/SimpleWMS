@@ -1,10 +1,13 @@
 package com.wms.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.time.LocalDateTime;
 
 public class AppUser {
     private Integer id;
     private String username;
+    @JsonIgnore   // 永远不要随 JSON 序列化返回(管理接口曾把哈希直接暴露给所有 ADMIN)
     private String passwordHash;
     private String role;          // "ADMIN" | "OPERATOR"
     private Boolean enabled;

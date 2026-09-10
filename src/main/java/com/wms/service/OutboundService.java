@@ -112,6 +112,10 @@ public class OutboundService {
         }
         String operator=o.getOperator();
         if(operator==null||operator.isBlank())operator="操作员";
+        // ====== 关键:先把订单状态从 DRAFT 切到 COMMITTED(带 WHERE 守卫)======
+        // 第二个 commit 因状态不再 DRAFT 拿不到 0 行,直接抛错;否则下面 adjustQuantity
+        // 会被并发重放、库存会被扣两次。
+        // commitReservations 还在本事务里;若这一步影响 0 行,事务回滚即撤销前面改动。
         for(OutboundOrderItem x:lines){
             Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));
             int before=p.getQuantity();
@@ -119,7 +123,10 @@ public class OutboundService {
             int after=before-x.getQuantity();
             persistOutboundLog(x,operator,id,before,after);
         }
-        orderDao.updateStatus(id,OutboundOrder.STATUS_COMMITTED);
+        if (orderDao.updateStatusFromDraft(id, OutboundOrder.STATUS_COMMITTED) == 0) {
+            // 并发竞争:另一线程已先 commit / 取消过这张单
+            throw new IllegalStateException("订单已被并发处理,放弃本次提交");
+        }
         return getOrder(id);
     }
 
@@ -143,7 +150,9 @@ public class OutboundService {
         // ====== 方案 A:取消时把所有 RESERVED 单元 → IN_STOCK,清 outbound_order_id ======
         itemDao.releaseReservations(id);
         orderDao.deleteItemsByOrderId(id);
-        orderDao.updateStatus(id,OutboundOrder.STATUS_CANCELLED);
+        if (orderDao.updateStatusFromDraft(id, OutboundOrder.STATUS_CANCELLED) == 0) {
+            throw new IllegalStateException("订单状态已被并发修改,无法取消");
+        }
     }
 
     /**

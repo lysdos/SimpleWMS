@@ -183,9 +183,11 @@ public class OutboundController {
      * 只有 DRAFT 状态、未被下发过的出库单可下发。
      */
     @PostMapping("/orders/{id}/dispatch")
-    public ApiResponse<OutboundOrder> dispatch(@PathVariable int id, @RequestBody Map<String, Object> body) {
+    public ApiResponse<OutboundOrder> dispatch(@PathVariable int id, @RequestBody Map<String, Object> body,
+                                                HttpServletRequest req) {
         String deviceCode = asString(body.get("deviceCode"));
-        return ApiResponse.ok(outboundService.dispatchToUhf(id, deviceCode, "admin"));
+        // 派单审计字段:用当前登录用户名,而非写死 "admin"
+        return ApiResponse.ok(outboundService.dispatchToUhf(id, deviceCode, currentOperator(req)));
     }
 
     /**

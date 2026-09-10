@@ -33,24 +33,34 @@ public class UserService {
     }
 
     /** 启动时若 app_user 为空,用 env 创建首账号 (admin, ADMIN, mustChangePw=true)。
-     *  未设置 admin.password 时,降级使用开发默认密码 'admin123',并打 WARN 提醒生产环境务必覆盖。 */
+     *  强制要求 env 中显式提供 admin.password(已知默认 'admin123' / 'change-me-now'
+     *  一律拒绝),避免新部署撞到公开可猜口令。 */
     @Transactional
     public void bootstrapIfEmpty() {
         if (userDao.count() > 0) return;
-        String pwd = (adminPassword == null || adminPassword.isBlank())
-                ? "admin123" : adminPassword;
         if (adminPassword == null || adminPassword.isBlank()) {
-            log.warn("[UserService] 未设置 admin.password,使用开发默认密码 'admin123'。"
-                    + "生产环境请通过环境变量 admin.password=... 覆盖,并立即登录后修改。");
+            throw new IllegalStateException(
+                "首次启动缺少 admin.password 配置。请在 .env 里设置 ADMIN_PASSWORD=<强口令> 后再启动。");
+        }
+        if (isWeakKnownDefault(adminPassword)) {
+            throw new IllegalStateException(
+                "admin.password 命中已知弱默认口令;请改用强口令后再启动。");
         }
         AppUser u = new AppUser();
         u.setUsername(adminUsername);
-        u.setPasswordHash(passwordService.hash(pwd));
+        u.setPasswordHash(passwordService.hash(adminPassword));
         u.setRole("ADMIN");
         u.setEnabled(true);
         u.setMustChangePw(true);
         userDao.insert(u);
         log.info("[UserService] 已创建首账号 username='{}' role=ADMIN mustChangePw=true", adminUsername);
+    }
+
+    private static boolean isWeakKnownDefault(String pwd) {
+        // 不可作为初始口令(下发了也拒绝)
+        if (pwd.length() < 8) return true;
+        String lower = pwd.toLowerCase();
+        return lower.equals("admin123") || lower.equals("change-me-now") || lower.equals("password");
     }
 
     public AppUser login(String username, String rawPassword) {

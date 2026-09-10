@@ -3,8 +3,10 @@
 
 import os
 import socket
+import secrets
 import threading
 import time
+from functools import wraps
 from flask import Flask, render_template, jsonify, request
 from datetime import datetime
 import json
@@ -28,12 +30,46 @@ def _cors(resp):
 def _preflight(_any):
     return ('', 204)
 
+# ====== 本地会话(防跨站 CSRF / 任意网页直连)======
+# 进程启动时生成一次性 token,以 SameSite=Strict + HttpOnly cookie 下发。
+# 除 /api/wms/session 外,所有 /api/wms/* 与 /command/* 都要求该 cookie:
+#   第三方网页发起的跨站请求不会携带 SameSite=Strict cookie → 403,
+#   浏览器同源页面(xhr/fetch)自动携带 cookie → 正常放行。
+SESSION_COOKIE = 'uhf_session'
+_SESSION_TOKEN = secrets.token_urlsafe(32)
+
+def _session_ok():
+    c = request.cookies.get(SESSION_COOKIE)
+    return c is not None and secrets.compare_digest(c, _SESSION_TOKEN)
+
+def session_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not _session_ok():
+            return jsonify({'code': -1, 'message': '未授权: 请从终端页面操作'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
+
+@app.route('/api/wms/session')
+def api_wms_session():
+    resp = jsonify({'code': 0, 'data': {'ok': True}})
+    resp.set_cookie(SESSION_COOKIE, _SESSION_TOKEN, httponly=True,
+                    samesite='Strict', path='/')
+    return resp
+
 # 读卡器 TCP 目标(从环境读,docker-compose 已注入)
 READER_HOST = os.getenv("READER_HOST", "192.168.1.209")
 READER_PORT = int(os.getenv("READER_PORT", "5000"))
 
 # WMS 后端地址(容器内是 http://backend:8080)
 WMS_BASE_URL = os.getenv("WMS_BASE_URL", "http://127.0.0.1:8080")
+# 是否由外部(env/.env)显式指定了 WMS 地址。
+#   - docker-compose 模式: True(WMS_BASE_URL=http://backend:8080),
+#     此时浏览器填的 ?wms= 只是 UI 展示,实际请求一律走 env 地址
+#     (容器内 localhost / 宿主机 IP 都不可达,填了必连不上)。
+#   - 独立部署(直接 python app.py,未配 env): False,
+#     运行时 ?wms= 才用来指向远程 WMS。
+WMS_BASE_URL_CONFIGURED = bool(os.getenv("WMS_BASE_URL"))
 
 # RFID Commands (from SDK Types.cs)
 CMD_START_MULTI_EPC = 0x17
@@ -291,12 +327,14 @@ def get_tags():
         return jsonify(tag_list)
 
 @app.route('/command/start_read', methods=['POST'])
+@session_required
 def cmd_start_read():
     """Start reading EPC tags"""
     result = start_reading_epc()
     return jsonify(result)
 
 @app.route('/command/stop_read', methods=['POST'])
+@session_required
 def cmd_stop_read():
     """Stop reading EPC tags"""
     result = stop_reading_epc()
@@ -325,6 +363,7 @@ except ImportError:
     HAS_BRIDGE = False
 
 @app.route('/api/wms/draft-orders')
+@session_required
 def api_wms_draft_orders():
     """返回 DRAFT 出库单列表,前端下拉选单用"""
     if not HAS_BRIDGE:
@@ -334,6 +373,7 @@ def api_wms_draft_orders():
     return jsonify({'code': 0, 'data': orders})
 
 @app.route('/api/wms/select-order', methods=['POST'])
+@session_required
 def api_wms_select_order():
     """Web UI 选定一个 DRAFT 出库单(后续扫码都送这个单)"""
     if not HAS_BRIDGE:
@@ -346,6 +386,7 @@ def api_wms_select_order():
     return jsonify({'code': 0, 'data': wms_bridge.get_state_snapshot()})
 
 @app.route('/api/wms/state')
+@session_required
 def api_wms_state():
     """Web UI 拉当前桥接状态(选中的单 / 已扫的 EPC 列表)"""
     if not HAS_BRIDGE:
@@ -353,6 +394,7 @@ def api_wms_state():
     return jsonify({'code': 0, 'data': wms_bridge.get_state_snapshot()})
 
 @app.route('/api/wms/login', methods=['POST'])
+@session_required
 def api_wms_login():
     """UHF 前端登录入口:接收用户名/密码 → bridge 代为调 WMS /api/auth/login,
     拿到 token 存到 wms_bridge.state,后续所有 /api/wms/* 都用这个 token 调 WMS。
@@ -370,12 +412,13 @@ def api_wms_login():
     password = body.get('password') or ''
     if not username or not password:
         return jsonify({'code': -1, 'message': '用户名或密码不能为空'}), 400
-    # 可选:动态设置 WMS URL(仅供展示,实际请求仍走 env 配置的容器内部地址)
+    # 可选:浏览器把填的 WMS URL 传过来(独立部署用)。是否真的影响请求
+    # 由 _wms_base() 决定:env 已配 WMS_BASE_URL(docker-compose)时被忽略,
+    # 一律走 http://backend:8080;仅未配 env 的独立部署才用这个运行时覆盖。
     wms_override = (request.args.get('wms') or '').strip()
     if wms_override:
         with wms_bridge.state.lock:
-            wms_bridge.state.wms_url = wms_override.rstrip('/')  # 留作 UI 展示
-        # 不动 _wms_base() — 容器内只能走 env WMS_BASE_URL (http://backend:8080)
+            wms_bridge.state.wms_url = wms_override.rstrip('/')
     # 调 WMS
     r = wms_bridge._http_post('/api/auth/login',
                              {'username': username, 'password': password})
@@ -398,6 +441,7 @@ def api_wms_login():
                     'message': r.get('message', '登录失败')}), 401
 
 @app.route('/api/wms/reader-info')
+@session_required
 def api_wms_reader_info():
     return jsonify({
         'code': 0,
@@ -410,6 +454,7 @@ def api_wms_reader_info():
     })
 
 @app.route('/api/wms/scan', methods=['POST'])
+@session_required
 def api_wms_scan():
     """UHF 终端手动扫码入口(无读卡器时也能演示)。
 
@@ -421,15 +466,30 @@ def api_wms_scan():
     body = request.get_json(silent=True) or {}
     epc = (body.get('epc') or '').strip().upper()
     if not epc:
-        return jsonify({'code': -1, 'message': 'EPC 不能为空'})
+        return jsonify({'code': -1, 'message': 'EPC 不能为空'}), 400
+    # 安全:入站 EPC 必须严格 24 位 hex(与后端一致)。非 hex 直接拒绝且不写入
+    # scanned_cache,避免任意字符串被回显到前端 innerHTML(存储型 XSS)。
+    if len(epc) != 24 or any(c not in '0123456789ABCDEF' for c in epc):
+        return jsonify({'code': -1, 'message': f'EPC 无效(需 24 位十六进制)'}), 400
     # 前端可显式传 orderId,否则用 bridge 当前选中
-    oid = body.get('orderId')
-    if not oid:
+    raw_oid = body.get('orderId')
+    if raw_oid is None:
         with wms_bridge.state.lock:
-            oid = wms_bridge.state.selected_order_id
+            raw_oid = wms_bridge.state.selected_order_id
+    try:
+        oid = int(raw_oid)
+    except (TypeError, ValueError):
+        return jsonify({'code': -1, 'message': 'orderId 无效'}), 400
     if not oid:
-        return jsonify({'code': -1, 'message': '请先选择出库单'})
-    result = wms_bridge.scan_epc(int(oid), epc)
+        return jsonify({'code': -1, 'message': '请先选择出库单'}), 400
+    result = wms_bridge.scan_epc(oid, epc)
+    # 与读卡器扫码泵(scan_pump_loop)一致:手动结果写入 scanned_cache,
+    # 前端 /api/wms/state 轮询才不会把它当成"新数据已清空"覆盖掉。
+    # cache_scan:有界(上限)+ 与当前选中单绑定,避免跨单/无限增长。
+    if isinstance(result, dict):
+        result['_epc'] = epc
+        result['_ts'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        wms_bridge.cache_scan(epc, result, order_id=oid)
     return jsonify({'code': 0, 'data': result})
 
 # ====== 给前端用的 WMS 业务代理(避免跨域) ======
@@ -440,6 +500,7 @@ def _bridge_auth_headers():
     return wms_bridge._auth_headers() or None
 
 @app.route('/api/wms/orders/<int:oid>/expect', methods=['GET'])
+@session_required
 def api_wms_order_expect(oid):
     if not HAS_BRIDGE:
         return jsonify({'code': -1, 'message': 'wms_bridge 未加载'}), 500
@@ -447,6 +508,7 @@ def api_wms_order_expect(oid):
                                         headers=_bridge_auth_headers() or {}))
 
 @app.route('/api/wms/orders/<int:oid>/commit', methods=['POST'])
+@session_required
 def api_wms_order_commit(oid):
     if not HAS_BRIDGE:
         return jsonify({'code': -1, 'message': 'wms_bridge 未加载'}), 500
@@ -454,6 +516,7 @@ def api_wms_order_commit(oid):
                                           headers=_bridge_auth_headers() or {}))
 
 @app.route('/api/wms/orders/<int:oid>/cancel', methods=['POST'])
+@session_required
 def api_wms_order_cancel(oid):
     if not HAS_BRIDGE:
         return jsonify({'code': -1, 'message': 'wms_bridge 未加载'}), 500
@@ -461,6 +524,7 @@ def api_wms_order_cancel(oid):
                                           headers=_bridge_auth_headers() or {}))
 
 @app.route('/api/wms/orders', methods=['GET'])
+@session_required
 def api_wms_orders_list():
     """拉 DRAFT 出库单(前端用)"""
     if not HAS_BRIDGE:
@@ -468,6 +532,24 @@ def api_wms_orders_list():
     keyword = request.args.get('keyword', '', type=str)
     # 走 bridge 已带 token 的 load_draft_orders
     return jsonify({'code': 0, 'data': wms_bridge.load_draft_orders(keyword=keyword)})
+
+@app.route('/api/wms/logout', methods=['POST'])
+@session_required
+def api_wms_logout():
+    """登出:清空 bridge 持有的 WMS token 与当前作业状态。"""
+    if not HAS_BRIDGE:
+        return jsonify({'code': -1, 'message': 'wms_bridge 模块未加载'}), 500
+    wms_bridge.logout()
+    return jsonify({'code': 0, 'data': {'loggedIn': False}})
+
+@app.route('/api/wms/scan-clear', methods=['POST'])
+@session_required
+def api_wms_scan_clear():
+    """清空当前扫码记录(bridge scanned_cache / 期望计数),不清选单。"""
+    if not HAS_BRIDGE:
+        return jsonify({'code': -1, 'message': 'wms_bridge 模块未加载'}), 500
+    wms_bridge.clear_scans()
+    return jsonify({'code': 0, 'data': wms_bridge.get_state_snapshot()})
 
 def main():
     thread = threading.Thread(target=tcp_client_thread, daemon=True)

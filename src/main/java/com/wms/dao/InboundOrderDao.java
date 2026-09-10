@@ -113,11 +113,18 @@ public class InboundOrderDao {
         return rows;
     }
 
-    /** 更新入库单状态(DRAFT / COMMITTED / CANCELLED) */
+    /** 更新入库单状态(无守卫)—— 仅 cancelDraft 取消前的内部状态用 */
     public int updateStatus(int orderId, String status) {
         return jdbc.update(
                 "UPDATE inbound_order SET status = ? WHERE id = ?",
                 status, orderId);
+    }
+
+    /** 仅当订单仍为 DRAFT 时才推进状态(影响行数 0 = 已被并发/手工修改过,commit/cancel 应放弃) */
+    public int updateStatusFromDraft(int orderId, String newStatus) {
+        return jdbc.update(
+                "UPDATE inbound_order SET status = ? WHERE id = ? AND status = ?",
+                newStatus, orderId, InboundOrder.STATUS_DRAFT);
     }
 
     /** 重算 total_quantity 和 item_count(明细增删后调用) */

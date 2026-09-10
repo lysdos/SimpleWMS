@@ -39,8 +39,17 @@ except ImportError:
 
 
 def _wms_base():
-    """WMS URL 运行时可被登录接口覆盖。"""
-    from app import WMS_BASE_URL as _env
+    """WMS URL 运行时可被登录接口覆盖。
+
+    docker-compose 模式(env WMS_BASE_URL 已配,如 http://backend:8080):
+      容器内只能访问 backend 服务名,浏览器填的 localhost / 宿主机 IP 都不可达,
+      因此一律返回 env 地址,忽略 state.wms_url(它只保留给 UI 展示)。
+    独立部署(未配 env WMS_BASE_URL): 返回登录时浏览器传的 state.wms_url,
+      用于指向远程 WMS。
+    """
+    from app import WMS_BASE_URL as _env, WMS_BASE_URL_CONFIGURED
+    if WMS_BASE_URL_CONFIGURED:
+        return _env
     return state.wms_url or _env
 
 logging.basicConfig(
@@ -54,6 +63,7 @@ WMS_USERNAME = os.getenv("WMS_USERNAME", "admin")
 WMS_PASSWORD = os.getenv("WMS_PASSWORD", "admin123")
 DEVICE_CODE  = os.getenv("DEFAULT_DEVICE_CODE", "MOCK-UHF-001")
 HTTP_TIMEOUT  = 5  # 秒
+MAX_SCANNED   = 200  # scanned_cache 上限(防止长跑内存无限增长)
 
 # ==================== 状态 ====================
 class BridgeState:
@@ -184,6 +194,24 @@ def scan_epc(order_id, epc):
         return r.get("data", {"matched": False, "reason": "返回为空"})
     return {"matched": False, "reason": r.get("message", "后端错误")}
 
+def cache_scan(epc, result, order_id=None):
+    """写入 scanned_cache(读卡器扫码泵与手动扫码共用)。
+
+    - 有界:超过 MAX_SCANNED 丢最旧(key 依插入序,重写先删再插移到队尾,
+      保证 get_state_snapshot 的 [-30:] 反映"最近"扫码)。
+    - 订单绑定:order_id 与当前选中单不一致时丢弃,避免跨单竞态把旧单结果
+      写进新单视图。
+    """
+    with state.lock:
+        if order_id is not None and state.selected_order_id != order_id:
+            return False
+        if epc in state.scanned_cache:
+            del state.scanned_cache[epc]
+        state.scanned_cache[epc] = result
+        while len(state.scanned_cache) > MAX_SCANNED:
+            state.scanned_cache.pop(next(iter(state.scanned_cache)))
+    return True
+
 # ==================== 后台:tag_list → WMS ====================
 def scan_pump_loop():
     """监听 tag_list 新增,把每个新 EPC 推给 WMS。"""
@@ -208,8 +236,7 @@ def scan_pump_loop():
                         result = scan_epc(cur_order_id, epc)
                         result["_epc"] = epc
                         result["_ts"] = item.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        with state.lock:
-                            state.scanned_cache[epc] = result
+                        cache_scan(epc, result, order_id=cur_order_id)
                         last_pushed.add(epc)
                         # 推送到 Web UI
                         try:
@@ -238,6 +265,25 @@ def select_order(order_id):
     state.expected_epcs = load_expected_epcs(order_id)
     log.info("[SELECT] order_id=%d, expected=%d EPCs", order_id, len(state.expected_epcs))
     return True
+
+def clear_scans():
+    """清空已扫记录(前端「清空」按钮),不清选单、不影响期望清单。"""
+    with state.lock:
+        state.scanned_cache.clear()
+    log.info("[CLEAR] scanned_cache cleared")
+
+def logout():
+    """登出:清空 WMS token / 当前用户 / 作业状态(选单 + 期望 + 已扫)。"""
+    with state.lock:
+        state.token = None
+        state.user = None
+        state.role = None
+        state.wms_url = None
+        state.selected_order_id = None
+        state.selected_order_no = None
+        state.expected_epcs = []
+        state.scanned_cache.clear()
+    log.info("[LOGOUT] token & order state cleared")
 
 def get_state_snapshot():
     """Web UI 拉一次状态(出库单列表 + 选定 + 期望 + 已扫)"""
@@ -314,7 +360,7 @@ def dispatch_poll_loop():
 def main():
     log.info("=" * 50)
     log.info("WMS Bridge (REST mode)")
-    log.info("  WMS endpoint: %s", WMS_BASE_URL)
+    log.info("  WMS endpoint: %s", _wms_base())
     log.info("  Login as:     %s", WMS_USERNAME)
     log.info("  Device:       %s", DEVICE_CODE)
     log.info("=" * 50)

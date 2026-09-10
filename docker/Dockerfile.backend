@@ -24,8 +24,14 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
+# 安全:不以内置 root 身份运行,降低 RCE 后的影响面。
+RUN groupadd --system wms && useradd --system --gid wms --home /app --shell /sbin/nologin wms \
+ && apt-get update && apt-get install -y --no-install-recommends curl tini && rm -rf /var/lib/apt/lists/*
+
 # 拷贝构建产物
 COPY --from=builder /build/target/simple-wms.jar /app/app.jar
+RUN chown -R wms:wms /app
+USER wms
 
 # 容器内默认编码 + JVM 调优
 ENV LANG=C.UTF-8 \
@@ -39,4 +45,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS -o /dev/null -w '%{http_code}' http://localhost:8080/api/auth/me | grep -qE '^[24][0-9][0-9]$' || exit 1
 
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
+# tini 收僵尸进程 + 转发信号,JVM 接到 SIGTERM 优雅退出
+ENTRYPOINT ["/usr/bin/tini", "--", "sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
