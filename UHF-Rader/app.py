@@ -265,12 +265,20 @@ def tcp_client_thread():
             print(f"[TCP] Connected to reader")
 
             buffer = ""
+            raw_dumped = 0
             while True:
                 try:
                     data = client_socket.recv(4096)
                     if not data:
                         print("[TCP] Connection closed by reader")
                         break
+
+                    # 调试:打印原始字节(每个连接前 40 个 chunk),用于核对读卡器真实协议。
+                    # 注意必须在 decode 之前打 —— 之前把二进制帧当 UTF-8 文本解析,
+                    # 导致 EPC 被错误地 hex 编码(尾号递增的假 EPC 就是这个原因)。
+                    if raw_dumped < 40:
+                        raw_dumped += 1
+                        print(f"[RAW] {data.hex()}")
 
                     buffer += data.decode('utf-8', errors='ignore')
 
