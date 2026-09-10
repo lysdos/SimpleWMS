@@ -102,14 +102,16 @@ public class OutboundService {
         if (records.isEmpty()) {
             throw new IllegalStateException("草稿单未锁定任何 inventory_item,请先调 /orders/{id}/reserve 补全锁定");
         }
-        // ====== 服务端校验:所有 RESERVED 单元都必须被 SCAN 日志确认过 ======
+        // ====== 扫码确认:只做记录,不再作为提交的硬性前置 ======
+        // UHF 读卡器是**可选工具**,不是出库的必经环节:
+        //   - 直接在 WMS 出库单里点「提交出库」= 出货完成(无需扫码);
+        //   - 用 UHF 终端扫码后再提交,同样 = 出货完成。
+        // 若未扫满,只把差异写进 OUT 流水的备注留痕,不阻断提交。
         int scannedCount = logDao.countScannedForOutboundAll(id);
         int lockedCount = records.stream().mapToInt(r -> r.quantity).sum();
-        if (scannedCount < lockedCount) {
-            // 回滚:把已经改 OUT 的重新退回去
-            // 注:commitReservations 已经在本事务里执行,这里抛异常会回滚
-            throw new IllegalStateException("还有 " + (lockedCount - scannedCount) + " 件未扫码确认,不能提交(已扫 " + scannedCount + " / 锁定 " + lockedCount + ")");
-        }
+        String scanNote = (scannedCount >= lockedCount)
+                ? null
+                : ("未扫码直接提交(已扫 " + scannedCount + " / 锁定 " + lockedCount + ")");
         String operator=o.getOperator();
         if(operator==null||operator.isBlank())operator="操作员";
         // ====== 关键:先把订单状态从 DRAFT 切到 COMMITTED(带 WHERE 守卫)======
@@ -121,7 +123,7 @@ public class OutboundService {
             int before=p.getQuantity();
             if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");
             int after=before-x.getQuantity();
-            persistOutboundLog(x,operator,id,before,after);
+            persistOutboundLog(x,operator,id,before,after,scanNote);
         }
         if (orderDao.updateStatusFromDraft(id, OutboundOrder.STATUS_COMMITTED) == 0) {
             // 并发竞争:另一线程已先 commit / 取消过这张单
@@ -130,8 +132,9 @@ public class OutboundService {
         return getOrder(id);
     }
 
-    /** 写一条出库流水(OUT),commitDraft 时调用 */
-    private void persistOutboundLog(OutboundOrderItem it,String operator,int orderId,int before,int after){
+    /** 写一条出库流水(OUT),commitDraft 时调用。
+     *  scanNote 非空表示"未扫码直接提交",拼到备注里留痕(不阻断提交)。 */
+    private void persistOutboundLog(OutboundOrderItem it,String operator,int orderId,int before,int after,String scanNote){
         InventoryLog log=new InventoryLog();
         log.setType(InventoryLog.TYPE_OUT);
         log.setProductId(it.getProductId());
@@ -140,7 +143,11 @@ public class OutboundService {
         log.setQuantity(it.getQuantity());
         log.setBeforeQty(before);
         log.setAfterQty(after);
-        log.setRemark(it.getRowRemark());
+        String remark=it.getRowRemark();
+        if(scanNote!=null){
+            remark=(remark==null||remark.isBlank())?("["+scanNote+"]"):(remark+" ["+scanNote+"]");
+        }
+        log.setRemark(remark);
         log.setOperator(operator);
         log.setOrderId(orderId);
         logDao.insert(log);
