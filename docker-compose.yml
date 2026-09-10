@@ -117,16 +117,16 @@ services:
       - backend
     ports:
       # 用户访问入口(原 8081:80,但 8081 也落在 Hyper-V 预留 8033-8132 内,改 9080)。
-      # 与 backend / uhf-rader 一样只绑本机回环,TLS 留给前置反代。
-      # 需要对外暴露时改为 "9080:80" 并部署 nginx/Traefik/Caddy。
-      - "127.0.0.1:9080:80"
+      # 对外提供服务:绑 0.0.0.0(局域网/浏览器直接访问 http://<本机IP>:9080)。
+      # 若只在本机调试,可改成 "127.0.0.1:9080:80" 收敛暴露面。
+      - "9080:80"
     networks:
       - simplewms-net
 
   # ---------- 4. UHF RFID 读卡器适配器 ----------
   #   - 复用 UHF-Rader/ 目录下的 Flask + TCP 客户端
   #   - 内置 wms_bridge.py:从 WMS 后端拉出库单期望清单 + 推扫码结果
-  #   - Web UI:http://127.0.0.1:5001  (避免和 WMS frontend:9080 冲突,绑本机)
+  #   - Web UI:http://<本机IP>:5001(对外提供扫码终端服务;与 WMS frontend:9080 不同端口,无冲突)
   uhf-rader:
     build:
       context: ./UHF-Rader
@@ -150,8 +150,9 @@ services:
       # 设备号(UHF-Rader 通过此标识 WMS 系统中的设备)
       DEFAULT_DEVICE_CODE: ${UHF_DEVICE_CODE:-MOCK-UHF-001}
     ports:
-      # Web UI 本机访问
-      - "127.0.0.1:5001:5000"
+      # Web UI 对外提供服务:绑 0.0.0.0,现场 UHF 扫码终端(手机/PDA/PC)通过
+      # http://<本机IP>:5001 访问。若只本机调试可改 "127.0.0.1:5001:5000"。
+      - "5001:5000"
     networks:
       - simplewms-net
 
