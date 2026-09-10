@@ -105,37 +105,25 @@ class TagInfo:
         }
 
 def _normalize_epc(raw):
-    """把读卡器各种形态的 EPC 归一化为 24 位大写 hex。失败返回 None。
+    """把读卡器给的 EPC 归一化为 24 位大写 hex;不是标准 24 hex 就返回 None。
 
     目标长度 = 24 hex = 12 字节 = 96 bit(标准 UHF Gen2 EPC),
     与 WMS 后端 inventory_item.code(VARCHAR(24))等长。
 
-    输入容忍:
-      - 已是 24 hex 字符 → 原样返回
-      - 16/12/8 hex 字符 → 右补 0 到 24
-      - 12 字节 raw 二进制(每字节 1-2 字符乱码)→ 先 hex 编码再补
+    ⚠️ 这里以前对「非 hex 文本」做 encode('utf-8').hex() 兜底,还把短 hex
+    右补 0 —— 结果把二进制帧的字节当成 EPC 编了出来。现场表现就是:读到的
+    EPC 全是 00000008580069394002xx、尾号还会"递增",而现场真实标签是
+    0000000035003 开头。假数据还会被扫码泵推进 WMS,污染日志与界面。
+
+    现在只接受标准的 24 位 hex;其余一律丢弃。宁可不上报,也不上报错数据。
+    换读卡器/协议时,先把原始字节打开看([RAW] 日志),确认 EPC 在帧里的
+    位置与长度,再改这里。
     """
     if not raw:
         return None
     s = raw.strip().upper()
-    # 已经是 24 hex
     if len(s) == 24 and all(c in "0123456789ABCDEF" for c in s):
         return s
-    # 短 hex → 右补 0
-    if all(c in "0123456789ABCDEF" for c in s) and len(s) < 24 and len(s) % 2 == 0:
-        return s.ljust(24, '0')
-    # 短 hex 奇数长度(不该出现,做容错)
-    if all(c in "0123456789ABCDEF" for c in s) and len(s) < 24:
-        return ("0" + s)[-24:]
-    # 含非 hex 字符:按 raw 字节 hex 编码(读卡器在某些固件下不直接给 hex 字符串)
-    try:
-        h = raw.strip().encode('utf-8').hex().upper()
-        if len(h) >= 24:
-            return h[-24:]
-        if len(h) > 0 and len(h) % 2 == 0:
-            return h.rjust(24, '0')
-    except Exception:
-        return None
     return None
 
 def parse_epc_data(data):
