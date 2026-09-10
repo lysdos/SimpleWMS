@@ -1,10 +1,17 @@
 -- ============================================================
---  SimpleWMS MySQL Schema
+--  SimpleWMS MySQL Schema(初始化建表脚本)
 --  适用: MySQL 5.7+ / 8.0+
---  本文件 = 库结构真实定义,容器首次启动时由
---    /docker-entrypoint-initdb.d/01-schema.sql 自动跑一次
+--
+--  本文件 = 库结构的真实定义,容器首次启动时由
+--    /docker-entrypoint-initdb.d/01-schema.sql 自动执行一次。
 --  字段 / 索引 / 字符集 / 默认值均与当前线上库 1:1 对齐
---    (由 mysqldump --no-data 导出后精简而来)
+--    (由 mysqldump --no-data 导出结构后补注释而来)
+--
+--  所有表与字段均带 COMMENT,便于用 Navicat / DBeaver /
+--  information_schema 直接查看语义(数据库设计规范要求)。
+--  改结构后请同步维护:
+--    - src/main/resources/schema.sql        (H2,本地默认 profile)
+--    - sql/mysql-migrate-YYYY-MM-DD*.sql    (已上线库的增量迁移)
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS simple_wms
@@ -17,269 +24,285 @@ USE simple_wms;
 --  用户
 -- ============================================================
 CREATE TABLE IF NOT EXISTS app_user (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    username        VARCHAR(64)  NOT NULL,
-    password_hash   VARCHAR(255) NOT NULL,
-    role            VARCHAR(16)  NOT NULL,
-    enabled         TINYINT(1)   NOT NULL DEFAULT 1,
-    must_change_pw  TINYINT(1)   NOT NULL DEFAULT 0,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_app_user_username (username)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id               INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    username         VARCHAR(64) NOT NULL COMMENT '登录用户名(唯一)',
+    password_hash    VARCHAR(255) NOT NULL COMMENT '密码哈希(BCrypt,不可逆)',
+    role             VARCHAR(16) NOT NULL COMMENT '角色:ADMIN=管理员 / OPERATOR=操作员',
+    enabled          TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用:1=启用 0=禁用(禁用后 token 立即失效)',
+    must_change_pw   TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否强制下次登录改密:1=是 0=否(为 1 时除改密外接口一律 403)',
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_app_user_username` (`username`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统用户(登录账号)';
 
 -- ============================================================
 --  库位
 -- ============================================================
 CREATE TABLE IF NOT EXISTS location (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    code        VARCHAR(32)  NOT NULL,
-    name        VARCHAR(64)  NOT NULL,
-    remark      VARCHAR(255) DEFAULT NULL,
-    enabled     TINYINT(1)   NOT NULL DEFAULT 1,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id           INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    code         VARCHAR(32) NOT NULL COMMENT '库位编码(唯一)',
+    name         VARCHAR(64) NOT NULL COMMENT '库位名称',
+    remark       VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    enabled      TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用:1=启用 0=停用',
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位(货架/货位)';
 
 -- ============================================================
 --  供应商
 -- ============================================================
 CREATE TABLE IF NOT EXISTS supplier (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    name        VARCHAR(128) NOT NULL,
-    contact     VARCHAR(64)  DEFAULT NULL,
-    phone       VARCHAR(32)  DEFAULT NULL,
-    email       VARCHAR(128) DEFAULT NULL,
-    address     VARCHAR(255) DEFAULT NULL,
-    remark      VARCHAR(255) DEFAULT NULL,
-    enabled     TINYINT(1)   NOT NULL DEFAULT 1,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id           INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    name         VARCHAR(128) NOT NULL COMMENT '供应商名称',
+    contact      VARCHAR(64) DEFAULT NULL COMMENT '联系人',
+    phone        VARCHAR(32) DEFAULT NULL COMMENT '联系电话',
+    email        VARCHAR(128) DEFAULT NULL COMMENT '邮箱',
+    address      VARCHAR(255) DEFAULT NULL COMMENT '地址',
+    remark       VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    enabled      TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用:1=启用 0=停用',
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商';
 
 -- ============================================================
 --  商品
---  category / unit / location 默认值用纯 ASCII(避免 MySQL 8.0 utf8mb4
---  双重编码导致的乱码),由前端 / 业务按需维护。
 -- ============================================================
 CREATE TABLE IF NOT EXISTS product (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    sku         VARCHAR(64)  NOT NULL,
-    name        VARCHAR(128) NOT NULL,
-    category    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    unit        VARCHAR(16)  NOT NULL DEFAULT 'pcs',
-    location    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    quantity    INT          NOT NULL DEFAULT 0,
-    unit_price  DECIMAL(12,2) NOT NULL DEFAULT 0,
-    low_stock   INT          NOT NULL DEFAULT 10,
-    remark      VARCHAR(255) DEFAULT NULL,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_product_sku (sku)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 商品 - 供应商 多对多关联
-CREATE TABLE IF NOT EXISTS product_supplier (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    product_id  INT          NOT NULL,
-    supplier_id INT          NOT NULL,
-    is_default  TINYINT(1)   NOT NULL DEFAULT 0,
-    unit_price  DECIMAL(12,2) DEFAULT NULL,
-    remark      VARCHAR(255) DEFAULT NULL,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_product_supplier (product_id, supplier_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id           INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    sku          VARCHAR(64) NOT NULL COMMENT '商品编码(SKU,唯一)',
+    name         VARCHAR(128) NOT NULL COMMENT '商品名称',
+    category     VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '分类',
+    unit         VARCHAR(16) NOT NULL DEFAULT 'pcs' COMMENT '计量单位(如 pcs)',
+    location     VARCHAR(64) NOT NULL DEFAULT 'default' COMMENT '默认库位(出库锁定时按此库位取货)',
+    quantity     INT NOT NULL DEFAULT 0 COMMENT '当前库存数量(由入库/出库自动维护)',
+    unit_price   DECIMAL(12,2) NOT NULL DEFAULT '0.00' COMMENT '单价',
+    low_stock    INT NOT NULL DEFAULT 10 COMMENT '低库存预警阈值(quantity <= 该值 时列表标红)',
+    remark       VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_product_sku` (`sku`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品(物料主数据)';
 
 -- ============================================================
---  入库单 (DRAFT / COMMITTED / CANCELLED)
+--  商品-供应商 供货关系
+-- ============================================================
+CREATE TABLE IF NOT EXISTS product_supplier (
+    id            INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    product_id    INT NOT NULL COMMENT '商品ID → product.id',
+    supplier_id   INT NOT NULL COMMENT '供应商ID → supplier.id',
+    is_default    TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认供应商:1=是 0=否',
+    unit_price    DECIMAL(12,2) DEFAULT NULL COMMENT '该供应商供货单价',
+    remark        VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_product_supplier` (`product_id`,`supplier_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品-供应商 供货关系(多对多)';
+
+-- ============================================================
+--  入库单
 -- ============================================================
 CREATE TABLE IF NOT EXISTS inbound_order (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    order_no        VARCHAR(64)  NOT NULL,
-    supplier        VARCHAR(128) DEFAULT NULL,
-    external_no     VARCHAR(128) DEFAULT NULL,
-    remark          VARCHAR(255) DEFAULT NULL,
-    operator        VARCHAR(64)  NOT NULL,
-    total_quantity  INT          NOT NULL DEFAULT 0,
-    item_count      INT          NOT NULL DEFAULT 0,
-    status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_inbound_order_no (order_no),
-    KEY idx_inbound_order_created (created_at),
-    KEY idx_inbound_order_status  (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS inbound_order_item (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    order_id        INT          NOT NULL,
-    product_id      INT          NOT NULL,
-    sku             VARCHAR(64)  NOT NULL,
-    product_name    VARCHAR(128) NOT NULL,
-    quantity        INT          NOT NULL,
-    unit_price      DECIMAL(12,2) NOT NULL DEFAULT 0,
-    before_qty      INT          NOT NULL DEFAULT 0,
-    after_qty       INT          NOT NULL DEFAULT 0,
-    row_remark      VARCHAR(255) DEFAULT NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    supplier        VARCHAR(128) DEFAULT NULL,
-    location        VARCHAR(32)  DEFAULT NULL,
-    KEY idx_inbound_item_order (order_id),
-    KEY idx_inbound_item_product (product_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id               INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    order_no         VARCHAR(64) NOT NULL COMMENT '入库单号(唯一,格式 IN-yyyyMMddHHmmss-序号)',
+    supplier         VARCHAR(128) DEFAULT NULL COMMENT '供应商名称(下单时的快照)',
+    external_no      VARCHAR(128) DEFAULT NULL COMMENT '外部单号(对方单据号)',
+    remark           VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    operator         VARCHAR(64) NOT NULL COMMENT '操作人',
+    total_quantity   INT NOT NULL DEFAULT 0 COMMENT '总件数(由明细汇总)',
+    item_count       INT NOT NULL DEFAULT 0 COMMENT '明细行数(由明细汇总)',
+    status           VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT '状态:DRAFT=草稿 / COMMITTED=已入库 / CANCELLED=已取消',
+    created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_inbound_order_no` (`order_no`),
+    KEY `idx_inbound_order_created` (`created_at`),
+    KEY `idx_inbound_order_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入库单(主表)';
 
 -- ============================================================
---  出库单 (DRAFT / COMMITTED / CANCELLED)
+--  入库单明细
+-- ============================================================
+CREATE TABLE IF NOT EXISTS inbound_order_item (
+    id             INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    order_id       INT NOT NULL COMMENT '所属入库单 → inbound_order.id',
+    product_id     INT NOT NULL COMMENT '商品ID → product.id',
+    sku            VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
+    product_name   VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
+    quantity       INT NOT NULL COMMENT '入库数量',
+    unit_price     DECIMAL(12,2) NOT NULL DEFAULT '0.00' COMMENT '单价',
+    before_qty     INT NOT NULL DEFAULT 0 COMMENT '操作前库存数量',
+    after_qty      INT NOT NULL DEFAULT 0 COMMENT '操作后库存数量',
+    row_remark     VARCHAR(255) DEFAULT NULL COMMENT '行备注',
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    supplier       VARCHAR(128) DEFAULT NULL COMMENT '行级供应商',
+    location       VARCHAR(32) DEFAULT NULL COMMENT '入库库位(决定生成的库存单元落在哪个库位)',
+    PRIMARY KEY (`id`),
+    KEY `idx_inbound_item_order` (`order_id`),
+    KEY `idx_inbound_item_product` (`product_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='入库单明细行';
+
+-- ============================================================
+--  出库单
 -- ============================================================
 CREATE TABLE IF NOT EXISTS outbound_order (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    order_no        VARCHAR(64)  NOT NULL,
-    customer        VARCHAR(128) DEFAULT NULL,
-    external_no     VARCHAR(128) DEFAULT NULL,
-    remark          VARCHAR(255) DEFAULT NULL,
-    operator        VARCHAR(64)  NOT NULL,
-    total_quantity  INT          NOT NULL DEFAULT 0,
-    item_count      INT          NOT NULL DEFAULT 0,
-    status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
-    uhf_dispatched_at  TIMESTAMP  NULL DEFAULT NULL,
-    uhf_dispatched_by  VARCHAR(64) NULL DEFAULT NULL,
-    uhf_device_code    VARCHAR(64) NULL DEFAULT NULL,
-    uhf_claimed_at     TIMESTAMP  NULL DEFAULT NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_outbound_order_no (order_no),
-    KEY idx_outbound_order_created (created_at),
-    KEY idx_outbound_order_status  (status),
-    KEY idx_outbound_order_uhf_dispatched (uhf_dispatched_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS outbound_order_item (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    order_id        INT          NOT NULL,
-    product_id      INT          NOT NULL,
-    sku             VARCHAR(64)  NOT NULL,
-    product_name    VARCHAR(128) NOT NULL,
-    quantity        INT          NOT NULL,
-    unit_price      DECIMAL(12,2) NOT NULL DEFAULT 0,
-    before_qty      INT          NOT NULL DEFAULT 0,
-    after_qty       INT          NOT NULL DEFAULT 0,
-    row_remark      VARCHAR(255) DEFAULT NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    location        VARCHAR(32)  DEFAULT NULL,
-    KEY idx_outbound_item_order (order_id),
-    KEY idx_outbound_item_product (product_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id                  INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    order_no            VARCHAR(64) NOT NULL COMMENT '出库单号(唯一,格式 OUT-yyyyMMddHHmmss-序号)',
+    customer            VARCHAR(128) DEFAULT NULL COMMENT '客户 / 领用方',
+    external_no         VARCHAR(128) DEFAULT NULL COMMENT '外部单号(对方单据号)',
+    remark              VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    operator            VARCHAR(64) NOT NULL COMMENT '操作人',
+    total_quantity      INT NOT NULL DEFAULT 0 COMMENT '总件数(由明细汇总)',
+    item_count          INT NOT NULL DEFAULT 0 COMMENT '明细行数(由明细汇总)',
+    status              VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT '状态:DRAFT=草稿 / COMMITTED=已出库 / CANCELLED=已取消',
+    uhf_dispatched_at   TIMESTAMP NULL DEFAULT NULL COMMENT '下发到 UHF 设备的时间(NULL=未下发)',
+    uhf_dispatched_by   VARCHAR(64) DEFAULT NULL COMMENT '下发操作人',
+    uhf_device_code     VARCHAR(64) DEFAULT NULL COMMENT '目标 UHF 设备号(如 MOCK-UHF-001)',
+    uhf_claimed_at      TIMESTAMP NULL DEFAULT NULL COMMENT 'UHF 设备认领时间(NULL=未认领)',
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_outbound_order_no` (`order_no`),
+    KEY `idx_outbound_order_created` (`created_at`),
+    KEY `idx_outbound_order_status` (`status`),
+    KEY `idx_outbound_order_uhf_dispatched` (`uhf_dispatched_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='出库单(主表)';
 
 -- ============================================================
---  库存单元 (一物一码)
---  status: PENDING(DRAFT 草稿生成但未生效) / IN_STOCK / OUT / SCRAPPED / TRANSFERRED
---  DRAFT 阶段不会写 IN_STOCK,只生成 PENDING,commit 时激活
+--  出库单明细
+-- ============================================================
+CREATE TABLE IF NOT EXISTS outbound_order_item (
+    id             INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    order_id       INT NOT NULL COMMENT '所属出库单 → outbound_order.id',
+    product_id     INT NOT NULL COMMENT '商品ID → product.id',
+    sku            VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
+    product_name   VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
+    quantity       INT NOT NULL COMMENT '出库数量',
+    unit_price     DECIMAL(12,2) NOT NULL DEFAULT '0.00' COMMENT '单价',
+    before_qty     INT NOT NULL DEFAULT 0 COMMENT '操作前库存数量',
+    after_qty      INT NOT NULL DEFAULT 0 COMMENT '操作后库存数量',
+    row_remark     VARCHAR(255) DEFAULT NULL COMMENT '行备注',
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    location       VARCHAR(32) DEFAULT NULL COMMENT '取货库位(按此库位锁定库存单元)',
+    PRIMARY KEY (`id`),
+    KEY `idx_outbound_item_order` (`order_id`),
+    KEY `idx_outbound_item_product` (`product_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='出库单明细行';
+
+-- ============================================================
+--  库存单元(一物一码)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS inventory_item (
-    id                INT AUTO_INCREMENT PRIMARY KEY,
-    code              VARCHAR(24) NOT NULL,
-    product_id        INT         NOT NULL,
-    sku               VARCHAR(64) NOT NULL,
-    product_name      VARCHAR(128) NOT NULL,
-    location_code     VARCHAR(32) NOT NULL,
-    quantity          INT         NOT NULL DEFAULT 0,
-    remaining         INT         NOT NULL DEFAULT 0,
-    status            VARCHAR(16) NOT NULL DEFAULT 'IN_STOCK',
-    inbound_order_id  INT         DEFAULT NULL,
-    inbound_item_id   INT         DEFAULT NULL,
-    outbound_order_id INT         DEFAULT NULL,
-    scrapped_at       TIMESTAMP   NULL DEFAULT NULL,
-    scrapped_remark   VARCHAR(255) DEFAULT NULL,
-    transferred_at    TIMESTAMP   NULL DEFAULT NULL,
-    transferred_from  VARCHAR(32) DEFAULT NULL,
-    transferred_to    VARCHAR(32) DEFAULT NULL,
-    created_by        VARCHAR(64) DEFAULT NULL,
-    created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_inventory_item_code (code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 库存流水
-CREATE TABLE IF NOT EXISTS inventory_log (
-    id           INT AUTO_INCREMENT PRIMARY KEY,
-    type         VARCHAR(16)  NOT NULL,
-    product_id   INT          NOT NULL,
-    sku          VARCHAR(64)  NOT NULL,
-    product_name VARCHAR(128) NOT NULL,
-    quantity     INT          NOT NULL,
-    before_qty   INT          NOT NULL DEFAULT 0,
-    after_qty    INT          NOT NULL DEFAULT 0,
-    remark       VARCHAR(255) DEFAULT NULL,
-    operator     VARCHAR(64)  DEFAULT NULL,
-    order_id     INT          DEFAULT NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    KEY idx_log_product (product_id),
-    KEY idx_log_created (created_at),
-    KEY idx_log_type    (type),
-    KEY idx_log_order   (order_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id                  INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    code                VARCHAR(24) NOT NULL COMMENT '库存单元编码(唯一)。一物一码;UHF 场景即标签 EPC(24 位 hex)',
+    product_id          INT NOT NULL COMMENT '商品ID → product.id',
+    sku                 VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
+    product_name        VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
+    location_code       VARCHAR(32) NOT NULL COMMENT '所在库位 → location.code',
+    quantity            INT NOT NULL DEFAULT 0 COMMENT '数量。标准单件=1(一物一码);老数据可能 >1 表示整批',
+    remaining           INT NOT NULL DEFAULT 0 COMMENT '剩余可用数量。1=整件可用,0=已出/已耗尽',
+    status              VARCHAR(16) NOT NULL DEFAULT 'IN_STOCK' COMMENT '状态:IN_STOCK=在库 / RESERVED=已被出库单锁定 / OUT=已出库 / SCRAPPED=已报废 / TRANSFERRED=已调拨 / PENDING=未入库(待提交)',
+    inbound_order_id    INT DEFAULT NULL COMMENT '来源入库单 → inbound_order.id',
+    inbound_item_id     INT DEFAULT NULL COMMENT '来源入库明细行 → inbound_order_item.id',
+    outbound_order_id   INT DEFAULT NULL COMMENT '关联出库单 → outbound_order.id(被锁定或已出库时)',
+    scrapped_at         TIMESTAMP NULL DEFAULT NULL COMMENT '报废时间',
+    scrapped_remark     VARCHAR(255) DEFAULT NULL COMMENT '报废备注',
+    transferred_at      TIMESTAMP NULL DEFAULT NULL COMMENT '调拨时间',
+    transferred_from    VARCHAR(32) DEFAULT NULL COMMENT '调出库位',
+    transferred_to      VARCHAR(32) DEFAULT NULL COMMENT '调入库位',
+    created_by          VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_inventory_item_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存单元(一物一码;每行 = 1 个实体件/EPC)';
 
 -- ============================================================
---  盘点单 (DRAFT / COMMITTED)
+--  库存流水
+-- ============================================================
+CREATE TABLE IF NOT EXISTS inventory_log (
+    id             INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    type           VARCHAR(16) NOT NULL COMMENT '流水类型:IN=入库 / OUT=出库 / SCAN=UHF 扫码确认 / CHECK=盘点调整',
+    product_id     INT NOT NULL COMMENT '商品ID → product.id',
+    sku            VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
+    product_name   VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
+    quantity       INT NOT NULL COMMENT '变动数量(SCAN 类型固定为 0,仅作确认标记)',
+    before_qty     INT NOT NULL DEFAULT 0 COMMENT '变动前库存数量',
+    after_qty      INT NOT NULL DEFAULT 0 COMMENT '变动后库存数量',
+    remark         VARCHAR(255) DEFAULT NULL COMMENT '备注。SCAN 类型格式为 "UHF 扫码确认, epc=<EPC>"(重复扫描按此串去重)',
+    operator       VARCHAR(64) DEFAULT NULL COMMENT '操作人',
+    order_id       INT DEFAULT NULL COMMENT '关联单据ID(入库单/出库单/盘点单)',
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_log_product` (`product_id`),
+    KEY `idx_log_created` (`created_at`),
+    KEY `idx_log_type` (`type`),
+    KEY `idx_log_order` (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存流水(入库/出库/扫码确认/盘点等事件留痕)';
+
+-- ============================================================
+--  盘点单
 -- ============================================================
 CREATE TABLE IF NOT EXISTS stock_check (
-    id              INT AUTO_INCREMENT PRIMARY KEY,
-    check_no        VARCHAR(64)  NOT NULL,
-    scope           VARCHAR(16)  NOT NULL DEFAULT 'ALL',
-    scope_keyword   VARCHAR(128) DEFAULT NULL,
-    remark          VARCHAR(255) DEFAULT NULL,
-    operator        VARCHAR(64)  NOT NULL,
-    status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT',
-    total_count     INT          NOT NULL DEFAULT 0,
-    counted_count   INT          NOT NULL DEFAULT 0,
-    diff_count      INT          NOT NULL DEFAULT 0,
-    committed_at    TIMESTAMP    NULL DEFAULT NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_stock_check_no (check_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id              INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    check_no        VARCHAR(64) NOT NULL COMMENT '盘点单号(唯一,格式 CK-yyyyMMddHHmmss-序号)',
+    scope           VARCHAR(16) NOT NULL DEFAULT 'ALL' COMMENT '盘点范围:FULL=全库 / KEYWORD=按关键字 / LOCATION=按库位',
+    scope_keyword   VARCHAR(128) DEFAULT NULL COMMENT '范围关键字(scope=KEYWORD 时使用)',
+    remark          VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    operator        VARCHAR(64) NOT NULL COMMENT '操作人',
+    status          VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT '状态:DRAFT=盘点中 / COMMITTED=已提交 / CANCELLED=已取消',
+    total_count     INT NOT NULL DEFAULT 0 COMMENT '应盘件数',
+    counted_count   INT NOT NULL DEFAULT 0 COMMENT '已盘件数',
+    diff_count      INT NOT NULL DEFAULT 0 COMMENT '差异件数',
+    committed_at    TIMESTAMP NULL DEFAULT NULL COMMENT '提交时间',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stock_check_no` (`check_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='盘点单(主表)';
 
+-- ============================================================
+--  盘点单明细
+-- ============================================================
 CREATE TABLE IF NOT EXISTS stock_check_item (
-    id                INT AUTO_INCREMENT PRIMARY KEY,
-    check_id          INT         NOT NULL,
-    inventory_item_id INT         NOT NULL,
-    code              VARCHAR(24) NOT NULL,
-    sku               VARCHAR(64) NOT NULL,
-    product_name      VARCHAR(128) NOT NULL,
-    location_code     VARCHAR(32) NOT NULL,
-    system_qty        INT         NOT NULL,
-    counted_qty       INT         DEFAULT NULL,
-    diff              INT         DEFAULT NULL,
-    row_remark        VARCHAR(255) DEFAULT NULL,
-    created_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- 唯一索引命名与 H2/线上 dump 一致(uk_check_item),避免两条初始化路径漂移
-    UNIQUE KEY uk_check_item (check_id, inventory_item_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    id                  INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    check_id            INT NOT NULL COMMENT '所属盘点单 → stock_check.id',
+    inventory_item_id   INT NOT NULL COMMENT '库存单元ID → inventory_item.id',
+    code                VARCHAR(24) NOT NULL COMMENT '库存单元编码(EPC 快照)',
+    sku                 VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
+    product_name        VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
+    location_code       VARCHAR(32) NOT NULL COMMENT '库位(快照)',
+    system_qty          INT NOT NULL COMMENT '系统数量(账面)',
+    counted_qty         INT DEFAULT NULL COMMENT '实盘数量',
+    diff                INT DEFAULT NULL COMMENT '差异 = 实盘 - 系统',
+    row_remark          VARCHAR(255) DEFAULT NULL COMMENT '行备注',
+    created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stock_check_item` (`check_id`,`inventory_item_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='盘点单明细行';
 
 -- ============================================================
---  权限:把 simple_wms 库的所有权限给 wms 业务用户
+--  权限
 --
---  MySQL 8 镜像在 .env 里写 MYSQL_USER / MYSQL_PASSWORD 时
---  会自动 CREATE USER,但**不会自动 GRANT 任何库**,本脚本末尾
---  补一刀把权限补上。
+--  MySQL 官方镜像的 docker-entrypoint 在设置了 MYSQL_DATABASE 时,
+--  会自动建库,并把 MYSQL_DATABASE 的全部权限 GRANT 给 MYSQL_USER。
+--  本文件是 /docker-entrypoint-initdb.d/ 的初始化脚本,所以正常情况下
+--  **不需要**再授权。
 --
---  改 .env 里 MYSQL_PASSWORD / MYSQL_USER 时:
---    - MySQL 镜像只会在**首次启动(空 data dir)**时建用户并应用新密码
---    - 已存在的 volume 不会更新用户密码,需要 docker compose down -v 重置
---    - 所以本脚本不再 CREATE USER,只 GRANT(用户由镜像创建)
+--  下面这段只是"手工执行本脚本"时的兜底:先判断 wms 用户是否存在,
+--  存在才 GRANT(MySQL 8 不允许 GRANT 到不存在的用户,直接写会报错;
+--  而 initdb.d 里的脚本一旦报错会中止,导致后续语句不执行)。
 --
---  兼容:用户名在镜像启动时由 docker-entrypoint 暴露为环境变量 MYSQL_USER,
---  这里通过动态拼接 GRANT 适配任何 MYSQL_USER 值(旧版硬编码 'wms'@'%'
---  在 MYSQL_USER 改名后会报 Access denied)。
+--  ⚠️ 注意:MySQL 镜像只在**首次启动(空 data dir)**时用 MYSQL_USER /
+--     MYSQL_PASSWORD 建用户。改了 .env 里的密码后,已存在的 volume 不会
+--     更新,需要 docker compose down -v 重置(会清空数据)。
 -- ============================================================
 
--- 用存储过程接受镜像注入的 MYSQL_USER,首次启动 /docker-entrypoint-initdb.d/
--- 末次执行此处,MySQL 把整个脚本作一个会话,环境变量可通过 @@session.<var> /
--- 实际 mysql 镜像不直接暴露,但 init script 内部会做 user 创建(已 create user
--- 'wms'@'%'),这里再做 GRANT 覆盖。为了向后兼容,先回退到 'wms',并用一个
--- prepared statement 兼容可能改名的部署。
-SET @biz_user := COALESCE(@@session.MYSQL_USER, 'wms');
-SET @sql := CONCAT('GRANT ALL PRIVILEGES ON simple_wms.* TO ', QUOTE(@biz_user), '@''%''');
+SET @has_wms := (SELECT COUNT(*) FROM mysql.user WHERE user = 'wms');
+SET @sql := IF(@has_wms > 0,
+    'GRANT ALL PRIVILEGES ON simple_wms.* TO ''wms''@''%''',
+    'SELECT ''skip: user wms not found'' AS info');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
--- 兜底:无论 MYSQL_USER 取不取得到,都保证 'wms'@'%' 有权限(向后兼容旧 .env)
-GRANT ALL PRIVILEGES ON simple_wms.* TO 'wms'@'%';
 FLUSH PRIVILEGES;
