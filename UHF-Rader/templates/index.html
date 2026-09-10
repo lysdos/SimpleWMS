@@ -817,6 +817,19 @@ async function logout() {
     location.reload();
 }
 
+// 把设备的真实 reading 状态同步到按钮。
+// 不做同步的话,页面只在"自己" start/stop 成功时改按钮:一旦设备状态在别处
+// 改变(另一客户端、容器重启、我手动调 stop_read),页面就会停在错误态 ——
+// 典型表现是「开始扫码」被置灰,点了没反应,日志里也看不到任何请求。
+function syncReadButtons(reading) {
+    const s = document.getElementById('btnStart');
+    const t2 = document.getElementById('btnStop');
+    if (!s || !t2) return;
+    const on = !!reading;
+    s.disabled = on;
+    t2.disabled = !on;
+}
+
 async function refreshBadges() {
     try {
         const r = await apiFetch('/api/wms/reader-info').then(r => r.json());
@@ -825,6 +838,7 @@ async function refreshBadges() {
         rb.textContent = d.connected ? t('reader.conn') : t('reader.disc');
         rb.className = 'badge ' + (d.connected ? 'online' : 'offline');
         document.getElementById('readerInfo').textContent = d.host + ':' + d.port;
+        syncReadButtons(d.reading);
 
         const ws = await apiFetch('/api/wms/state').then(r => r.json());
         const wb = document.getElementById('wmsBadge');
@@ -1013,19 +1027,19 @@ async function startRead() {
     const r = await apiFetch('/command/start_read', {method: 'POST'});
     const d = await r.json();
     if (d.success) {
-        document.getElementById('btnStart').disabled = true;
-        document.getElementById('btnStop').disabled = false;
+        syncReadButtons(true);
     } else {
         // d.error 是读卡器返回的原始错误;会话类失败只有 message,别弹 undefined
         alert(t('start.fail', { msg: d.error || d.message || ('HTTP ' + r.status) }));
+        // 失败时按设备真实状态回正按钮
+        try { const s = await apiFetch('/api/wms/reader-info').then(x => x.json()); syncReadButtons((s.data || {}).reading); } catch (e) {}
     }
 }
 async function stopRead() {
     const r = await apiFetch('/command/stop_read', {method: 'POST'});
     const d = await r.json();
     if (d.success) {
-        document.getElementById('btnStart').disabled = false;
-        document.getElementById('btnStop').disabled = true;
+        syncReadButtons(false);
     }
 }
 async function clearScanned() {

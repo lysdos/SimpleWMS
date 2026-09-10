@@ -449,6 +449,9 @@ def api_wms_reader_info():
             'host': READER_HOST,
             'port': READER_PORT,
             'connected': is_connected,
+            # 前端据此同步「开始/停止」按钮的可用态,避免页面状态与设备脱节
+            # (按钮 disabled 但设备其实已停 → 点了没反应、日志也无请求)
+            'reading': is_reading,
             'wms_url': WMS_BASE_URL,
         }
     })
