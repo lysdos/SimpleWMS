@@ -100,4 +100,17 @@ public class InventoryLogDao {
                 Integer.class, orderId);
         return n == null ? 0 : n;
     }
+
+    /**
+     * 撤销本出库单的全部"扫码确认"(删 SCAN 类型日志)。
+     * 用于错扫/重扫恢复:清了这些日志后同一 EPC 可以重新扫(否则会被
+     * scanEpc 的"EPC 已扫过(本单)"去重挡住)。
+     * 只删 SCAN 日志,不动 IN/OUT 真实流水,也不改 inventory_item 状态。
+     * @return 删除条数
+     */
+    public int deleteScansForOutbound(int orderId) {
+        return jdbc.update(
+                "DELETE FROM inventory_log WHERE type = 'SCAN' AND order_id = ?",
+                orderId);
+    }
 }

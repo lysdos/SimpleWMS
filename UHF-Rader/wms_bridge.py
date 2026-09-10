@@ -194,6 +194,24 @@ def scan_epc(order_id, epc):
         return r.get("data", {"matched": False, "reason": "返回为空"})
     return {"matched": False, "reason": r.get("message", "后端错误")}
 
+def reset_scans(order_id):
+    """撤销后端本单的全部扫码确认(清 SCAN 日志)。
+
+    UHF 终端「清空」按钮用:否则只在界面上清掉,后端仍记着"已扫过",
+    同一个 EPC 再也扫不进去。返回删除条数;失败返回 None。
+    """
+    if not order_id:
+        return None
+    hdrs = _auth_headers()
+    if not hdrs:
+        if not login():
+            return None
+    r = _http_post(f"/api/outbound/orders/{order_id}/reset-scans", {}, headers=hdrs or {})
+    if r.get("code") == 0:
+        return (r.get("data") or {}).get("deleted", 0)
+    log.warning("[RESET-SCANS] order=%s failed: %s", order_id, r.get("message"))
+    return None
+
 def cache_scan(epc, result, order_id=None):
     """写入 scanned_cache(读卡器扫码泵与手动扫码共用)。
 

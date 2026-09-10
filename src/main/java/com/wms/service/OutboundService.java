@@ -270,6 +270,17 @@ public class OutboundService {
                 .withStillNeeded(Math.max(0, totalReserved - already));
     }
 
+    /**
+     * 撤销本出库单的全部"扫码确认"(清 SCAN 日志),用于错扫/重扫恢复。
+     * 只允许 DRAFT 单;不改 inventory_item 状态,也不动 IN/OUT 真实流水。
+     * @return 被清除的扫码记录条数
+     */
+    @Transactional
+    public int resetScans(int orderId) {
+        requireDraft(orderId);
+        return logDao.deleteScansForOutbound(orderId);
+    }
+
     private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new IllegalArgumentException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
 
     @Transactional(readOnly=true) public OutboundOrder getOrder(int id){OutboundOrder o=orderDao.findOrderById(id);if(o!=null)o.setItems(orderDao.findItemsByOrderId(id));return o;}

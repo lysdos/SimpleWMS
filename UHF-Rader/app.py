@@ -545,11 +545,21 @@ def api_wms_logout():
 @app.route('/api/wms/scan-clear', methods=['POST'])
 @session_required
 def api_wms_scan_clear():
-    """清空当前扫码记录(bridge scanned_cache / 期望计数),不清选单。"""
+    """清空当前扫码记录,不清选单。
+
+    两件事都要做,否则「清空」是假的:
+      1) 清 bridge 的 scanned_cache(界面立即空)
+      2) 调后端 reset-scans 删掉本单 SCAN 日志 —— 不然同一 EPC 再扫
+         仍被去重挡回"EPC 已扫过(本单)",错扫后无法重扫。
+    """
     if not HAS_BRIDGE:
         return jsonify({'code': -1, 'message': 'wms_bridge 模块未加载'}), 500
+    with wms_bridge.state.lock:
+        oid = wms_bridge.state.selected_order_id
+    deleted = wms_bridge.reset_scans(oid) if oid else 0
     wms_bridge.clear_scans()
-    return jsonify({'code': 0, 'data': wms_bridge.get_state_snapshot()})
+    snap = wms_bridge.get_state_snapshot()
+    return jsonify({'code': 0, 'data': snap, 'deleted': deleted})
 
 def main():
     thread = threading.Thread(target=tcp_client_thread, daemon=True)

@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -166,6 +167,21 @@ public class OutboundController {
     @PostMapping("/orders/{id}/reserve")
     public ApiResponse<OutboundOrder> reserve(@PathVariable int id) {
         return ApiResponse.ok(outboundService.reserveDraft(id));
+    }
+
+    /**
+     * 撤销本单的全部扫码确认(清 SCAN 日志),用于错扫/重扫恢复。
+     * 只对 DRAFT 单生效;不改库存单元状态,也不动 IN/OUT 真实流水。
+     * UHF 终端的「清空」按钮会调这里,否则清完界面后同一 EPC 仍会被
+     * 「EPC 已扫过(本单)」挡住,无法重扫。
+     */
+    @PostMapping("/orders/{id}/reset-scans")
+    public ApiResponse<Map<String, Object>> resetScans(@PathVariable int id) {
+        int deleted = outboundService.resetScans(id);
+        Map<String, Object> data = new HashMap<>();
+        data.put("orderId", id);
+        data.put("deleted", deleted);
+        return ApiResponse.ok(data);
     }
 
     /** 取消草稿单(DRAFT → CANCELLED) */
