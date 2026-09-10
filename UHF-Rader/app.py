@@ -71,13 +71,31 @@ WMS_BASE_URL = os.getenv("WMS_BASE_URL", "http://127.0.0.1:8080")
 #     运行时 ?wms= 才用来指向远程 WMS。
 WMS_BASE_URL_CONFIGURED = bool(os.getenv("WMS_BASE_URL"))
 
-# RFID Commands (from SDK Types.cs)
-CMD_START_MULTI_EPC = 0x17
-CMD_STOP_MULTI_EPC = 0x18
+# ===== 读卡器协议(0xBB 帧头 + SUM 校验 + 9 字节固定帧尾)=====
+# 与该读卡器一致(型号:UHF+2.4G 双频读写器 / UHFReader.dll v2.1.1),
+# 已用现场设备实测通过;协议细节对照 web-monitor 项目的 server.js。
+#
+#   帧结构: [0xBB][type 1B][len 1B][data N][checksum 1B][trailer 9B]
+#   校验和: SUM(type + len + data) & 0xFF   (不含 0xBB 头,也不含帧尾)
+#   帧尾  : 固定 9 字节 0D 0A 7E 7E 08 58 00 69 39
+#
+#   下行命令: 0x17 开始盘存(data=[0x00]) / 0x18 停止盘存
+#   上行帧  : 0x97|0x96 标签数据 / 0x98 停止应答 / 0x40 心跳 / 0x3A 初始化
+#
+# ⚠️ 该读卡器把 0x17 当作"跑一轮盘存":发完标签帧后会发一个 5 字节的
+#    0x97(payload[0]==0x00)作为"本轮结束"标记,然后回到 idle。要连续读,
+#    必须每轮结束补发 0x18 → 200ms → 0x17(只重发 0x17 会被忽略)。
+FRAME_HEADER = 0xBB
+FRAME_TRAILER = bytes([0x0D, 0x0A, 0x7E, 0x7E, 0x08, 0x58, 0x00, 0x69, 0x39])
 
-# Protocol Frame Format
-FRAME_HEADER = 0xA0  # Protocol header
-FRAME_ESCAPE = 0xA1  # Escape byte for data transparency
+CMD_START_MULTI_EPC = 0x17
+CMD_STOP_MULTI_EPC  = 0x18
+
+TYPE_TAG_DATA       = 0x97
+TYPE_TAG_DATA_ALT   = 0x96
+TYPE_STOP_ACK       = 0x98
+TYPE_HEARTBEAT      = 0x40
+TYPE_INIT           = 0x3A
 
 tag_list = []
 tag_list_lock = threading.Lock()
@@ -104,91 +122,53 @@ class TagInfo:
             'timestamp': self.timestamp
         }
 
-def _normalize_epc(raw):
-    """把读卡器给的 EPC 归一化为 24 位大写 hex;不是标准 24 hex 就返回 None。
-
-    目标长度 = 24 hex = 12 字节 = 96 bit(标准 UHF Gen2 EPC),
-    与 WMS 后端 inventory_item.code(VARCHAR(24))等长。
-
-    ⚠️ 这里以前对「非 hex 文本」做 encode('utf-8').hex() 兜底,还把短 hex
-    右补 0 —— 结果把二进制帧的字节当成 EPC 编了出来。现场表现就是:读到的
-    EPC 全是 00000008580069394002xx、尾号还会"递增",而现场真实标签是
-    0000000035003 开头。假数据还会被扫码泵推进 WMS,污染日志与界面。
-
-    现在只接受标准的 24 位 hex;其余一律丢弃。宁可不上报,也不上报错数据。
-    换读卡器/协议时,先把原始字节打开看([RAW] 日志),确认 EPC 在帧里的
-    位置与长度,再改这里。
-    """
-    if not raw:
-        return None
-    s = raw.strip().upper()
-    if len(s) == 24 and all(c in "0123456789ABCDEF" for c in s):
-        return s
-    return None
-
-def parse_epc_data(data):
-    """Parse EPC data from reader. Handles both comma-separated and binary formats."""
-    try:
-        data = data.strip()
-        if not data:
-            return None
-
-        # Try comma-separated format first (ASCII mode)
-        result = data.split(',')
-        if len(result) >= 14:
-            raw_epc = result[5] if result[5] else ""
-            tid = result[13] if len(result) > 13 and result[13] else ""
-            ant_id = result[3] if result[3] else ""
-            rssi = result[7] if len(result) > 7 and result[7] else ""
-
-            epc = _normalize_epc(raw_epc)
-            if epc:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return TagInfo(epc, tid, ant_id, rssi, timestamp)
-
-        # Binary format with ~~ marker
-        # Format: ~~<epc_data> where epc_data is raw bytes
-        if '~~' in data:
-            idx = data.find('~~')
-            after_marker = data[idx+2:]  # After ~~
-            epc = _normalize_epc(after_marker)
-            if epc:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                return TagInfo(epc, "", "1", "", timestamp)
-
-        return None
-    except Exception as e:
-        print(f"[Parse Error] {e}")
-        return None
+def calc_checksum(buf):
+    """SUM(buf[1..]) & 0xFF —— 跳过 0xBB 帧头,对 type+len+data 求和。"""
+    return sum(buf[1:]) & 0xFF
 
 def build_command_frame(cmd, data=None):
-    """Build protocol frame: Header(2) + Length(2) + Command(1) + Data(n) + Checksum(2)"""
-    if data is None:
-        data = []
+    """按 0xBB 协议构造命令帧: [BB][cmd][len][data][SUM][trailer 9B]。"""
+    data = bytes(data or [])
+    pre = bytes([FRAME_HEADER, cmd, len(data)]) + data
+    return pre + bytes([calc_checksum(pre)]) + FRAME_TRAILER
 
-    # Calculate payload length: Command(1) + Data(n)
-    payload_len = 1 + len(data)
+def _parse_tag_entries(payload):
+    """从 0x97/0x96 载荷里解出标签。载荷布局(与 web-monitor server.js 一致):
 
-    # Build frame without checksum first
-    frame = bytearray()
-    frame.append(FRAME_HEADER)
-    frame.append(0x00)  # High byte of header (reserved)
-    frame.append((payload_len >> 8) & 0xFF)  # Length high
-    frame.append(payload_len & 0xFF)  # Length low
-    frame.append(cmd)  # Command byte
+        34B: [DevID 2B LE][EPC1 12B][EPC2 12B] ...  RSSI@27, Count@28(2B LE)
+        35B: [DevID 2B LE][Ant 1B][EPC1 12B][Ant 1B][EPC2 12B] ... RSSI@27, Count@28
+        其他: [DevID 2B LE][EPC 12B]
 
-    if data:
-        frame.extend(data)
+    返回 [(epc_hex, ant_id, rssi, count, dev_id)]
+    """
+    n = len(payload)
+    if n < 14:
+        return []
+    dev_id = payload[0] | (payload[1] << 8)
+    if n == 34:
+        entries = [(payload[2:14], payload[2]), (payload[14:26], payload[14])]
+    elif n == 35:
+        entries = [(payload[3:15], payload[2]), (payload[16:28], payload[15])]
+    else:
+        entries = [(payload[2:14], None)]
 
-    # Calculate checksum (XOR of all bytes after header)
-    checksum = 0
-    for b in frame[2:]:
-        checksum ^= b
-
-    frame.append((checksum >> 8) & 0xFF)  # Checksum high
-    frame.append(checksum & 0xFF)  # Checksum low
-
-    return bytes(frame)
+    out = []
+    for epc_bin, ant_byte in entries:
+        if len(epc_bin) < 12:
+            continue
+        epc = epc_bin.hex().upper()
+        # 空槽位/无效码过滤:全 0、全 F、0 字节过多都丢弃
+        if set(epc) == {'0'} or set(epc) == {'F'}:
+            continue
+        if epc_bin.count(0) > 8:
+            continue
+        ant = str((ant_byte & 0x0F)) if ant_byte is not None else '1'
+        rssi = -(payload[27] & 0x7F) if 27 < n else 0
+        count = 1
+        if 28 + 1 < n:
+            count = payload[28] | (payload[29] << 8) or 1
+        out.append((epc, ant, rssi, count, dev_id))
+    return out
 
 def send_command(cmd, data=None):
     """Send command to reader - don't wait for response, tag data comes via tcp_client_thread"""
@@ -210,23 +190,105 @@ def send_command(cmd, data=None):
         print(f"[CMD] Error: {e}")
         return {"success": False, "error": str(e)}
 
+# ---- 连续盘存:该读卡器一次 0x17 只跑一轮,需要每轮结束补一次 0x18→0x17 ----
+_last_cycle_ts = 0.0
+_cycle_lock = threading.Lock()
+CYCLE_RESTART_COOLDOWN = 1.0   # 秒,防止结束标记抖动导致风暴
+CYCLE_MAX_DURATION     = 5.0   # 秒,兜底:超过这么久没结束标记就强制重启一轮
+
+def _restart_inventory_cycle(source):
+    """一轮盘存结束后重启下一轮:0x18 停止 → 200ms → 0x17 开始。
+
+    设备在每轮结束后回到 idle,单独重发 0x17 会被忽略,必须先 0x18。
+    """
+    global _last_cycle_ts
+    if not is_reading:
+        return
+    with _cycle_lock:
+        now = time.time()
+        if now - _last_cycle_ts < CYCLE_RESTART_COOLDOWN:
+            return
+        _last_cycle_ts = now
+    print(f"[CYCLE] restart ({source})")
+    send_command(CMD_STOP_MULTI_EPC)
+
+    def _start_next():
+        if is_reading:
+            send_command(CMD_START_MULTI_EPC, [0x00])
+
+    threading.Timer(0.2, _start_next).start()
+
+def _reading_safety_net():
+    """兜底线程:万一丢了一轮结束标记,超过 CYCLE_MAX_DURATION 强制重启一轮。"""
+    while True:
+        time.sleep(1.0)
+        if is_reading and (time.time() - _last_cycle_ts) > CYCLE_MAX_DURATION:
+            _restart_inventory_cycle('safety')
+
 def start_reading_epc():
-    """Send command to start reading EPC tags"""
-    global is_reading
-    result = send_command(CMD_START_MULTI_EPC)
+    """开始盘存:发 0x17(data=[0x00]),并记录本轮的起始时间。"""
+    global is_reading, _last_cycle_ts
+    result = send_command(CMD_START_MULTI_EPC, [0x00])
     if result.get("success"):
         is_reading = True
+        _last_cycle_ts = time.time()
         print("[CMD] Start reading EPC")
     return result
 
 def stop_reading_epc():
-    """Send command to stop reading EPC tags"""
+    """停止盘存:发 0x18。"""
     global is_reading
     result = send_command(CMD_STOP_MULTI_EPC)
     if result.get("success"):
         is_reading = False
         print("[CMD] Stop reading EPC")
     return result
+
+def _consume_frames(buf):
+    """从二进制缓冲里按 0xBB 帧结构切帧并处理,返回未消费的剩余字节。
+
+    frame_len = 1(头) + 1(类型) + 1(长度) + len(数据) + 1(校验) + 9(帧尾)
+    """
+    while True:
+        i = buf.find(bytes([FRAME_HEADER]))
+        if i < 0:
+            return b""            # 没有帧头,丢弃(噪声/半帧)
+        if i > 0:
+            buf = buf[i:]         # 丢弃帧头之前的垃圾
+        if len(buf) < 4:
+            return buf            # 连长度字段都不够,等更多数据
+        data_len = buf[2]
+        frame_len = 1 + 1 + 1 + data_len + 1 + 9
+        if len(buf) < frame_len:
+            return buf            # 整帧还没收全,等下一次 recv
+        frame = buf[:frame_len]
+        buf = buf[frame_len:]
+        try:
+            _handle_frame(frame[1], frame[3:3 + data_len])
+        except Exception as e:
+            print(f"[FRAME] handle error: {e}")
+
+
+def _handle_frame(ftype, payload):
+    """处理一帧上行数据。"""
+    if ftype in (TYPE_TAG_DATA, TYPE_TAG_DATA_ALT):
+        # 5 字节且 payload[0]==0x00 = 本轮盘存结束标记 -> 重启下一轮
+        if len(payload) == 5 and payload[0] == 0x00:
+            _restart_inventory_cycle('marker')
+            return
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for epc, ant, rssi, count, dev_id in _parse_tag_entries(payload):
+            tag = TagInfo(epc, "", ant, str(rssi), ts)
+            with tag_list_lock:
+                tag_list.insert(0, tag.to_dict())
+                if len(tag_list) > MAX_TAGS:
+                    del tag_list[MAX_TAGS:]
+            print(f"[DATA] EPC: {epc}, RSSI: {rssi}, Count: {count}, DevID: {dev_id}")
+    elif ftype in (TYPE_HEARTBEAT, TYPE_INIT, TYPE_STOP_ACK):
+        pass                       # 心跳/初始化/停止应答:正常,不处理
+    else:
+        print(f"[FRAME] unknown type=0x{ftype:02X} payload={payload.hex()}")
+
 
 def tcp_client_thread():
     global is_connected, client_socket, is_reading
@@ -252,7 +314,7 @@ def tcp_client_thread():
             is_connected = True
             print(f"[TCP] Connected to reader")
 
-            buffer = ""
+            buffer = b""
             raw_dumped = 0
             while True:
                 try:
@@ -261,36 +323,13 @@ def tcp_client_thread():
                         print("[TCP] Connection closed by reader")
                         break
 
-                    # 调试:打印原始字节(每个连接前 40 个 chunk),用于核对读卡器真实协议。
-                    # 注意必须在 decode 之前打 —— 之前把二进制帧当 UTF-8 文本解析,
-                    # 导致 EPC 被错误地 hex 编码(尾号递增的假 EPC 就是这个原因)。
+                    # 调试:打印原始字节(每个连接前 40 个 chunk),核对现场协议用
                     if raw_dumped < 40:
                         raw_dumped += 1
                         print(f"[RAW] {data.hex()}")
 
-                    buffer += data.decode('utf-8', errors='ignore')
-
-                    # Handle both \r\n and \n line endings
-                    while '\r\n' in buffer or '\n' in buffer:
-                        # Prefer \r\n splitting
-                        if '\r\n' in buffer:
-                            lines = buffer.split('\r\n')
-                        else:
-                            lines = buffer.split('\n')
-
-                        for i in range(len(lines) - 1):
-                            line = lines[i].strip()
-                            if line:
-                                tag = parse_epc_data(line)
-                                if tag:
-                                    with tag_list_lock:
-                                        tag_list.insert(0, tag.to_dict())
-                                        if len(tag_list) > MAX_TAGS:
-                                            del tag_list[MAX_TAGS:]
-                                    # socketio 已停用,前端用 /tags 轮询拉最新数据
-                                    print(f"[DATA] EPC: {tag.epc}, TID: {tag.tid}, Ant: {tag.ant_id}")
-
-                        buffer = lines[-1] if lines[-1].strip() else ""
+                    # 二进制处理:按 0xBB 帧结构切帧,绝不能 decode 成文本再解析
+                    buffer = _consume_frames(buffer + data)
 
                 except socket.timeout:
                     continue
@@ -563,6 +602,9 @@ def api_wms_scan_clear():
 def main():
     thread = threading.Thread(target=tcp_client_thread, daemon=True)
     thread.start()
+
+    # 连续盘存兜底:丢了"本轮结束"标记时强制重启一轮
+    threading.Thread(target=_reading_safety_net, daemon=True).start()
 
     # 启动 wms_bridge 桥接
     if HAS_BRIDGE:
