@@ -703,12 +703,29 @@ let _dispatchAutoSelectArmed = false; // 首次自动认领只做一次
 let _bootstrapped = false;            // onLoginSuccess 幂等,防重复轮询
 let _sessionPromise = null;
 
-// 建立本地会话 cookie(CSRF 防护用),登录/轮询前先调用一次
-function ensureSession() {
+// 建立本地会话 cookie(CSRF 防护用),登录/轮询前先调用一次。
+// force=true 时丢弃缓存强制重建(服务重启后旧 cookie 会失效)。
+function ensureSession(force) {
+    if (force) _sessionPromise = null;
     if (!_sessionPromise) {
         _sessionPromise = fetch('/api/wms/session').then(r => r.json()).catch(() => ({}));
     }
     return _sessionPromise;
+}
+
+// 所有 /api/wms/* 、/command/* 都走这里:
+//   服务端会话 token 是进程级的,容器重启/发版后会重新生成,浏览器旧 cookie
+//   随即失效 → 全部接口 403。旧版本页面表现就是"读卡器未连"+点开始扫码弹
+//   "启动失败: undefined"。这里遇到 403 自动重建会话并重试一次(403 是在
+//   会话校验阶段被拒,handler 还没执行,重试是安全的)。
+async function apiFetch(url, opts) {
+    await ensureSession(false);
+    let res = await fetch(url, opts);
+    if (res.status === 403) {
+        await ensureSession(true);
+        res = await fetch(url, opts);
+    }
+    return res;
 }
 
 // HTML 转义:所有插入 innerHTML 的服务端/用户字符串先过这里(防注入)
@@ -732,7 +749,7 @@ async function init() {
     document.getElementById('loginUser').value = lastUser;
 
     if (savedUrl && lastUser) {
-        fetch('/api/wms/state').then(r => r.json()).then(st => {
+        apiFetch('/api/wms/state').then(r => r.json()).then(st => {
             if (st.data && st.data.loggedIn) {
                 _wmsBase = savedUrl.replace(/\/+$/, '');
                 _currentUser = st.data.user || lastUser;
@@ -752,7 +769,7 @@ async function doLogin() {
     if (errEl) errEl.textContent = '';
     if (!user || !pass) { if (errEl) errEl.textContent = t('login.empty'); return; }
     try {
-        const r = await fetch('/api/wms/login?wms=' + encodeURIComponent(wms), {
+        const r = await apiFetch('/api/wms/login?wms=' + encodeURIComponent(wms), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username: user, password: pass })
@@ -793,7 +810,7 @@ function onLoginSuccess(username, role) {
 async function logout() {
     if (!confirm(t('logout.confirm'))) return;
     // 1) 让 bridge 丢弃 WMS token / 作业状态
-    try { await fetch('/api/wms/logout', { method: 'POST' }); } catch (e) {}
+    try { await apiFetch('/api/wms/logout', { method: 'POST' }); } catch (e) {}
     // 2) 清除本地记住的凭据,init() 不再静默重登
     try { localStorage.removeItem('wms_base_url'); } catch (e) {}
     try { localStorage.removeItem('wms_last_user'); } catch (e) {}
@@ -802,14 +819,14 @@ async function logout() {
 
 async function refreshBadges() {
     try {
-        const r = await fetch('/api/wms/reader-info').then(r => r.json());
+        const r = await apiFetch('/api/wms/reader-info').then(r => r.json());
         const d = r.data || {};
         const rb = document.getElementById('readerBadge');
         rb.textContent = d.connected ? t('reader.conn') : t('reader.disc');
         rb.className = 'badge ' + (d.connected ? 'online' : 'offline');
         document.getElementById('readerInfo').textContent = d.host + ':' + d.port;
 
-        const ws = await fetch('/api/wms/state').then(r => r.json());
+        const ws = await apiFetch('/api/wms/state').then(r => r.json());
         const wb = document.getElementById('wmsBadge');
         wb.textContent = ws.data && ws.data.loggedIn ? t('wms.logged') : t('wms.not');
         wb.className = 'badge ' + (ws.data && ws.data.loggedIn ? 'online' : 'offline');
@@ -848,7 +865,7 @@ function refreshTexts() {
 
 async function loadOrders() {
     const kw = document.getElementById('kw').value || '';
-    const r = await fetch('/api/wms/draft-orders?keyword=' + encodeURIComponent(kw)).then(r => r.json());
+    const r = await apiFetch('/api/wms/draft-orders?keyword=' + encodeURIComponent(kw)).then(r => r.json());
     const orders = (r.data || []);
     const box = document.getElementById('orders');
     if (!orders.length) { box.innerHTML = '<div class="empty">' + t('orders.empty') + '</div>'; return; }
@@ -872,7 +889,7 @@ async function selectOrder(id, no) {
     document.querySelectorAll('.order-row').forEach(r => {
         r.classList.toggle('selected', parseInt(r.dataset.id) === id);
     });
-    await fetch('/api/wms/select-order', {
+    await apiFetch('/api/wms/select-order', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({orderId: id})
@@ -885,7 +902,7 @@ async function selectOrder(id, no) {
 async function loadExpectedEpcs() {
     if (!selectedOrderId) return;
     try {
-        const r = await fetch('/api/wms/orders/' + selectedOrderId + '/expect').then(r => r.json());
+        const r = await apiFetch('/api/wms/orders/' + selectedOrderId + '/expect').then(r => r.json());
         expectedEpcs = (r.code === 0) ? (r.data || []) : [];
         renderExpectedList();
     } catch (e) {
@@ -960,7 +977,7 @@ function renderScan() {
 
 // 接收扫码实时事件 — 通过 /api/wms/state 轮询拉取(每 1.5s)
 function pollScanResults() {
-    return fetch('/api/wms/state').then(r => r.json()).then(r => {
+    return apiFetch('/api/wms/state').then(r => r.json()).then(r => {
         const d = (r.data || {});
         const newScanned = d.scanned || [];
         if (newScanned.length !== scanResults.length ||
@@ -983,7 +1000,7 @@ function pollScanResults() {
 }
 
 async function autoClaimFirstDispatch() {
-    const r = await fetch('/api/wms/draft-orders').then(r => r.json()).catch(() => ({}));
+    const r = await apiFetch('/api/wms/draft-orders').then(r => r.json()).catch(() => ({}));
     const orders = r.data || [];
     if (orders.length) {
         const o = orders[0];
@@ -993,17 +1010,18 @@ async function autoClaimFirstDispatch() {
 
 async function startRead() {
     if (!selectedOrderId) { alert(t('start.noOrder')); return; }
-    const r = await fetch('/command/start_read', {method: 'POST'});
+    const r = await apiFetch('/command/start_read', {method: 'POST'});
     const d = await r.json();
     if (d.success) {
         document.getElementById('btnStart').disabled = true;
         document.getElementById('btnStop').disabled = false;
     } else {
-        alert(t('start.fail', { msg: d.error }));
+        // d.error 是读卡器返回的原始错误;会话类失败只有 message,别弹 undefined
+        alert(t('start.fail', { msg: d.error || d.message || ('HTTP ' + r.status) }));
     }
 }
 async function stopRead() {
-    const r = await fetch('/command/stop_read', {method: 'POST'});
+    const r = await apiFetch('/command/stop_read', {method: 'POST'});
     const d = await r.json();
     if (d.success) {
         document.getElementById('btnStart').disabled = false;
@@ -1012,7 +1030,7 @@ async function stopRead() {
 }
 async function clearScanned() {
     // 先清服务端 scanned_cache,再清本地:避免轮询把刚清掉的记录又带回来
-    try { await fetch('/api/wms/scan-clear', { method: 'POST' }); } catch (e) {}
+    try { await apiFetch('/api/wms/scan-clear', { method: 'POST' }); } catch (e) {}
     scanResults = [];
     renderScan();
     setStatText();
@@ -1055,7 +1073,7 @@ async function manualScan() {
     const epc = (input.value || '').trim().toUpperCase();
     if (!epc) { alert(t('manual.needEpc')); return; }
     if (epc.length !== 24) { beepFail(); alert(t('manual.badLen', { n: epc.length })); return; }
-    const r = await fetch('/api/wms/scan', {
+    const r = await apiFetch('/api/wms/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ epc: epc, orderId: selectedOrderId })
@@ -1082,7 +1100,7 @@ async function doCommit() {
     btn.disabled = true;
     btn.textContent = t('commit.busy');
     try {
-        const r = await fetch('/api/wms/orders/' + selectedOrderId + '/commit', {
+        const r = await apiFetch('/api/wms/orders/' + selectedOrderId + '/commit', {
             method: 'POST'
         }).then(r => r.json());
         if (r.code === 0) {
@@ -1090,7 +1108,7 @@ async function doCommit() {
             // 通知 bridge 反选:清掉该单的 scanned_cache/期望,派单轮询才能认领下一单,
             // 否则轮询会把已提交单的扫码记录重新导回界面并逐条响铃。
             try {
-                await fetch('/api/wms/select-order', {
+                await apiFetch('/api/wms/select-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ orderId: null })
