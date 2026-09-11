@@ -317,10 +317,7 @@ async function viewInboundOrderBarcodes(orderId, sku, productName) {
             </div>
             <div style="max-height:60vh;overflow-y:auto;">${cards}</div>
         `);
-        const ok = document.getElementById('modal-ok');
-        const newOk = ok.cloneNode(true);
-        newOk.textContent = t('common.close');
-        ok.parentNode.replaceChild(newOk, ok);
+        freshModalOk(t('common.close'));
     } catch (e) {
         toast(e.message, 'error');
     }
@@ -396,10 +393,7 @@ async function viewOutboundOrderBarcodes(orderId, sku, productName) {
             </div>
             <div style="max-height:60vh;overflow-y:auto;">${cards}</div>
         `);
-        const ok = document.getElementById('modal-ok');
-        const newOk = ok.cloneNode(true);
-        newOk.textContent = t('common.close');
-        ok.parentNode.replaceChild(newOk, ok);
+        freshModalOk(t('common.close'));
     } catch (e) {
         toast(e.message, 'error');
     }
@@ -492,14 +486,9 @@ async function openStockCheckDetail(id) {
                 } catch (e) { toast(e.message, 'error'); }
             };
         });
-        const ok = document.getElementById('modal-ok');
-        const newOk = ok.cloneNode(true);
-        if (c.status === 'DRAFT') {
-            newOk.textContent = (c.countedCount === c.totalCount) ? t('stock_check.btn.commit') : t('common.close');
-        } else {
-            newOk.textContent = t('common.close');
-        }
-        ok.parentNode.replaceChild(newOk, ok);
+        freshModalOk(c.status === 'DRAFT'
+            ? ((c.countedCount === c.totalCount) ? t('stock_check.btn.commit') : t('common.close'))
+            : t('common.close'));
     } catch (e) {
         toast(e.message, 'error');
     }
@@ -588,11 +577,7 @@ function openOrderDetailModal(type, o) {
     document.getElementById('modal-mask').hidden = false;
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    newOk.textContent = t('common.close');
-    ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', closeModal);
+    freshModalOk(t('common.close')).addEventListener('click', closeModal);
     const modal = document.querySelector('.modal');
     if (modal) modal.classList.add('modal-wide');
 }
@@ -910,11 +895,7 @@ function viewBarcode(id, code) {
             </div>
         </div>
     `);
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    newOk.textContent = t('common.close');
-    ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', closeModal);
+    freshModalOk(t('common.close')).addEventListener('click', closeModal);
 }
 
 function scrapInventory(id, code) {
@@ -975,11 +956,7 @@ async function openNewOrderModal(type) {
     document.getElementById('modal-title').textContent = type === 'IN' ? t('inbound.modal.title.new') : t('outbound.modal.title.new');
     document.getElementById('modal-body').innerHTML = Views.newOrderModal(type, state.products, state.suppliers);
     document.getElementById('modal-mask').hidden = false;
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    newOk.textContent = t('common.submit');
-    ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', submitNewOrder);
+    freshModalOk(t('common.submit')).addEventListener('click', submitNewOrder);
     const modal = document.querySelector('.modal');
     if (modal) modal.classList.add('modal-wide');
     document.querySelectorAll('#nw-rows .nw-product').forEach(sel => {
@@ -1091,6 +1068,10 @@ async function submitNewOrder() {
         const order = await api.post(url, body);
         const cnt = t('new_order.toast.count_suffix', { a: order.itemCount, b: order.totalQuantity });
         toast(`${type === 'IN' ? t('new_order.toast.in_done') : t('new_order.toast.out_done')}: ${cnt}`, 'success');
+        // 成功路径也要复位按钮:之前只在 catch 里复位,导致 disabled 一直留在 DOM 上,
+        // 紧接着 open*OrderModal 的 cloneNode 会把它复制给「关闭」按钮,
+        // 之后每次开弹窗再层层继承 —— 提交按钮全变灰,只有刷新页面才能恢复。
+        if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('common.submit'); }
         state.products = [];
         await ensureProducts();
         if (type === 'IN') openInboundOrderModal(order);
@@ -1111,11 +1092,7 @@ function openInboundOrderModal(order) {
     document.getElementById('modal-mask').hidden = false;
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    newOk.textContent = t('common.close');
-    ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', closeModal);
+    freshModalOk(t('common.close')).addEventListener('click', closeModal);
     const modal = document.querySelector('.modal');
     if (modal) modal.classList.add('modal-wide');
 }
@@ -1126,11 +1103,7 @@ function openOutboundOrderModal(order) {
     document.getElementById('modal-mask').hidden = false;
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    newOk.textContent = t('common.close');
-    ok.parentNode.replaceChild(newOk, ok);
-    newOk.addEventListener('click', closeModal);
+    freshModalOk(t('common.close')).addEventListener('click', closeModal);
     const modal = document.querySelector('.modal');
     if (modal) modal.classList.add('modal-wide');
 }
