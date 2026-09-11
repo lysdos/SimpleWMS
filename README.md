@@ -26,7 +26,8 @@ run.bat         :: 启动应用 → 浏览器访问 http://localhost:8080/
   - 用户名 `sa` / 密码空
 
 > 默认使用 **H2 嵌入式数据库**,数据文件位于 `./data/wmsdb.mv.db`。
-> 删除整个 `data/` 文件夹即恢复出厂状态(下次启动会重新生成演示数据)。
+> 删除整个 `data/` 文件夹即恢复出厂状态 —— 下次启动只会重建表结构并创建首个 admin 账号,
+> 不含任何演示数据;商品 / 供应商 / 库位需自行建立(或手动跑 `tools/seed.sql`)。
 
 ### 端口被占用?
 
@@ -53,7 +54,7 @@ $env:SPRING_PROFILES_ACTIVE="mysql"
 java -jar target\simple-wms.jar
 ```
 
-> 切到 MySQL 后,**演示数据仍会由 DataSeeder 在空表时自动写入**。
+> 切到 MySQL 后,初始化行为一致:自动建表 + 创建首个 admin 账号,**不写入演示数据**。
 
 ## 🛠️ 技术栈
 

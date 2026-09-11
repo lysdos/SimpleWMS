@@ -288,6 +288,7 @@ const I18N = (() => {
         'new_order.ph.qty':     { 'zh-CN': '数量',                          'en-US': 'Qty' },
         'new_order.ph.row_remark':{ 'zh-CN': '行备注(可选)',                 'en-US': 'Row remark (optional)' },
         'new_order.ph.remark':  { 'zh-CN': '可选',                          'en-US': 'optional' },
+        'new_order.placeholder.pick_product':{ 'zh-CN': '请选择商品',        'en-US': 'Select a product' },
         'new_order.placeholder.no_product':{ 'zh-CN': '暂无商品',           'en-US': 'No products' },
         'new_order.placeholder.no_supplier':{ 'zh-CN': '暂无供应商',         'en-US': 'No suppliers' },
         'new_order.placeholder.not_set':{ 'zh-CN': '(不填)',                 'en-US': '(empty)' },

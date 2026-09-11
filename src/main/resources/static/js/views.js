@@ -341,11 +341,16 @@ const Views = {
         suppliers = suppliers || [];
         const isIn = type === 'IN';
 
-        const productOpts = products.map(p => {
-            const low = p.quantity <= p.lowStock ? ` [${t('product.low_badge')}]` : '';
-            const dflt = p.defaultSupplier ? ` (${t('new_order.label.supplier')}:${escapeHtml(p.defaultSupplier)})` : '';
-            return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
-        }).join('');
+        // 空占位项必须放在最前:否则商品列表非空时浏览器会自动选中第一项,
+        // 预渲染的空白行会被当成"已选商品但数量为空",一提交就报"数量必须大于 0",
+        // 整单无法保存(app.js readNewOrderItems 只在商品+数量都为空时才跳过该行)。
+        const productOpts = products.length
+            ? `<option value="">${t('new_order.placeholder.pick_product')}</option>` + products.map(p => {
+                const low = p.quantity <= p.lowStock ? ` [${t('product.low_badge')}]` : '';
+                const dflt = p.defaultSupplier ? ` (${t('new_order.label.supplier')}:${escapeHtml(p.defaultSupplier)})` : '';
+                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
+            }).join('')
+            : `<option value="">${t('new_order.placeholder.no_product')}</option>`;
 
         const supplierOpts = suppliers
             .filter(s => s.enabled !== false)
@@ -353,7 +358,7 @@ const Views = {
             .join('');
 
         const blankRow = () => {
-            const productCell  = `<select class="select nw-product" style="width:360px;">${productOpts || `<option value="">${t('new_order.placeholder.no_product')}</option>`}</select>`;
+            const productCell  = `<select class="select nw-product" style="width:360px;">${productOpts}</select>`;
             const supplierCell = isIn
                 ? `<select class="select nw-supplier" style="width:200px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
                 : '';
