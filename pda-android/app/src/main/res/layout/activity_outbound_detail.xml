@@ -185,6 +185,26 @@
                 android:background="@drawable/bg_card"
                 android:padding="@dimen/space_sm"
                 android:layout_marginTop="@dimen/space_sm" />
+
+            <!-- 已扫码记录 -->
+            <TextView
+                android:id="@+id/tv_scanned_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_lg"
+                android:text="扫码记录"
+                style="@style/Text.Subtitle"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/ll_scanned"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/bg_card"
+                android:padding="@dimen/space_sm"
+                android:layout_marginTop="@dimen/space_sm"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 

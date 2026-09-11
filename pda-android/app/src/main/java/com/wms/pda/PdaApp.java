@@ -7,6 +7,7 @@ import com.wms.pda.data.remote.RemoteWmsRepository;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.SessionStore;
 import com.wms.pda.data.repo.SettingsStore;
+import com.wms.pda.util.BeepUtil;
 
 /**
  * Application 入口 - 全局初始化。
@@ -20,6 +21,7 @@ public class PdaApp extends Application {
         super.onCreate();
         SessionStore.init(this);
         SettingsStore.init(this);
+        BeepUtil.init(this);
 
         String token = SessionStore.token();
         if (token != null && !token.isEmpty()) {

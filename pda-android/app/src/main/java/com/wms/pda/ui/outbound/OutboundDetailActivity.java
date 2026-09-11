@@ -10,6 +10,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
@@ -22,6 +23,7 @@ import com.wms.pda.scan.ScanResult;
 import com.wms.pda.scan.ScanType;
 import com.wms.pda.scan.ScannerCallback;
 import com.wms.pda.ui.common.StatusPill;
+import com.wms.pda.util.BeepUtil;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -41,6 +43,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
     private MaterialButton btnComplete;
     private TextView tvProgress;
     private ProgressBar progressBar;
+    private TextView tvScannedTitle;
+    private LinearLayout llScanned;
 
     // RFID 扫码按钮对
     private MaterialButton btnRfidScan, btnRfidStop;
@@ -70,6 +74,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
         btnComplete = findViewById(R.id.btn_complete);
         tvProgress = findViewById(R.id.tv_progress);
         progressBar = findViewById(R.id.progress_bar);
+        tvScannedTitle = findViewById(R.id.tv_scanned_title);
+        llScanned = findViewById(R.id.ll_scanned);
 
         // RFID 按钮
         btnRfidScan = findViewById(R.id.btn_rfid_scan);
@@ -212,31 +218,40 @@ public class OutboundDetailActivity extends AppCompatActivity {
      *   条码扫码中 → 条码停止按钮可见,条码开始隐藏;RFID 两个按钮都禁用
      */
     private void updateButtonStates() {
+        int colorEnabled = ContextCompat.getColor(this, R.color.on_primary);
+        int colorDisabled = ContextCompat.getColor(this, R.color.text_hint);
+
         if (activeScanType == null) {
-            // 空闲状态
+            // 空闲状态: 两个开始按钮都可点击
             btnRfidScan.setVisibility(View.VISIBLE);
             btnRfidScan.setEnabled(true);
+            btnRfidScan.setClickable(true);
+            btnRfidScan.setTextColor(colorEnabled);
             btnRfidStop.setVisibility(View.GONE);
 
             btnBarcodeScan.setVisibility(View.VISIBLE);
             btnBarcodeScan.setEnabled(true);
+            btnBarcodeScan.setClickable(true);
+            btnBarcodeScan.setTextColor(colorEnabled);
             btnBarcodeStop.setVisibility(View.GONE);
         } else if (activeScanType == ScanType.RFID_EPC) {
-            // RFID 扫码中
+            // RFID 扫码中: RFID 显示停止按钮,条码按钮禁用
             btnRfidScan.setVisibility(View.GONE);
             btnRfidStop.setVisibility(View.VISIBLE);
 
             btnBarcodeScan.setEnabled(false);
-            btnBarcodeScan.setAlpha(0.5f);
+            btnBarcodeScan.setClickable(false);
+            btnBarcodeScan.setTextColor(colorDisabled);
             btnBarcodeScan.setVisibility(View.VISIBLE);
             btnBarcodeStop.setVisibility(View.GONE);
         } else {
-            // 条码扫码中
+            // 条码扫码中: 条码显示停止按钮,RFID 按钮禁用
             btnBarcodeScan.setVisibility(View.GONE);
             btnBarcodeStop.setVisibility(View.VISIBLE);
 
             btnRfidScan.setEnabled(false);
-            btnRfidScan.setAlpha(0.5f);
+            btnRfidScan.setClickable(false);
+            btnRfidScan.setTextColor(colorDisabled);
             btnRfidScan.setVisibility(View.VISIBLE);
             btnRfidStop.setVisibility(View.GONE);
         }
@@ -251,6 +266,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 new WmsCallback<OutboundOrder>() {
                     @Override public void onSuccess(OutboundOrder o) {
                         scannedCodes.add(code);
+                        BeepUtil.success();
                         Toast.makeText(OutboundDetailActivity.this,
                                 "已出库: " + code, Toast.LENGTH_SHORT).show();
                         render();
@@ -262,6 +278,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
     }
 
     private void handleScanError(int code, String msg) {
+        BeepUtil.error();
         if (msg == null) msg = "";
         if (msg.contains("码不存在")) {
             Toast.makeText(this, "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
@@ -356,6 +373,24 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 tvInfo.setText(info.toString());
 
                 llLines.addView(row);
+            }
+        }
+
+        // 显示已扫码记录
+        llScanned.removeAllViews();
+        if (scannedCodes.isEmpty()) {
+            tvScannedTitle.setVisibility(View.GONE);
+            llScanned.setVisibility(View.GONE);
+        } else {
+            tvScannedTitle.setVisibility(View.VISIBLE);
+            llScanned.setVisibility(View.VISIBLE);
+            for (String code : scannedCodes) {
+                TextView tv = new TextView(this);
+                tv.setText("✓ " + code);
+                tv.setTextColor(ContextCompat.getColor(this, R.color.success));
+                tv.setTextSize(13);
+                tv.setPadding(24, 8, 24, 8);
+                llScanned.addView(tv);
             }
         }
 

@@ -92,7 +92,38 @@ public class OutboundService {
         return o;
     }
     @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String operator){if(operator==null||operator.isBlank())operator="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setOperator(operator);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
-    @Transactional public OutboundOrder scanCodeToDraft(int orderId,String code){OutboundOrder o=requireDraft(orderId);InventoryItem inv=itemDao.findByCode(code);if(inv==null)throw new IllegalArgumentException("码不存在");if(InventoryItem.STATUS_OUT.equals(inv.getStatus()))throw new IllegalStateException("已出库");if(InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus()))throw new IllegalStateException("已报废");if(!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus()))throw new IllegalStateException("库存状态不可出库");Product p=productDao.findById(inv.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(orderId);OutboundOrderItem line=lines.stream().filter(x->x.getProductId().equals(inv.getProductId())).findFirst().orElse(null);if(line==null){line=new OutboundOrderItem();line.setOrderId(orderId);line.setProductId(p.getId());line.setSku(p.getSku());line.setProductName(p.getName());line.setQuantity(1);line.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());line.setLocation(blank(p.getLocation()));line.setBeforeQty(p.getQuantity());line.setAfterQty(p.getQuantity()-1);orderDao.insertItem(line);}else{orderDao.updateItemQuantity(line.getId(),line.getQuantity()+1);}orderDao.refreshAggregates(orderId);return getOrder(orderId);}
+    @Transactional public OutboundOrder scanCodeToDraft(int orderId, String code) {
+        OutboundOrder o = requireDraft(orderId);
+        InventoryItem inv = itemDao.findByCode(code);
+        if (inv == null) throw new IllegalArgumentException("码不存在");
+        if (InventoryItem.STATUS_OUT.equals(inv.getStatus())) throw new IllegalStateException("已出库");
+        if (InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus())) throw new IllegalStateException("已报废");
+        // 方案 A: 已锁定给本单的 RESERVED 单元,扫码只是确认,不改数量
+        if (InventoryItem.STATUS_RESERVED.equals(inv.getStatus())) {
+            if (inv.getOutboundOrderId() == null || inv.getOutboundOrderId() != orderId) {
+                throw new IllegalStateException("该码已被其他出库单锁定");
+            }
+            return getOrder(orderId); // 已属于本单,直接返回
+        }
+        if (!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus())) {
+            throw new IllegalStateException("库存状态不可出库");
+        }
+        // IN_STOCK: 扫码添加明细(先建空单再扫码的流程)
+        Product p = productDao.findById(inv.getProductId()).orElseThrow(() -> new IllegalArgumentException("商品不存在"));
+        List<OutboundOrderItem> lines = orderDao.findItemsByOrderId(orderId);
+        OutboundOrderItem line = lines.stream().filter(x -> x.getProductId().equals(inv.getProductId())).findFirst().orElse(null);
+        if (line == null) {
+            line = new OutboundOrderItem();
+            line.setOrderId(orderId); line.setProductId(p.getId()); line.setSku(p.getSku()); line.setProductName(p.getName());
+            line.setQuantity(1); line.setUnitPrice(p.getUnitPrice() == null ? BigDecimal.ZERO : p.getUnitPrice());
+            line.setLocation(blank(p.getLocation())); line.setBeforeQty(p.getQuantity()); line.setAfterQty(p.getQuantity() - 1);
+            orderDao.insertItem(line);
+        } else {
+            orderDao.updateItemQuantity(line.getId(), line.getQuantity() + 1);
+        }
+        orderDao.refreshAggregates(orderId);
+        return getOrder(orderId);
+    }
     @Transactional public OutboundOrder commitDraft(int id){
         OutboundOrder o=requireDraft(id);
         List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);
