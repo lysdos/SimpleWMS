@@ -31,9 +31,9 @@
     <!-- 设置 -->
     <string name="settings_title">服务器设置</string>
     <string name="settings_address">服务地址</string>
-    <string name="settings_address_hint">如 http://10.0.2.2:8080</string>
+    <string name="settings_address_hint">如 http://192.168.11.160:9090</string>
     <string name="settings_test">测试连接</string>
-    <string name="settings_test_success">连接成功(模拟)</string>
+    <string name="settings_test_success">连接成功</string>
     <string name="settings_test_fail">连接失败</string>
     <string name="settings_reset">恢复默认</string>
 
@@ -141,11 +141,6 @@
     <string name="stocktake_located_fmt">已定位: %1$s</string>
     <string name="stocktake_unknown_barcode_fmt">未找到此条码: %1$s</string>
     <string name="stocktake_not_in_order">此 SKU 不在本盘点单中</string>
-
-    <!-- 扫码 -->
-    <string name="scan_dialog_title">扫码结果(原型模拟)</string>
-    <string name="scan_dialog_hint">生产环境将使用 CameraX + ML Kit 识别真实条码,原型中可手动输入或选预置条码</string>
-    <string name="scan_dialog_preset">使用预置条码</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">已退出登录</string>

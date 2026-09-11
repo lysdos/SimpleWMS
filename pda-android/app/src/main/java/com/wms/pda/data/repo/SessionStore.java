@@ -5,7 +5,7 @@ import android.content.SharedPreferences;
 
 /**
  * 登录态存储:用户名、JWT token、角色。
- * 原型阶段只要 username,接后端后扩展 token 字段。
+ * 登录态存储:用户名、JWT token、角色。
  */
 public final class SessionStore {
 

@@ -17,8 +17,11 @@ import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.StocktakeOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
-import com.wms.pda.ui.common.ScanSimulator;
 import com.wms.pda.ui.common.StatusPill;
+import com.wms.pda.scan.ScanManager;
+import com.wms.pda.scan.ScanResult;
+import com.wms.pda.scan.ScanType;
+import com.wms.pda.scan.ScannerCallback;
 
 import java.util.List;
 
@@ -47,7 +50,13 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         btnScan = findViewById(R.id.btn_scan);
         btnSubmit = findViewById(R.id.btn_submit);
 
-        btnScan.setOnClickListener(v -> ScanSimulator.show(this, code ->
+        btnScan.setOnClickListener(v -> ScanManager.get(this).startScan(ScanType.RFID_EPC, new ScannerCallback() {
+            @Override
+            public void onScanResult(ScanResult result) {
+                String code = result.getCode();
+                if (code == null || code.isEmpty()) {
+                    return;
+                }
                 RepositoryProvider.get().submitStocktakeScan(String.valueOf(dbId), code,
                         new WmsCallback<StocktakeOrder>() {
                             @Override public void onSuccess(StocktakeOrder o) {
@@ -56,10 +65,34 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                 render();
                             }
                             @Override public void onError(int code, String msg) {
-                                Toast.makeText(StocktakeDetailActivity.this,
-                                        "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+                                // 智能处理:码不在盘点单中时友好提示
+                                if (msg != null && msg.contains("不在本盘点单中")) {
+                                    Toast.makeText(StocktakeDetailActivity.this,
+                                            "该码不在本盘点单中,已跳过", Toast.LENGTH_SHORT).show();
+                                } else if (msg != null && msg.contains("码不存在")) {
+                                    Toast.makeText(StocktakeDetailActivity.this,
+                                            "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
+                                } else if (msg != null && msg.contains("状态不可盘点")) {
+                                    Toast.makeText(StocktakeDetailActivity.this,
+                                            "该码状态异常,已跳过", Toast.LENGTH_SHORT).show();
+                                } else {
+                                    Toast.makeText(StocktakeDetailActivity.this,
+                                            "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+                                }
                             }
-                        })));
+                        });
+            }
+
+            @Override
+            public void onError(int code, String msg) {
+                Toast.makeText(StocktakeDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onTimeout() {
+                Toast.makeText(StocktakeDetailActivity.this, "扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
+            }
+        }));
 
         btnSubmit.setOnClickListener(v -> confirmAndSubmit());
     }

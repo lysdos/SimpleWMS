@@ -37,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(new Intent(this, SettingsActivity.class)));
         tb.findViewById(R.id.btn_logout).setOnClickListener(v -> {
             SessionStore.logout();
-            RepositoryProvider.resetToMock();
+            RepositoryProvider.reset();
             Toast.makeText(this, R.string.msg_logout_done, Toast.LENGTH_SHORT).show();
             startActivity(new Intent(this, LoginActivity.class));
             finish();

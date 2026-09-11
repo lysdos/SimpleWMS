@@ -1,27 +1,28 @@
 package com.wms.pda.data.repo;
 
-import com.wms.pda.data.mock.MockWmsRepository;
-
 /**
- * 全局仓库单例。默认 Mock,可通过 {@link #setRepository(WmsRepository)} 切换为 RemoteWmsRepository。
+ * 全局仓库单例。必须通过 {@link #setRepository(WmsRepository)} 显式设置(登录成功后调)。
+ * 未设置时调用 get() 会抛 IllegalStateException。
  */
 public final class RepositoryProvider {
 
-    private static WmsRepository repo = MockWmsRepository.get();
+    private static WmsRepository repo;
 
     private RepositoryProvider() {}
 
     public static WmsRepository get() {
+        if (repo == null) {
+            throw new IllegalStateException("Repository not initialized. Call setRepository() after login.");
+        }
         return repo;
     }
 
-    /** 切换实现(登录成功后由 LoginActivity 切到 RemoteWmsRepository)。 */
     public static void setRepository(WmsRepository r) {
         repo = r;
     }
 
-    /** 回退到 Mock(退出登录时调用,避免下次打开页面用 stale token 拉接口失败)。 */
-    public static void resetToMock() {
-        repo = MockWmsRepository.get();
+    /** 退出登录时调用,清除引用,下次进入需重新登录设置。 */
+    public static void reset() {
+        repo = null;
     }
 }

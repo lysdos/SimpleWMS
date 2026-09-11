@@ -11,12 +11,11 @@ WORKDIR /build
 
 # 优先复制 pom 以利用 Docker 层缓存
 COPY pom.xml .
-COPY .m2-repo /root/.m2/repository
 
 # 复制源码(原 Dockerfile 遗漏,导致 repackage 找不到 main class)
 COPY src ./src
 
-# 离线编译 - 项目自带 .m2-repo 镜像,无需联网
+# 在线编译 - 首次需联网下载依赖,后续会缓存到镜像层
 RUN mvn -B -q -DskipTests package
 
 # ---------- 运行阶段 ----------

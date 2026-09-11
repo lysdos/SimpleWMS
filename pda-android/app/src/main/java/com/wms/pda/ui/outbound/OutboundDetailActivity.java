@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -16,15 +17,45 @@ import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.OutboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
-import com.wms.pda.ui.common.ScanSimulator;
+import com.wms.pda.scan.ScanManager;
+import com.wms.pda.scan.ScanResult;
+import com.wms.pda.scan.ScanType;
+import com.wms.pda.scan.ScannerCallback;
 import com.wms.pda.ui.common.StatusPill;
 
-/** 出库单详情:展示后端实际字段;扫码累计 / 提交。 */
+import java.util.HashSet;
+import java.util.Set;
+
+/**
+ * 出库单详情:展示后端实际字段;双模式扫码(RFID + 条码) / 提交。
+ *
+ * 扫码智能处理:
+ *   - 扫到当前出库单的 SKU → 正常累加
+ *   - 扫到在库但非当前出库单 SKU → 提示"在库但非当前出库单"后跳过
+ *   - 扫到非在库的码 → 提示"未入库"后跳过
+ */
 public class OutboundDetailActivity extends AppCompatActivity {
 
     private Integer dbId;
     private LinearLayout llLines;
-    private MaterialButton btnScan, btnComplete;
+    private MaterialButton btnComplete;
+    private TextView tvProgress;
+    private ProgressBar progressBar;
+
+    // RFID 扫码按钮对
+    private MaterialButton btnRfidScan, btnRfidStop;
+    // 条码扫码按钮对
+    private MaterialButton btnBarcodeScan, btnBarcodeStop;
+
+    /** 已成功扫描的 24 位码(用于避免重复提示) */
+    private final Set<String> scannedCodes = new HashSet<>();
+
+    /** 当前出库单的总数量(用于进度计算) */
+    private int totalQty = 0;
+    private int scannedQty = 0;
+
+    /** 当前活跃的扫码类型(null = 未在扫码) */
+    private ScanType activeScanType = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -36,22 +67,21 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
         dbId = getIntent().getIntExtra("orderDbId", -1);
         llLines = findViewById(R.id.ll_lines);
-        btnScan = findViewById(R.id.btn_scan);
         btnComplete = findViewById(R.id.btn_complete);
+        tvProgress = findViewById(R.id.tv_progress);
+        progressBar = findViewById(R.id.progress_bar);
 
-        btnScan.setOnClickListener(v -> ScanSimulator.show(this, code ->
-                RepositoryProvider.get().submitOutboundScan(String.valueOf(dbId), code,
-                        new WmsCallback<OutboundOrder>() {
-                            @Override public void onSuccess(OutboundOrder o) {
-                                Toast.makeText(OutboundDetailActivity.this,
-                                        getString(R.string.scanned_out_fmt, code), Toast.LENGTH_SHORT).show();
-                                render();
-                            }
-                            @Override public void onError(int code, String msg) {
-                                Toast.makeText(OutboundDetailActivity.this,
-                                        "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
-                            }
-                        })));
+        // RFID 按钮
+        btnRfidScan = findViewById(R.id.btn_rfid_scan);
+        btnRfidStop = findViewById(R.id.btn_rfid_stop);
+        btnRfidScan.setOnClickListener(v -> startRfidScan());
+        btnRfidStop.setOnClickListener(v -> stopScan());
+
+        // 条码按钮
+        btnBarcodeScan = findViewById(R.id.btn_barcode_scan);
+        btnBarcodeStop = findViewById(R.id.btn_barcode_stop);
+        btnBarcodeScan.setOnClickListener(v -> startBarcodeScan());
+        btnBarcodeStop.setOnClickListener(v -> stopScan());
 
         btnComplete.setOnClickListener(v ->
                 RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
@@ -68,6 +98,189 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
     @Override
     protected void onResume() { super.onResume(); render(); }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopScan(); // 离开页面时停止扫码
+    }
+
+    // ============================================================
+    // RFID 扫码
+    // ============================================================
+
+    private void startRfidScan() {
+        // 如果条码正在扫码,先停掉
+        if (activeScanType == ScanType.BARCODE) {
+            stopScan();
+        }
+        activeScanType = ScanType.RFID_EPC;
+        updateButtonStates();
+
+        ScanManager.get(this).startScan(ScanType.RFID_EPC, new ScannerCallback() {
+            @Override
+            public void onScanResult(ScanResult result) {
+                String code = result.getCode();
+                if (code == null || code.isEmpty()) return;
+                if (scannedCodes.contains(code)) {
+                    Toast.makeText(OutboundDetailActivity.this,
+                            "该码已扫描过: " + code, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                submitScan(code);
+            }
+
+            @Override
+            public void onError(int code, String msg) {
+                stopScan();
+                if (code == -100) {
+                    Toast.makeText(OutboundDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(OutboundDetailActivity.this,
+                            "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onTimeout() {
+                stopScan();
+                Toast.makeText(OutboundDetailActivity.this,
+                        "RFID 扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // ============================================================
+    // 条码扫码
+    // ============================================================
+
+    private void startBarcodeScan() {
+        // 如果 RFID 正在扫码,先停掉
+        if (activeScanType == ScanType.RFID_EPC) {
+            stopScan();
+        }
+        activeScanType = ScanType.BARCODE;
+        updateButtonStates();
+
+        ScanManager.get(this).startScan(ScanType.BARCODE, new ScannerCallback() {
+            @Override
+            public void onScanResult(ScanResult result) {
+                String code = result.getCode();
+                if (code == null || code.isEmpty()) return;
+                if (scannedCodes.contains(code)) {
+                    Toast.makeText(OutboundDetailActivity.this,
+                            "该码已扫描过: " + code, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                submitScan(code);
+            }
+
+            @Override
+            public void onError(int code, String msg) {
+                stopScan();
+                if (code == -100) {
+                    Toast.makeText(OutboundDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(OutboundDetailActivity.this,
+                            "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                }
+            }
+
+            @Override
+            public void onTimeout() {
+                stopScan();
+                Toast.makeText(OutboundDetailActivity.this,
+                        "条码扫码超时,未读到码", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // ============================================================
+    // 停止扫码
+    // ============================================================
+
+    private void stopScan() {
+        ScanManager.get(this).stopScan();
+        activeScanType = null;
+        updateButtonStates();
+    }
+
+    /**
+     * 更新按钮状态:
+     *   未扫码 → 两个"开始"按钮可见,"停止"按钮隐藏
+     *   RFID 扫码中 → RFID 停止按钮可见,RFID 开始隐藏;条码两个按钮都禁用
+     *   条码扫码中 → 条码停止按钮可见,条码开始隐藏;RFID 两个按钮都禁用
+     */
+    private void updateButtonStates() {
+        if (activeScanType == null) {
+            // 空闲状态
+            btnRfidScan.setVisibility(View.VISIBLE);
+            btnRfidScan.setEnabled(true);
+            btnRfidStop.setVisibility(View.GONE);
+
+            btnBarcodeScan.setVisibility(View.VISIBLE);
+            btnBarcodeScan.setEnabled(true);
+            btnBarcodeStop.setVisibility(View.GONE);
+        } else if (activeScanType == ScanType.RFID_EPC) {
+            // RFID 扫码中
+            btnRfidScan.setVisibility(View.GONE);
+            btnRfidStop.setVisibility(View.VISIBLE);
+
+            btnBarcodeScan.setEnabled(false);
+            btnBarcodeScan.setAlpha(0.5f);
+            btnBarcodeScan.setVisibility(View.VISIBLE);
+            btnBarcodeStop.setVisibility(View.GONE);
+        } else {
+            // 条码扫码中
+            btnBarcodeScan.setVisibility(View.GONE);
+            btnBarcodeStop.setVisibility(View.VISIBLE);
+
+            btnRfidScan.setEnabled(false);
+            btnRfidScan.setAlpha(0.5f);
+            btnRfidScan.setVisibility(View.VISIBLE);
+            btnRfidStop.setVisibility(View.GONE);
+        }
+    }
+
+    // ============================================================
+    // 提交扫码结果
+    // ============================================================
+
+    private void submitScan(String code) {
+        RepositoryProvider.get().submitOutboundScan(String.valueOf(dbId), code,
+                new WmsCallback<OutboundOrder>() {
+                    @Override public void onSuccess(OutboundOrder o) {
+                        scannedCodes.add(code);
+                        Toast.makeText(OutboundDetailActivity.this,
+                                "已出库: " + code, Toast.LENGTH_SHORT).show();
+                        render();
+                    }
+                    @Override public void onError(int code, String msg) {
+                        handleScanError(code, msg);
+                    }
+                });
+    }
+
+    private void handleScanError(int code, String msg) {
+        if (msg == null) msg = "";
+        if (msg.contains("码不存在")) {
+            Toast.makeText(this, "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (msg.contains("已出库")) {
+            Toast.makeText(this, "该码已出过库,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (msg.contains("已报废")) {
+            Toast.makeText(this, "该码已报废,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (msg.contains("库存状态")) {
+            Toast.makeText(this, "该码状态异常,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (code == 404) {
+            Toast.makeText(this, "该码不在当前出库单中,已跳过", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ============================================================
+    // 渲染
+    // ============================================================
 
     private void render() {
         if (dbId == null || dbId < 0) { finish(); return; }
@@ -104,9 +317,19 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
         TextView tvSummary = findViewById(R.id.tv_summary);
         int itemCount = o.itemCount == null ? 0 : o.itemCount;
-        int totalQty  = o.totalQuantity == null ? 0 : o.totalQuantity;
-        tvSummary.setText(itemCount + " 行 · " + totalQty + " 件 · 创建于 " +
+        int totalQtyAll  = o.totalQuantity == null ? 0 : o.totalQuantity;
+        tvSummary.setText(itemCount + " 行 · " + totalQtyAll + " 件 · 创建于 " +
                 (o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
+
+        // 计算总数量
+        totalQty = 0;
+        if (o.lines != null) {
+            for (OutboundOrder.Line l : o.lines) {
+                totalQty += l.qty;
+            }
+        }
+        scannedQty = scannedCodes.size();
+        updateProgress();
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
@@ -131,12 +354,24 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
                 if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
                 tvInfo.setText(info.toString());
+
                 llLines.addView(row);
             }
         }
 
         boolean done = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
-        btnScan.setEnabled(!done);
         btnComplete.setEnabled(!done);
+        if (done) stopScan();
+    }
+
+    private void updateProgress() {
+        if (totalQty <= 0) {
+            tvProgress.setText("暂无明细");
+            progressBar.setProgress(0);
+            return;
+        }
+        tvProgress.setText("已扫描 " + scannedQty + " / " + totalQty + " 件");
+        int percent = totalQty > 0 ? (scannedQty * 100 / totalQty) : 0;
+        progressBar.setProgress(percent);
     }
 }

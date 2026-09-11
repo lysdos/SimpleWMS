@@ -88,7 +88,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="保存后下次启动会使用新地址。原型阶段即使填错也不影响 mock 数据。\n格式示例:http://192.168.1.10:8080"
+                android:text="保存后下次启动会使用新地址。\n格式示例:http://192.168.11.160:9090"
                 style="@style/Text.Caption"
                 android:layout_marginTop="@dimen/space_md" />
         </LinearLayout>

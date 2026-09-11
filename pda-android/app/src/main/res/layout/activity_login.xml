@@ -102,7 +102,7 @@
                     android:layout_marginTop="@dimen/space_xs"
                     style="@style/Text.Body"
                     android:textStyle="bold"
-                    tools:text="http://10.0.2.2:8080"
+                    tools:text="http://192.168.11.160:9090"
                     xmlns:tools="http://schemas.android.com/tools" />
 
                 <TextView
@@ -188,14 +188,6 @@
                 android:layout_marginTop="@dimen/space_md"
                 android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/tv_proto_hint"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_xl"
-                android:text="原型版本 · 数据为模拟"
-                style="@style/Text.Caption" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

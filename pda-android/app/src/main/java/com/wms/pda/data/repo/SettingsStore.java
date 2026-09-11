@@ -6,7 +6,7 @@ import android.content.SharedPreferences;
 import com.wms.pda.BuildConfig;
 
 /**
- * 服务器设置存储。原型阶段只用 SharedPreferences 保存 baseUrl。
+ * 服务器设置存储。用 SharedPreferences 保存 baseUrl。
  * 默认值取自 BuildConfig.API_BASE_URL(在 app/build.gradle 配置)。
  */
 public final class SettingsStore {

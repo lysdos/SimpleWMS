@@ -85,8 +85,8 @@ public class LoginActivity extends AppCompatActivity {
             @Override public void onError(int code, String msg) {
                 setLoading(false);
                 etPwd.setError("登录失败: " + msg);
-                // 登录失败 → 回退 Mock,避免主页面用 stale remote 调接口全失败
-                RepositoryProvider.resetToMock();
+                // 登录失败 → 清除仓库引用,避免残留失效的 remote 实例
+                RepositoryProvider.reset();
                 SessionStore.logout();
             }
         });

@@ -102,13 +102,55 @@
                     android:text="@string/outbound_scan_hint"
                     style="@style/Text.Caption" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btn_scan"
+                <!-- RFID 扫码(UHF) -->
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:layout_marginTop="@dimen/space_sm"
-                    android:text="@string/action_scan"
-                    app:icon="@drawable/ic_scan" />
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="@dimen/space_sm">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_rfid_scan"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="RFID 扫码"
+                        app:icon="@drawable/ic_scan" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_rfid_stop"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="停止"
+                        android:visibility="gone"
+                        style="@style/Widget.Material3.Button.TonalButton" />
+                </LinearLayout>
+
+                <!-- 条码扫码(硬件扫把头/摄像头) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="@dimen/space_sm">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_barcode_scan"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="条码扫码"
+                        app:icon="@drawable/ic_scan" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_barcode_stop"
+                        android:layout_width="0dp"
+                        android:layout_height="56dp"
+                        android:layout_weight="1"
+                        android:text="停止"
+                        android:visibility="gone"
+                        style="@style/Widget.Material3.Button.TonalButton" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView
@@ -117,6 +159,23 @@
                 android:layout_marginTop="@dimen/space_lg"
                 android:text="@string/section_lines_outbound"
                 style="@style/Text.Subtitle" />
+
+            <TextView
+                android:id="@+id/tv_progress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_sm"
+                style="@style/Text.Body"
+                android:textColor="@color/text_secondary" />
+
+            <ProgressBar
+                android:id="@+id/progress_bar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_xs"
+                android:max="100"
+                android:progress="0" />
 
             <LinearLayout
                 android:id="@+id/ll_lines"

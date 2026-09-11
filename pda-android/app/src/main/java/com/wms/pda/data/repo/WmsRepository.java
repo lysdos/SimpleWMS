@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * 异步仓库接口。所有方法走 callback,UI 不阻塞。
- * 实现:MockWmsRepository(内存) / RemoteWmsRepository(真实后端)。
+ * 实现:RemoteWmsRepository(真实后端)。
  */
 public interface WmsRepository {
 

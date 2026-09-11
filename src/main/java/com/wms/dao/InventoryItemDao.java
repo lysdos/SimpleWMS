@@ -88,9 +88,17 @@ public class InventoryItemDao {
     }
 
     public InventoryItem findByCode(String code) {
-        List<InventoryItem> list = jdbc.query(
-                "SELECT * FROM inventory_item WHERE code = ?", ROW, code);
-        return list.isEmpty() ? null : list.get(0);
+        if (code == null || code.isBlank()) return null;
+        String c = code.trim();
+        List<InventoryItem> exact = jdbc.query(
+                "SELECT * FROM inventory_item WHERE code = ?", ROW, c);
+        if (!exact.isEmpty()) return exact.get(0);
+        // 兼容条码前导零丢失:扫到的码比库里短(如 16 位 vs 24 位),退化为尾匹配(与 findByEpc 一致)
+        String r = c.toUpperCase();
+        List<InventoryItem> fuzzy = jdbc.query(
+                "SELECT * FROM inventory_item WHERE RIGHT(code, ?) = ? ORDER BY id ASC LIMIT 1",
+                ROW, r.length(), r);
+        return fuzzy.isEmpty() ? null : fuzzy.get(0);
     }
 
     /**

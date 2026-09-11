@@ -16,7 +16,7 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
-        buildConfigField "String", "API_BASE_URL", "\"http://10.0.2.2:8080\""
+        buildConfigField "String", "API_BASE_URL", "\"http://192.168.11.160:9090\""
     }
 
     signingConfigs {
@@ -60,9 +60,9 @@ dependencies {
     implementation 'androidx.camera:camera-view:1.3.4'
     // ML Kit 条码识别(unbundled,不依赖 Google Play Services)
     implementation 'com.google.mlkit:barcode-scanning:17.2.0'
-    // 优博讯 UROVO RFID SDK(URFIDLibrary v2.4.1226)
-    // 仿照 E:\Code\huaxiaapp 项目使用,适配同款 PDA
-    implementation files('libs/URFIDLibrary-v2.4.1226.aar')
+    // CHAINWAY DeviceAPI SDK(UHF RFID + 硬件条码扫把头)
+    // 来源: huaxiaapp 项目(app/libs/DeviceAPI_ver20230301_release.aar)
+    implementation files('libs/DeviceAPI_ver20230301_release.aar')
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.mockito:mockito-core:5.0.0'
     testImplementation 'com.squareup.okhttp3:mockwebserver:3.12.0'

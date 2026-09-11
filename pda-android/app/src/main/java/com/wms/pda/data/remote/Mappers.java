@@ -12,7 +12,7 @@ import java.util.List;
 
 /**
  * 后端 DTO → PDA UI model 翻译。
- * PDA UI 用 `id` 当单号展示(原 Mock 是 "RK1001"),所以把后端 orderNo 映射成 model.id。
+ * PDA UI 用 `id` 当单号展示,把后端 orderNo 映射成 model.id。
  * 后端 `id`(数据库自增)不暴露给 UI。
  */
 final class Mappers {
