@@ -61,13 +61,30 @@ function toast(message, type) {
 }
 
 /* ---------- Modal ---------- */
+
+/**
+ * 取一个「干净」的 #modal-ok 副本替换原按钮,并返回新按钮,调用方再挂自己的 click。
+ * 为什么需要:各弹窗都靠 cloneNode(true) 重置按钮文案/监听,而 cloneNode 会
+ * **连同 disabled 属性一起复制**。只要有一次把按钮置灰后忘了复位(如提交成功后),
+ * 之后每个弹窗的「确定/关闭/提交」都会继承置灰,直到刷新页面才恢复。
+ * 统一在这里清掉临时状态,杜绝这类跨弹窗的状态泄漏。
+ * @param {string} [text] 新按钮文案;不传则保留原文案
+ */
+function freshModalOk(text) {
+    const ok = document.getElementById('modal-ok');
+    const fresh = ok.cloneNode(true);
+    fresh.disabled = false;     // cloneNode 会复制 disabled,必须显式清掉
+    fresh._inFlight = false;    // 防双击标记,同样不能带到下一个弹窗
+    if (text !== undefined) fresh.textContent = text;
+    ok.parentNode.replaceChild(fresh, ok);
+    return fresh;
+}
+
 function showModal(title, bodyHtml, onOk) {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHtml;
     document.getElementById('modal-mask').hidden = false;
-    const ok = document.getElementById('modal-ok');
-    const newOk = ok.cloneNode(true);
-    ok.parentNode.replaceChild(newOk, ok);
+    const newOk = freshModalOk();
     // onOk 可能是同步函数(返回 true/false 决定是否关闭)或返回 Promise。
     // 之前只识别同步 false,Promise 一律被吞 → 校验/网络错误时弹窗也关闭、输入丢失。
     newOk.addEventListener('click', async () => {

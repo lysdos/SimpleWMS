@@ -267,7 +267,7 @@ UNIQUE(check_id, inventory_item_id)
 
 ## 5. 迁移与初始化
 
-- **首次**:DataSeeder 仅在 `product` 表为空时插入演示数据
+- **首次**:只建表 + 创建首个 admin 账号(`UserService.bootstrapIfEmpty()`,账号/口令取自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`),**不写入任何演示数据**;商品 / 供应商 / 库位由使用方自行建立
 - **空库自动建**:`schema.sql` 全部 `CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`
 - **老库升级**:`DataSeeder.migrate()` 在启动时跑(`tryAddColumn` / `tryAddIndex` 查询 information_schema 后增量 DDL),不会破坏已有数据
 - **状态列追加**:B1/B2 后需手工 `ALTER TABLE inbound_order ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'DRAFT'` —— 当前 9090 容器已加,见后端 report
