@@ -99,6 +99,11 @@ a:hover { color: var(--c-brand-hover); }
     font-size: 32px;
     box-shadow: 0 8px 20px rgba(37,99,235,0.30);
 }
+/* 品牌 logo 图片(登录页):自带配色,不再套蓝色渐变方块,按原始比例展示 */
+.login-card .logo-img {
+    height: 68px; width: auto;
+    display: block; margin: 0 auto 14px;
+}
 .login-card h1 { margin: 0 0 4px; font-size: 24px; color: var(--c-text); letter-spacing: 0.5px; }
 .login-card .subtitle { color: var(--c-text-3); margin: 0 0 28px; font-size: 13px; }
 .login-card form label { display: block; text-align: left; margin-bottom: 16px; font-size: 13px; color: var(--c-text-2); font-weight: 500; }
@@ -134,13 +139,10 @@ a:hover { color: var(--c-brand-hover); }
     position: sticky; top: 0; z-index: 50;
 }
 .brand { display: flex; align-items: center; gap: 10px; }
+/* 品牌 logo 图片(页头):与右侧「SimpleWMS」文字并列,自身不带文字,按比例缩放 */
 .brand .logo {
-    width: 34px; height: 34px;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: linear-gradient(135deg, var(--c-brand), #60a5fa);
-    border-radius: var(--r-md);
-    font-size: 18px;
-    box-shadow: 0 4px 10px rgba(37,99,235,0.30);
+    height: 30px; width: auto;
+    display: block;
 }
 .brand .title { font-size: 17px; font-weight: 600; color: var(--c-text); letter-spacing: 0.5px; }
 .brand .subtitle { font-size: 12px; color: var(--c-text-3); margin-left: 4px; }
