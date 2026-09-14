@@ -84,6 +84,7 @@ final class Mappers {
                 l.rowRemark = it.rowRemark;
                 l.qty = it.quantity == null ? 0 : it.quantity;
                 l.uom = "件";
+                l.codes = it.codes;
                 m.lines.add(l);
             }
         }

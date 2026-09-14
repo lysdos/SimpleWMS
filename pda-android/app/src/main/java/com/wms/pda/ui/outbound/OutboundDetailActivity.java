@@ -8,6 +8,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.content.res.ColorStateList;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
@@ -218,21 +219,30 @@ public class OutboundDetailActivity extends AppCompatActivity {
      *   条码扫码中 → 条码停止按钮可见,条码开始隐藏;RFID 两个按钮都禁用
      */
     private void updateButtonStates() {
-        int colorEnabled = ContextCompat.getColor(this, R.color.on_primary);
+        int colorPrimary = ContextCompat.getColor(this, R.color.primary);
+        int colorOnPrimary = ContextCompat.getColor(this, R.color.on_primary);
         int colorDisabled = ContextCompat.getColor(this, R.color.text_hint);
+        int colorDisabledBg = ContextCompat.getColor(this, R.color.divider);
+
+        // 禁用状态: 灰色文字 + 浅灰背景
+        ColorStateList disabledBg = ColorStateList.valueOf(colorDisabledBg);
+        // 启用状态: 白色文字 + 主色背景
+        ColorStateList enabledBg = ColorStateList.valueOf(colorPrimary);
 
         if (activeScanType == null) {
             // 空闲状态: 两个开始按钮都可点击
             btnRfidScan.setVisibility(View.VISIBLE);
             btnRfidScan.setEnabled(true);
             btnRfidScan.setClickable(true);
-            btnRfidScan.setTextColor(colorEnabled);
+            btnRfidScan.setTextColor(colorOnPrimary);
+            btnRfidScan.setBackgroundTintList(enabledBg);
             btnRfidStop.setVisibility(View.GONE);
 
             btnBarcodeScan.setVisibility(View.VISIBLE);
             btnBarcodeScan.setEnabled(true);
             btnBarcodeScan.setClickable(true);
-            btnBarcodeScan.setTextColor(colorEnabled);
+            btnBarcodeScan.setTextColor(colorOnPrimary);
+            btnBarcodeScan.setBackgroundTintList(enabledBg);
             btnBarcodeStop.setVisibility(View.GONE);
         } else if (activeScanType == ScanType.RFID_EPC) {
             // RFID 扫码中: RFID 显示停止按钮,条码按钮禁用
@@ -242,6 +252,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
             btnBarcodeScan.setEnabled(false);
             btnBarcodeScan.setClickable(false);
             btnBarcodeScan.setTextColor(colorDisabled);
+            btnBarcodeScan.setBackgroundTintList(disabledBg);
             btnBarcodeScan.setVisibility(View.VISIBLE);
             btnBarcodeStop.setVisibility(View.GONE);
         } else {
@@ -252,6 +263,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
             btnRfidScan.setEnabled(false);
             btnRfidScan.setClickable(false);
             btnRfidScan.setTextColor(colorDisabled);
+            btnRfidScan.setBackgroundTintList(disabledBg);
             btnRfidScan.setVisibility(View.VISIBLE);
             btnRfidStop.setVisibility(View.GONE);
         }
@@ -286,8 +298,10 @@ public class OutboundDetailActivity extends AppCompatActivity {
             Toast.makeText(this, "该码已出过库,已跳过", Toast.LENGTH_SHORT).show();
         } else if (msg.contains("已报废")) {
             Toast.makeText(this, "该码已报废,已跳过", Toast.LENGTH_SHORT).show();
-        } else if (msg.contains("库存状态")) {
-            Toast.makeText(this, "该码状态异常,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (msg.contains("未锁定给本出库单")) {
+            Toast.makeText(this, "该码未锁定给本出库单,已跳过", Toast.LENGTH_SHORT).show();
+        } else if (msg.contains("已被其他出库单锁定")) {
+            Toast.makeText(this, "该码已被其他出库单锁定,已跳过", Toast.LENGTH_SHORT).show();
         } else if (code == 404) {
             Toast.makeText(this, "该码不在当前出库单中,已跳过", Toast.LENGTH_SHORT).show();
         } else {
@@ -350,6 +364,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
+        int colorScanned = ContextCompat.getColor(this, R.color.success);
+        int colorUnscanned = ContextCompat.getColor(this, R.color.text_hint);
         if (o.lines == null || o.lines.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText(R.string.lines_empty_outbound);
@@ -372,7 +388,25 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
                 tvInfo.setText(info.toString());
 
+                // 逐件显示库存单元编码
+                LinearLayout container = new LinearLayout(this);
+                container.setOrientation(LinearLayout.VERTICAL);
+                container.setPadding(48, 8, 24, 8);
+                if (l.codes != null && !l.codes.isEmpty()) {
+                    for (String code : l.codes) {
+                        TextView tvCode = new TextView(this);
+                        boolean scanned = scannedCodes.contains(code);
+                        tvCode.setText((scanned ? "✓ " : "  ") + code);
+                        tvCode.setTextColor(scanned ? colorScanned : colorUnscanned);
+                        tvCode.setTextSize(12);
+                        tvCode.setPadding(0, 4, 0, 4);
+                        container.addView(tvCode);
+                    }
+                }
                 llLines.addView(row);
+                if (container.getChildCount() > 0) {
+                    llLines.addView(container);
+                }
             }
         }
 

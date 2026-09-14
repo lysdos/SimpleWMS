@@ -2,6 +2,7 @@ package com.wms.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class OutboundOrderItem {
 
@@ -17,6 +18,7 @@ public class OutboundOrderItem {
     private String location;
     private String rowRemark;
     private LocalDateTime createdAt;
+    private List<String> codes; // 每个库存单元的编码(逐件显示用)
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -42,4 +44,6 @@ public class OutboundOrderItem {
     public void setRowRemark(String rowRemark) { this.rowRemark = rowRemark; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public List<String> getCodes() { return codes; }
+    public void setCodes(List<String> codes) { this.codes = codes; }
 }
