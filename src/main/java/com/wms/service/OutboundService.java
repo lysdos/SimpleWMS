@@ -92,7 +92,21 @@ public class OutboundService {
         return o;
     }
     @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String operator){if(operator==null||operator.isBlank())operator="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setOperator(operator);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
-    @Transactional public OutboundOrder scanCodeToDraft(int orderId,String code){OutboundOrder o=requireDraft(orderId);InventoryItem inv=itemDao.findByCode(code);if(inv==null)throw new IllegalArgumentException("码不存在");if(InventoryItem.STATUS_OUT.equals(inv.getStatus()))throw new IllegalStateException("已出库");if(InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus()))throw new IllegalStateException("已报废");if(!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus()))throw new IllegalStateException("库存状态不可出库");Product p=productDao.findById(inv.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(orderId);OutboundOrderItem line=lines.stream().filter(x->x.getProductId().equals(inv.getProductId())).findFirst().orElse(null);if(line==null){line=new OutboundOrderItem();line.setOrderId(orderId);line.setProductId(p.getId());line.setSku(p.getSku());line.setProductName(p.getName());line.setQuantity(1);line.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());line.setLocation(blank(p.getLocation()));line.setBeforeQty(p.getQuantity());line.setAfterQty(p.getQuantity()-1);orderDao.insertItem(line);}else{orderDao.updateItemQuantity(line.getId(),line.getQuantity()+1);}orderDao.refreshAggregates(orderId);return getOrder(orderId);}
+    @Transactional public OutboundOrder scanCodeToDraft(int orderId, String code) {
+        OutboundOrder o = requireDraft(orderId);
+        InventoryItem inv = itemDao.findByCode(code);
+        if (inv == null) throw new IllegalArgumentException("码不存在");
+        if (InventoryItem.STATUS_OUT.equals(inv.getStatus())) throw new IllegalStateException("已出库");
+        if (InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus())) throw new IllegalStateException("已报废");
+        // 只允许扫描已锁定给本单的 RESERVED 单元(扫码确认,不改数量)
+        if (!InventoryItem.STATUS_RESERVED.equals(inv.getStatus())) {
+            throw new IllegalStateException("该码未锁定给本出库单");
+        }
+        if (inv.getOutboundOrderId() == null || inv.getOutboundOrderId() != orderId) {
+            throw new IllegalStateException("该码已被其他出库单锁定");
+        }
+        return getOrder(orderId); // 已属于本单,直接返回
+    }
     @Transactional public OutboundOrder commitDraft(int id){
         OutboundOrder o=requireDraft(id);
         List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);
@@ -297,7 +311,24 @@ public class OutboundService {
 
     private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new IllegalArgumentException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
 
-    @Transactional(readOnly=true) public OutboundOrder getOrder(int id){OutboundOrder o=orderDao.findOrderById(id);if(o!=null)o.setItems(orderDao.findItemsByOrderId(id));return o;}
+    @Transactional(readOnly=true)
+    public OutboundOrder getOrder(int id) {
+        OutboundOrder o = orderDao.findOrderById(id);
+        if (o != null) {
+            List<OutboundOrderItem> items = orderDao.findItemsByOrderId(id);
+            // 为每个明细行填充关联的库存单元编码(逐件显示用)
+            for (OutboundOrderItem item : items) {
+                List<InventoryItem> units = itemDao.findByOutboundOrderAndProduct(id, item.getProductId());
+                List<String> codes = new java.util.ArrayList<>();
+                for (InventoryItem u : units) {
+                    codes.add(u.getCode());
+                }
+                item.setCodes(codes);
+            }
+            o.setItems(items);
+        }
+        return o;
+    }
     @Transactional(readOnly=true) public List<OutboundOrder> listOrders(String b,String e,String k,String op,String st,int p,int s){return orderDao.findOrders(b,e,k,op,st,p,s);}
     @Transactional(readOnly=true) public long countOrders(String b,String e,String k,String op,String st){return orderDao.countOrders(b,e,k,op,st);}
 

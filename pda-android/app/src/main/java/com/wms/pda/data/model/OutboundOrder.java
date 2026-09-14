@@ -1,5 +1,6 @@
 package com.wms.pda.data.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -49,6 +50,7 @@ public class OutboundOrder {
         public String rowRemark;
         public int qty;
         public String uom;           // 后端无字段,PDA 端占位 "件"
+        public List<String> codes;   // 每个库存单元的编码(逐件显示用)
 
         public Line() {}
 

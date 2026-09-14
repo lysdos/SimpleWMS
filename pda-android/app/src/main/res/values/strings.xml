@@ -133,7 +133,7 @@
     <string name="warehouse_prefix_fmt">目标仓库: %1$s</string>
     <string name="outbound_warehouse_prefix_fmt">出库仓库: %1$s</string>
     <string name="created_at_fmt">创建时间: %1$s</string>
-    <string name="outbound_scan_hint">扫码出库:扫到的条码会从本单累计扣减,扫描到不存在的 SKU 时会报错。</string>
+    <string name="outbound_scan_hint">扫码出库:扫到的条码会从本单累计扣减</string>
     <string name="qty_fmt">× %1$d %2$s</string>
     <string name="barcode_fmt">条码 %1$s</string>
     <string name="joined_fmt">已加入: %1$s</string>

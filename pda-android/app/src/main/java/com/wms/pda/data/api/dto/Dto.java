@@ -76,6 +76,7 @@ public class Dto {
         public String location;
         public String rowRemark;
         public String createdAt;
+        public List<String> codes;   // 每个库存单元的编码(逐件显示用)
     }
 
     // ---- 盘点 ----

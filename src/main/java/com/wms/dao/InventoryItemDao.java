@@ -221,6 +221,15 @@ public class InventoryItemDao {
                 ROW, orderId);
     }
 
+    /** 列出某出库单某商品的所有库存单元(RESERVED + OUT,逐件显示用) */
+    public List<InventoryItem> findByOutboundOrderAndProduct(int orderId, int productId) {
+        return jdbc.query(
+                "SELECT * FROM inventory_item " +
+                "WHERE outbound_order_id = ? AND product_id = ? " +
+                "AND status IN ('RESERVED', 'OUT') ORDER BY id ASC",
+                ROW, orderId, productId);
+    }
+
     /**
      * 列表查询(库存管理用)。
      * @param sku     SKU 模糊匹配(可空)
