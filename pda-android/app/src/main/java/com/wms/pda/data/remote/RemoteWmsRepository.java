@@ -2,6 +2,7 @@ package com.wms.pda.data.remote;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import com.google.gson.reflect.TypeToken;
 import com.wms.pda.data.api.ApiClient;
 import com.wms.pda.data.api.dto.Dto;
 import com.wms.pda.data.model.DashboardSnapshot;
@@ -14,6 +15,7 @@ import com.wms.pda.data.model.StocktakeOrder;
 import com.wms.pda.data.repo.WmsCallback;
 import com.wms.pda.data.repo.WmsRepository;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -107,7 +109,11 @@ public class RemoteWmsRepository implements WmsRepository {
             @Override public void onSuccess(ListInboundWrap w) {
                 List<InboundOrder> out = new ArrayList<>();
                 if (w == null || w.list == null) { cb.onSuccess(out); return; }
-                for (Dto.InboundOrder o : w.list) out.add(Mappers.toModel(o));
+                for (Dto.InboundOrder o : w.list) {
+                    // 后端 status 只支持单值过滤,"已入库"tab 拉 ALL 后在本地剔除草稿单
+                    if (!onlyPending && "DRAFT".equals(o.status)) continue;
+                    out.add(Mappers.toModel(o));
+                }
                 cb.onSuccess(out);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -176,6 +182,55 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
+    public void updateInboundItem(String orderId, String itemId, int quantity, String supplier,
+                                  String rowRemark, WmsCallback<InboundOrder> cb) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("quantity", quantity);
+        if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
+        if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        api.put("/api/inbound/orders/" + orderId + "/items/" + itemId, body,
+                Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
+            @Override public void onSuccess(Dto.InboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void deleteInboundItem(String orderId, String itemId, WmsCallback<InboundOrder> cb) {
+        api.delete("/api/inbound/orders/" + orderId + "/items/" + itemId,
+                Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
+            @Override public void onSuccess(Dto.InboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void listProducts(WmsCallback<List<com.wms.pda.data.model.Product>> cb) {
+        Type t = new TypeToken<List<Dto.Product>>(){}.getType();
+        api.get("/api/products", t, new ApiClient.Callback<List<Dto.Product>>() {
+            @Override public void onSuccess(List<Dto.Product> list) {
+                List<com.wms.pda.data.model.Product> out = new ArrayList<>();
+                if (list != null) for (Dto.Product p : list) out.add(Mappers.toModel(p));
+                cb.onSuccess(out);
+            }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void listSuppliers(WmsCallback<List<com.wms.pda.data.model.Supplier>> cb) {
+        Type t = new TypeToken<List<Dto.Supplier>>(){}.getType();
+        api.get("/api/suppliers", t, new ApiClient.Callback<List<Dto.Supplier>>() {
+            @Override public void onSuccess(List<Dto.Supplier> list) {
+                List<com.wms.pda.data.model.Supplier> out = new ArrayList<>();
+                if (list != null) for (Dto.Supplier s : list) out.add(Mappers.toModel(s));
+                cb.onSuccess(out);
+            }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
     public void cancelInbound(String orderId, WmsCallback<Void> cb) {
         api.post("/api/inbound/orders/" + orderId + "/cancel", null,
                 Void.class, new ApiClient.Callback<Void>() {
@@ -193,7 +248,11 @@ public class RemoteWmsRepository implements WmsRepository {
             @Override public void onSuccess(ListOutboundWrap w) {
                 List<OutboundOrder> out = new ArrayList<>();
                 if (w == null || w.list == null) { cb.onSuccess(out); return; }
-                for (Dto.OutboundOrder o : w.list) out.add(Mappers.toModel(o));
+                for (Dto.OutboundOrder o : w.list) {
+                    // 后端 status 只支持单值过滤,"已出库"tab 拉 ALL 后在本地剔除草稿单
+                    if (!onlyPending && "DRAFT".equals(o.status)) continue;
+                    out.add(Mappers.toModel(o));
+                }
                 cb.onSuccess(out);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -233,6 +292,29 @@ public class RemoteWmsRepository implements WmsRepository {
         api.post("/api/outbound/orders/" + orderId + "/scan", body,
                 Dto.OutboundOrder.class, new ApiClient.Callback<Dto.OutboundOrder>() {
             @Override public void onSuccess(Dto.OutboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void submitOutboundEpcScan(String orderId, String epc,
+                                      WmsCallback<com.wms.pda.data.model.EpcScanResult> cb) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("epc", epc);
+        api.post("/api/outbound/orders/" + orderId + "/scan-epc", body,
+                Dto.EpcScanResult.class, new ApiClient.Callback<Dto.EpcScanResult>() {
+            @Override public void onSuccess(Dto.EpcScanResult r) { cb.onSuccess(Mappers.toModel(r)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void resetOutboundScans(String orderId, WmsCallback<Integer> cb) {
+        api.post("/api/outbound/orders/" + orderId + "/reset-scans", null,
+                Dto.ResetScansResponse.class, new ApiClient.Callback<Dto.ResetScansResponse>() {
+            @Override public void onSuccess(Dto.ResetScansResponse r) {
+                cb.onSuccess(r == null || r.deleted == null ? 0 : r.deleted);
+            }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
     }

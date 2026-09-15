@@ -60,6 +60,7 @@ public class Dto {
         public Integer itemCount;
         public String createdAt;
         public String status;
+        public List<String> scannedCodes; // 已扫码确认的库存单元编码(详情页回看用)
         public List<OutboundOrderItem> items;
     }
 
@@ -131,11 +132,48 @@ public class Dto {
         public String updatedAt;
     }
 
+    // ---- 商品(/api/products,添加明细选商品用) ----
+    public static class Product {
+        public Integer id;
+        public String sku;
+        public String name;
+        public String unit;
+        public Integer quantity;
+        public Integer lowStock;
+        public String defaultSupplier;
+        public Integer defaultSupplierId;
+    }
+
+    // ---- 供应商(/api/suppliers,下拉选项) ----
+    public static class Supplier {
+        public Integer id;
+        public String name;
+        public Boolean enabled;
+    }
+
     // ---- 登录响应 ----
     public static class LoginResponse {
         public String token;
         public String username;
         public String role;
         public Boolean mustChangePw;
+    }
+
+    // ---- 撤销扫码确认(POST /orders/{id}/reset-scans 响应) ----
+    public static class ResetScansResponse {
+        public Integer orderId;
+        public Integer deleted;
+    }
+
+    // ---- UHF EPC 扫码结果(后端 /orders/{id}/scan-epc 返回) ----
+    public static class EpcScanResult {
+        public Boolean matched;          // true = 扫码确认成功(幂等的重复扫也走 true)
+        public Boolean alreadyScanned;   // true = 本单此前已确认过该 EPC(非错误)
+        public String reason;            // matched=false 时的失败原因
+        public String epc;
+        public String sku;
+        public Integer scannedQty;       // 本单(该 SKU)已确认件数
+        public Integer reservedCount;    // 本单(该 SKU)锁定总件数
+        public Integer stillNeeded;      // 还差几件
     }
 }

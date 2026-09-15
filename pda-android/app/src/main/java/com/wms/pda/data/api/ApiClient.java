@@ -4,12 +4,13 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
 import com.wms.pda.model.ApiResponse;
 import com.wms.pda.data.repo.SettingsStore;
 
 import java.io.IOException;
+import java.lang.reflect.Type;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Interceptor;
@@ -72,19 +73,24 @@ public class ApiClient {
     }
 
     public <T> void get(String path, Class<T> dataType, Callback<T> cb) {
+        get(path, (Type) dataType, cb);
+    }
+
+    /** data 为 JSON 数组时使用,如 TypeToken<List<Dto.Product>>(){}.getType() */
+    public <T> void get(String path, Type dataType, Callback<T> cb) {
         execute(buildRequest(path, null, "GET"), dataType, cb);
     }
 
     public <T> void post(String path, Object body, Class<T> dataType, Callback<T> cb) {
-        execute(buildRequest(path, body, "POST"), dataType, cb);
+        execute(buildRequest(path, body, "POST"), (Type) dataType, cb);
     }
 
     public <T> void put(String path, Object body, Class<T> dataType, Callback<T> cb) {
-        execute(buildRequest(path, body, "PUT"), dataType, cb);
+        execute(buildRequest(path, body, "PUT"), (Type) dataType, cb);
     }
 
     public <T> void delete(String path, Class<T> dataType, Callback<T> cb) {
-        execute(buildRequest(path, null, "DELETE"), dataType, cb);
+        execute(buildRequest(path, null, "DELETE"), (Type) dataType, cb);
     }
 
     private Request buildRequest(String path, Object body, String method) {
@@ -100,7 +106,7 @@ public class ApiClient {
         return b.build();
     }
 
-    private <T> void execute(Request req, Class<T> type, Callback<T> cb) {
+    private <T> void execute(Request req, Type type, Callback<T> cb) {
         http.newCall(req).enqueue(new okhttp3.Callback() {
             @Override public void onFailure(okhttp3.Call call, IOException e) {
                 ui.post(() -> cb.onError(-1, "网络不可达: " + e.getMessage()));
@@ -136,9 +142,16 @@ public class ApiClient {
                     return;
                 }
                 T data = null;
-                if (type != Void.class && ar.data != null) {
-                    JsonObject dataJson = gson.toJsonTree(ar.data).getAsJsonObject();
-                    data = gson.fromJson(dataJson, type);
+                if (ar.data != null) {
+                    JsonElement el = gson.toJsonTree(ar.data);
+                    if (!(type instanceof Class) || !Void.class.equals(type)) {
+                        try {
+                            data = gson.fromJson(el, type);
+                        } catch (JsonSyntaxException ex) {
+                            ui.post(() -> cb.onError(-3, "数据解析失败: " + ex.getMessage()));
+                            return;
+                        }
+                    }
                 }
                 final T d = data;
                 ui.post(() -> cb.onSuccess(d));

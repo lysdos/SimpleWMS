@@ -142,6 +142,25 @@ public class InboundOrderDao {
         return jdbc.update("DELETE FROM inbound_order_item WHERE order_id = ?", orderId);
     }
 
+    /** 按行 id 查单条明细 */
+    public InboundOrderItem findItemById(int itemId) {
+        List<InboundOrderItem> list = jdbc.query(
+                "SELECT * FROM inbound_order_item WHERE id = ?", ITEM_ROW, itemId);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /** 更新 DRAFT 单明细行(数量/供应商/行备注),返回影响行数 */
+    public int updateItem(int itemId, int quantity, String supplier, String rowRemark) {
+        return jdbc.update(
+                "UPDATE inbound_order_item SET quantity = ?, supplier = ?, row_remark = ? WHERE id = ?",
+                quantity, supplier, rowRemark, itemId);
+    }
+
+    /** 删除 DRAFT 单单条明细行,返回影响行数 */
+    public int deleteItem(int itemId) {
+        return jdbc.update("DELETE FROM inbound_order_item WHERE id = ?", itemId);
+    }
+
     public InboundOrder findOrderById(int id) {
         List<InboundOrder> list = jdbc.query(
                 "SELECT * FROM inbound_order WHERE id = ?", ORDER_ROW, id);

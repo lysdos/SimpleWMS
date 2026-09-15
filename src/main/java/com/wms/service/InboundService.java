@@ -173,6 +173,70 @@ public class InboundService {
     }
 
     /**
+     * 修改 DRAFT 单明细行(数量/供应商/行备注),仅 DRAFT 可改,商品不可换。
+     * 数量增减同步增删 PENDING 占位单元(未生效,不动库存/流水);
+     * commit 时按行 quantity 统一激活,数量差值在占位阶段即可平衡。
+     */
+    @Transactional
+    public InboundOrder updateDraftItem(int orderId, int itemId, BatchItem patch) {
+        InboundOrder order = requireDraftOrder(orderId);
+        if (patch == null) throw new IllegalArgumentException("明细不能为空");
+        if (patch.quantity == null || patch.quantity <= 0) {
+            throw new IllegalArgumentException("入库数量必须大于 0");
+        }
+        InboundOrderItem item = orderDao.findItemById(itemId);
+        if (item == null || item.getOrderId() == null || item.getOrderId() != orderId) {
+            throw new IllegalArgumentException("明细行不存在或不属于该单, itemId=" + itemId);
+        }
+        int oldQty = item.getQuantity() == null ? 0 : item.getQuantity();
+        int newQty = patch.quantity;
+        if (newQty > oldQty) {
+            // 补占位单元
+            BatchItem extra = new BatchItem();
+            extra.productId = item.getProductId();
+            extra.quantity = newQty - oldQty;
+            extra.supplier = blankToNull(patch.supplier);
+            extra.rowRemark = blankToNull(patch.rowRemark);
+            String operator = order.getOperator();
+            if (operator == null || operator.isBlank()) operator = "操作员";
+            List<InventoryItem> generated = processItemBatch(extra, operator, orderId);
+            for (InventoryItem u : generated) {
+                itemDao.updateInboundItemId(itemId, u.getId());
+            }
+        } else if (newQty < oldQty) {
+            itemDao.deletePendingByInboundItem(itemId, oldQty - newQty);
+        }
+        orderDao.updateItem(itemId, newQty, blankToNull(patch.supplier), blankToNull(patch.rowRemark));
+        orderDao.refreshAggregates(orderId);
+        return getOrder(orderId);
+    }
+
+    /**
+     * 删除 DRAFT 单明细行(连带清理其 PENDING 占位单元),仅 DRAFT 可删。
+     */
+    @Transactional
+    public InboundOrder deleteDraftItem(int orderId, int itemId) {
+        requireDraftOrder(orderId);
+        InboundOrderItem item = orderDao.findItemById(itemId);
+        if (item == null || item.getOrderId() == null || item.getOrderId() != orderId) {
+            throw new IllegalArgumentException("明细行不存在或不属于该单, itemId=" + itemId);
+        }
+        itemDao.deletePendingByInboundItem(itemId, Integer.MAX_VALUE);
+        orderDao.deleteItem(itemId);
+        orderDao.refreshAggregates(orderId);
+        return getOrder(orderId);
+    }
+
+    private InboundOrder requireDraftOrder(int orderId) {
+        InboundOrder order = orderDao.findOrderById(orderId);
+        if (order == null) throw new IllegalArgumentException("入库单不存在, id=" + orderId);
+        if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
+            throw new IllegalStateException("只有 DRAFT 单可以修改明细, 当前 status=" + order.getStatus());
+        }
+        return order;
+    }
+
+    /**
      * commit:校验 DRAFT + totalQuantity>0,把 status 推到 COMMITTED,返回含 codes 的完整单。
      */
     @Transactional

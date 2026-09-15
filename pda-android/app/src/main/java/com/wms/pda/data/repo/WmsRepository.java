@@ -28,6 +28,15 @@ public interface WmsRepository {
     /** 选商品+数量+库位+备注追加到 DRAFT 单。返回最新单(含 items[]) */
     void addInboundItem(String orderId, int productId, int quantity, String supplier,
                         String rowRemark, WmsCallback<InboundOrder> cb);
+    /** 修改 DRAFT 单明细行(商品不可换) */
+    void updateInboundItem(String orderId, String itemId, int quantity, String supplier,
+                           String rowRemark, WmsCallback<InboundOrder> cb);
+    /** 删除 DRAFT 单明细行 */
+    void deleteInboundItem(String orderId, String itemId, WmsCallback<InboundOrder> cb);
+    /** 商品列表(添加明细选商品用,去重后的商品而非库存单元) */
+    void listProducts(WmsCallback<List<com.wms.pda.data.model.Product>> cb);
+    /** 供应商列表(下拉选项) */
+    void listSuppliers(WmsCallback<List<com.wms.pda.data.model.Supplier>> cb);
     void commitInbound(String orderId, WmsCallback<InboundOrder> cb);
     void cancelInbound(String orderId, WmsCallback<Void> cb);
 
@@ -37,6 +46,10 @@ public interface WmsRepository {
     void createOutbound(String customer, String externalNo, String remark, WmsCallback<OutboundOrder> cb);
     /** 出库扫码:每扫一码调一次,后端 inventory_item 校验后累加 item[].quantity */
     void submitOutboundScan(String orderId, String code, WmsCallback<OutboundOrder> cb);
+    /** UHF EPC 扫码:走后端 /scan-epc 专用接口(校验本单 RESERVED + 幂等) */
+    void submitOutboundEpcScan(String orderId, String epc, WmsCallback<com.wms.pda.data.model.EpcScanResult> cb);
+    /** 撤销本单全部扫码确认(仅 DRAFT 单),返回清除条数 */
+    void resetOutboundScans(String orderId, WmsCallback<Integer> cb);
     void commitOutbound(String orderId, WmsCallback<OutboundOrder> cb);
     void cancelOutbound(String orderId, WmsCallback<Void> cb);
 

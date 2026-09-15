@@ -105,6 +105,26 @@ public class OutboundService {
         if (inv.getOutboundOrderId() == null || inv.getOutboundOrderId() != orderId) {
             throw new IllegalStateException("该码已被其他出库单锁定");
         }
+        // 记录扫码确认(幂等:同码重复扫不重复落库)。
+        // 落库后提交前/提交后重进详情页都能从 getOrder 拿到已扫标记,
+        // commitDraft 的"未扫码直接提交"留痕统计也自动恢复准确。
+        String fullCode = inv.getCode();
+        if (logDao.countScannedForOutboundCode(orderId, fullCode) == 0) {
+            String operator = o.getOperator();
+            if (operator == null || operator.isBlank()) operator = "操作员";
+            InventoryLog log = new InventoryLog();
+            log.setType(InventoryLog.TYPE_SCAN);
+            log.setProductId(inv.getProductId());
+            log.setSku(inv.getSku());
+            log.setProductName(inv.getProductName());
+            log.setQuantity(0);
+            log.setBeforeQty(0);
+            log.setAfterQty(0);
+            log.setRemark("条码扫码确认, code=" + fullCode);
+            log.setOperator(operator);
+            log.setOrderId(orderId);
+            logDao.insert(log);
+        }
         return getOrder(orderId); // 已属于本单,直接返回
     }
     @Transactional public OutboundOrder commitDraft(int id){
@@ -326,6 +346,23 @@ public class OutboundService {
                 item.setCodes(codes);
             }
             o.setItems(items);
+            // 回填已扫码确认的库存单元编码(条码日志存完整 code,UHF 日志存 epc 需反查)
+            List<String> scanned = new java.util.ArrayList<>();
+            for (String remark : logDao.findScanRemarksForOutbound(id)) {
+                if (remark == null) continue;
+                int i = remark.indexOf("code=");
+                if (i >= 0) {
+                    String c = remark.substring(i + 5).trim();
+                    if (!c.isEmpty() && !scanned.contains(c)) scanned.add(c);
+                    continue;
+                }
+                i = remark.indexOf("epc=");
+                if (i >= 0) {
+                    InventoryItem u = itemDao.findByEpc(remark.substring(i + 4).trim());
+                    if (u != null && !scanned.contains(u.getCode())) scanned.add(u.getCode());
+                }
+            }
+            o.setScannedCodes(scanned);
         }
         return o;
     }

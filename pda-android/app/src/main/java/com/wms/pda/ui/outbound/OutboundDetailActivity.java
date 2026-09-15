@@ -1,6 +1,8 @@
 package com.wms.pda.ui.outbound;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -15,6 +17,7 @@ import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
+import com.wms.pda.data.model.EpcScanResult;
 import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.OutboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
@@ -26,7 +29,9 @@ import com.wms.pda.scan.ScannerCallback;
 import com.wms.pda.ui.common.StatusPill;
 import com.wms.pda.util.BeepUtil;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -55,12 +60,28 @@ public class OutboundDetailActivity extends AppCompatActivity {
     /** 已成功扫描的 24 位码(用于避免重复提示) */
     private final Set<String> scannedCodes = new HashSet<>();
 
+    /** 本单已提交过的码(成功或失败都算):连续扫码时失败的码静默跳过,不重复弹错误提示 */
+    private final Set<String> triedCodes = new HashSet<>();
+
     /** 当前出库单的总数量(用于进度计算) */
     private int totalQty = 0;
     private int scannedQty = 0;
 
+    /** 最近一次加载的明细行(扫码结果归一化用) */
+    private List<OutboundOrder.Line> loadedLines = new ArrayList<>();
+
     /** 当前活跃的扫码类型(null = 未在扫码) */
     private ScanType activeScanType = null;
+
+    /** 单据已完成/已取消,扫码入口整体锁定 */
+    private boolean scanLocked = false;
+
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    /** 错误提示限频:2 秒内只响铃/弹一次,其余计数合并 */
+    private long lastErrFeedbackMs = 0L;
+    private int suppressedErrCount = 0;
+    /** render 节流:连续扫码成功时合并刷新 */
+    private Runnable pendingRender = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -90,6 +111,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
         btnBarcodeScan.setOnClickListener(v -> startBarcodeScan());
         btnBarcodeStop.setOnClickListener(v -> stopScan());
 
+        findViewById(R.id.btn_clear_scans).setOnClickListener(v -> confirmClearScans());
+
         btnComplete.setOnClickListener(v ->
                 RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
                         new WmsCallback<OutboundOrder>() {
@@ -112,6 +135,12 @@ public class OutboundDetailActivity extends AppCompatActivity {
         stopScan(); // 离开页面时停止扫码
     }
 
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        uiHandler.removeCallbacksAndMessages(null);
+    }
+
     // ============================================================
     // RFID 扫码
     // ============================================================
@@ -129,12 +158,9 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onScanResult(ScanResult result) {
                 String code = result.getCode();
                 if (code == null || code.isEmpty()) return;
-                if (scannedCodes.contains(code)) {
-                    Toast.makeText(OutboundDetailActivity.this,
-                            "该码已扫描过: " + code, Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                submitScan(code);
+                String canon = canonicalCode(code);
+                if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
+                submitEpcScan(code, canon);
             }
 
             @Override
@@ -174,11 +200,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onScanResult(ScanResult result) {
                 String code = result.getCode();
                 if (code == null || code.isEmpty()) return;
-                if (scannedCodes.contains(code)) {
-                    Toast.makeText(OutboundDetailActivity.this,
-                            "该码已扫描过: " + code, Toast.LENGTH_SHORT).show();
-                    return;
-                }
+                String canon = canonicalCode(code);
+                if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
                 submitScan(code);
             }
 
@@ -229,6 +252,24 @@ public class OutboundDetailActivity extends AppCompatActivity {
         // 启用状态: 白色文字 + 主色背景
         ColorStateList enabledBg = ColorStateList.valueOf(colorPrimary);
 
+        if (scanLocked) {
+            // 单据已完成/已取消: 两个扫码按钮全部禁用
+            btnRfidScan.setVisibility(View.VISIBLE);
+            btnRfidStop.setVisibility(View.GONE);
+            btnRfidScan.setEnabled(false);
+            btnRfidScan.setClickable(false);
+            btnRfidScan.setTextColor(colorDisabled);
+            btnRfidScan.setBackgroundTintList(disabledBg);
+
+            btnBarcodeScan.setVisibility(View.VISIBLE);
+            btnBarcodeStop.setVisibility(View.GONE);
+            btnBarcodeScan.setEnabled(false);
+            btnBarcodeScan.setClickable(false);
+            btnBarcodeScan.setTextColor(colorDisabled);
+            btnBarcodeScan.setBackgroundTintList(disabledBg);
+            return;
+        }
+
         if (activeScanType == null) {
             // 空闲状态: 两个开始按钮都可点击
             btnRfidScan.setVisibility(View.VISIBLE);
@@ -273,15 +314,95 @@ public class OutboundDetailActivity extends AppCompatActivity {
     // 提交扫码结果
     // ============================================================
 
+    /**
+     * UHF EPC 扫码提交:走 /scan-epc 专用接口。
+     * matched=true → 成功(已扫过幂等返回不发成功音,只刷新);
+     * matched=false → 失败原因提示(限频),该码本次会话内静默跳过。
+     */
+    private void submitEpcScan(String epc, String canonical) {
+        triedCodes.add(canonical);
+        RepositoryProvider.get().submitOutboundEpcScan(String.valueOf(dbId), epc,
+                new WmsCallback<EpcScanResult>() {
+                    @Override public void onSuccess(EpcScanResult r) {
+                        if (r != null && r.matched) {
+                            scannedCodes.add(canonical);
+                            if (r.alreadyScanned) {
+                                Toast.makeText(OutboundDetailActivity.this,
+                                        "该码已扫过: " + canonical, Toast.LENGTH_SHORT).show();
+                            } else {
+                                BeepUtil.success();
+                                Toast.makeText(OutboundDetailActivity.this,
+                                        "已出库: " + canonical, Toast.LENGTH_SHORT).show();
+                            }
+                            renderSoon();
+                        } else {
+                            String reason = (r == null || r.reason == null) ? "未知原因" : r.reason;
+                            showScanErrorLimited(reason);
+                        }
+                    }
+                    @Override public void onError(int code, String msg) {
+                        showScanErrorLimited("扫码失败: " + msg);
+                    }
+                });
+    }
+
+    /** 清空本单扫码确认:确认后调 reset-scans,成功后刷新(已扫标记/进度归零,可重新扫) */
+    private void confirmClearScans() {
+        if (scanLocked) return;
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("清空扫码")
+                .setMessage("确定清空本单全部扫码记录吗?清空后可重新扫码。")
+                .setPositiveButton("清空", (d, w) ->
+                        RepositoryProvider.get().resetOutboundScans(String.valueOf(dbId),
+                                new WmsCallback<Integer>() {
+                                    @Override public void onSuccess(Integer deleted) {
+                                        scannedCodes.clear();
+                                        triedCodes.clear();
+                                        Toast.makeText(OutboundDetailActivity.this,
+                                                "已清空 " + (deleted == null ? 0 : deleted) + " 条扫码记录",
+                                                Toast.LENGTH_SHORT).show();
+                                        render();
+                                    }
+                                    @Override public void onError(int code, String msg) {
+                                        Toast.makeText(OutboundDetailActivity.this,
+                                                "清空失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    }
+                                }))
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 失败提示限频:2 秒窗口内只响铃+弹一次,窗口内的重复错误合并计数 */
+    private void showScanErrorLimited(String reason) {
+        long now = System.currentTimeMillis();
+        if (now - lastErrFeedbackMs < 2000L) {
+            suppressedErrCount++;
+            return;
+        }
+        lastErrFeedbackMs = now;
+        int n = suppressedErrCount;
+        suppressedErrCount = 0;
+        BeepUtil.error();
+        String text = n > 0 ? reason + "(另有 " + n + " 个重复错误省略),已跳过" : reason + ",已跳过";
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
+    }
+
+    /** 连续扫码成功时合并刷新,300ms 防抖 */
+    private void renderSoon() {
+        if (pendingRender != null) uiHandler.removeCallbacks(pendingRender);
+        pendingRender = this::render;
+        uiHandler.postDelayed(pendingRender, 300);
+    }
+
     private void submitScan(String code) {
         RepositoryProvider.get().submitOutboundScan(String.valueOf(dbId), code,
                 new WmsCallback<OutboundOrder>() {
                     @Override public void onSuccess(OutboundOrder o) {
-                        scannedCodes.add(code);
+                        scannedCodes.add(canonicalCode(code));
                         BeepUtil.success();
                         Toast.makeText(OutboundDetailActivity.this,
                                 "已出库: " + code, Toast.LENGTH_SHORT).show();
-                        render();
+                        renderSoon();
                     }
                     @Override public void onError(int code, String msg) {
                         handleScanError(code, msg);
@@ -328,6 +449,10 @@ public class OutboundDetailActivity extends AppCompatActivity {
     }
 
     private void doRender(OutboundOrder o) {
+        loadedLines = o.lines == null ? new ArrayList<>() : o.lines;
+        // 以服务端扫码记录为准(跨会话/重进页面标记不丢)
+        scannedCodes.clear();
+        if (o.scannedCodes != null) scannedCodes.addAll(o.scannedCodes);
         ((TextView) findViewById(R.id.tv_id)).setText(o.id);
         StatusPill.apply((TextView) findViewById(R.id.tv_status), o.status);
 
@@ -429,8 +554,30 @@ public class OutboundDetailActivity extends AppCompatActivity {
         }
 
         boolean done = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
+        scanLocked = done;
         btnComplete.setEnabled(!done);
+        findViewById(R.id.btn_clear_scans).setEnabled(!done);
+        findViewById(R.id.btn_clear_scans).setAlpha(done ? 0.4f : 1f);
         if (done) stopScan();
+        updateButtonStates();
+    }
+
+    /**
+     * 把扫到的原始码归一化成后端存的完整编码。
+     * 条码枪可能吞前导零(后端 findByCode 靠尾匹配兜底),
+     * 若直接把原始码放进 scannedCodes,明细区的 ✓ 标记比对不上会漏打。
+     */
+    private String canonicalCode(String raw) {
+        if (raw == null) return null;
+        String r = raw.trim();
+        for (OutboundOrder.Line l : loadedLines) {
+            if (l.codes == null) continue;
+            for (String c : l.codes) {
+                if (c == null) continue;
+                if (c.equals(r) || c.endsWith(r) || r.endsWith(c)) return c;
+            }
+        }
+        return r;
     }
 
     private void updateProgress() {

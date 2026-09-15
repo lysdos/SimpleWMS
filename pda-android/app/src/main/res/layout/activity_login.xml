@@ -62,23 +62,39 @@
             android:orientation="vertical"
             android:padding="@dimen/space_xl">
 
-            <!-- 大 Logo 占位 -->
-            <View
-                android:layout_width="96dp"
-                android:layout_height="96dp"
+            <!-- 大 Logo:图形 + 分离的文字(透明底,融入灰色页面背景) -->
+            <ImageView
+                android:layout_width="100dp"
+                android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_xl"
-                android:background="@drawable/bg_kpi_blue" />
+                android:layout_marginTop="-14dp"
+                android:src="@drawable/ic_app_logo"
+                android:contentDescription="@string/app_name" />
 
-            <TextView
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="WMS"
-                android:textColor="@color/primary"
-                android:textSize="32sp"
-                android:textStyle="bold"
                 android:layout_gravity="center_horizontal"
-                android:layout_marginTop="@dimen/space_md" />
+                android:layout_marginTop="-12dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Simple"
+                    android:textColor="@color/text_primary"
+                    android:textSize="30sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="WMS"
+                    android:textColor="@color/primary"
+                    android:textSize="30sp"
+                    android:textStyle="bold"
+                    android:layout_marginStart="2dp" />
+            </LinearLayout>
 
             <!-- 服务器提示卡 -->
             <LinearLayout

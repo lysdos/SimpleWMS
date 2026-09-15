@@ -41,11 +41,25 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_md"
-        android:text="@string/inbound_supplier"
+        android:text="@string/inbound_pick_supplier"
+        style="@style/Text.Caption" />
+
+    <Spinner
+        android:id="@+id/sp_supplier"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/touch_min"
+        android:layout_marginTop="@dimen/space_xs"
+        android:background="@drawable/bg_input" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:text="@string/inbound_row_remark"
         style="@style/Text.Caption" />
 
     <EditText
-        android:id="@+id/et_supplier"
+        android:id="@+id/et_row_remark"
         android:layout_width="match_parent"
         android:layout_height="@dimen/touch_min"
         android:layout_marginTop="@dimen/space_xs"

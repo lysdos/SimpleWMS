@@ -41,4 +41,43 @@
             tools:text="× 10 台"
             xmlns:tools="http://schemas.android.com/tools" />
     </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ll_line_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="@dimen/space_xs"
+        android:visibility="gone"
+        android:gravity="end">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_line_edit"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/touch_min"
+            android:minWidth="0dp"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_edit"
+            android:textSize="@dimen/text_caption"
+            android:backgroundTint="@color/bg_subtle"
+            android:textColor="@color/text_secondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_line_delete"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/touch_min"
+            android:minWidth="0dp"
+            android:layout_marginStart="@dimen/space_xs"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:text="@string/action_delete"
+            android:textSize="@dimen/text_caption"
+            android:backgroundTint="@color/danger"
+            android:textColor="@color/on_primary" />
+    </LinearLayout>
 </LinearLayout>

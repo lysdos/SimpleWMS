@@ -22,6 +22,8 @@ public class OutboundOrder {
     private LocalDateTime createdAt;
     private String status;
     private List<OutboundOrderItem> items;
+    /** 本单已扫码确认的库存单元编码(详情页回看已扫标记用) */
+    private List<String> scannedCodes;
     // ===== UHF 派单字段 =====
     private LocalDateTime uhfDispatchedAt;
     private String uhfDispatchedBy;
@@ -50,6 +52,8 @@ public class OutboundOrder {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public List<OutboundOrderItem> getItems() { return items; }
     public void setItems(List<OutboundOrderItem> items) { this.items = items; }
+    public List<String> getScannedCodes() { return scannedCodes; }
+    public void setScannedCodes(List<String> scannedCodes) { this.scannedCodes = scannedCodes; }
 
     public LocalDateTime getUhfDispatchedAt() { return uhfDispatchedAt; }
     public void setUhfDispatchedAt(LocalDateTime uhfDispatchedAt) { this.uhfDispatchedAt = uhfDispatchedAt; }

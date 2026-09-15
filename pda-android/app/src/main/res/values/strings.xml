@@ -66,6 +66,14 @@
     <string name="inbound_add_item_action">添加明细</string>
     <string name="inbound_pick_product">选择商品</string>
     <string name="inbound_pick_qty">入库数量</string>
+    <string name="inbound_pick_supplier">供应商(可选)</string>
+    <string name="inbound_row_remark">行备注(可选)</string>
+    <string name="supplier_none">不指定</string>
+    <string name="action_edit">编辑</string>
+    <string name="action_delete">删除</string>
+    <string name="msg_load_products_failed">加载商品失败</string>
+    <string name="msg_no_products">请先在 PC 端维护商品</string>
+    <string name="confirm_delete_line">确认删除该明细行?将连带清理其占位库存。</string>
 
     <!-- 出库 -->
     <string name="outbound_title">出库登记</string>

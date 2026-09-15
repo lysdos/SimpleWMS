@@ -205,6 +205,16 @@ public class InventoryItemDao {
                 orderId, InventoryItem.STATUS_PENDING);
     }
 
+    /**
+     * 删除某明细行下指定数量的 PENDING 占位单元(DRAFT 单缩减数量/删行时用)。
+     * 只删 PENDING(未生效),已激活的不碰。
+     */
+    public int deletePendingByInboundItem(int inboundItemId, int limit) {
+        return jdbc.update(
+                "DELETE FROM inventory_item WHERE inbound_item_id = ? AND status = ? LIMIT ?",
+                inboundItemId, InventoryItem.STATUS_PENDING, limit);
+    }
+
     /** 把 inventory_item 的 inbound_item_id 字段回填(每件实物→它所属的明细行) */
     public int updateInboundItemId(int inboundItemId, int inventoryItemId) {
         // SQL 顺序:SET 新值, WHERE 列值

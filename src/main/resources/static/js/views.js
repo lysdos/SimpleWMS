@@ -358,12 +358,12 @@ const Views = {
             .join('');
 
         const blankRow = () => {
-            const productCell  = `<select class="select nw-product" style="width:360px;">${productOpts}</select>`;
+            const productCell  = `<select class="select nw-product" style="width:240px;">${productOpts}</select>`;
             const supplierCell = isIn
-                ? `<select class="select nw-supplier" style="width:200px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
+                ? `<select class="select nw-supplier" style="width:150px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
                 : '';
-            const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:100px;">`;
-            const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}">`;
+            const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:90px;">`;
+            const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}" style="width:180px;">`;
             return `
             <tr class="nw-row">
                 <td class="num row-idx">1</td>
@@ -376,17 +376,17 @@ const Views = {
         };
 
         const ths = isIn
-            ? `<th style="width:50px;">#</th>
-               <th style="width:360px;">${t('new_order.label.product')}<span class="req">*</span></th>
-               <th style="width:200px;">${t('new_order.label.supplier')}</th>
-               <th style="width:120px;">${t('new_order.label.qty')}<span class="req">*</span></th>
+            ? `<th style="width:36px;">#</th>
+               <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
+               <th style="width:150px;">${t('new_order.label.supplier')}</th>
+               <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
                <th>${t('new_order.label.row_remark')}</th>
-               <th style="width:80px;">${t('common.actions')}</th>`
-            : `<th style="width:50px;">#</th>
-               <th style="width:360px;">${t('new_order.label.product')}<span class="req">*</span></th>
-               <th style="width:120px;">${t('new_order.label.qty')}<span class="req">*</span></th>
+               <th style="width:66px;">${t('common.actions')}</th>`
+            : `<th style="width:36px;">#</th>
+               <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
+               <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
                <th>${t('new_order.label.row_remark')}</th>
-               <th style="width:80px;">${t('common.actions')}</th>`;
+               <th style="width:66px;">${t('common.actions')}</th>`;
 
         const headFields = isIn ? `
             <div class="form-field" style="flex:1;">

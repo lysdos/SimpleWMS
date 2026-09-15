@@ -151,6 +151,29 @@ public class InboundController {
     }
 
     /**
+     * 修改 DRAFT 单明细行(数量/供应商/行备注;商品不可换)。
+     * body: { "quantity": 5, "supplier": "可选", "rowRemark": "可选" }
+     */
+    @PutMapping("/orders/{id}/items/{itemId}")
+    public ApiResponse<InboundOrder> updateItem(@PathVariable int id, @PathVariable int itemId,
+                                                @RequestBody Map<String, Object> body) {
+        if (body == null) throw new IllegalArgumentException("请求体不能为空");
+        InboundService.BatchItem it = new InboundService.BatchItem();
+        it.quantity = asInt(body.get("quantity"));
+        it.supplier = asString(body.get("supplier"));
+        it.rowRemark = asString(body.get("rowRemark"));
+        return ApiResponse.ok(inboundService.updateDraftItem(id, itemId, it));
+    }
+
+    /**
+     * 删除 DRAFT 单明细行(连带清理其 PENDING 占位库存单元)。
+     */
+    @DeleteMapping("/orders/{id}/items/{itemId}")
+    public ApiResponse<InboundOrder> deleteItem(@PathVariable int id, @PathVariable int itemId) {
+        return ApiResponse.ok(inboundService.deleteDraftItem(id, itemId));
+    }
+
+    /**
      * 提交草稿单(DRAFT → COMMITTED)。返回完整单 + 每行 inventory_item.code 列表。
      */
     @PostMapping("/orders/{id}/commit")

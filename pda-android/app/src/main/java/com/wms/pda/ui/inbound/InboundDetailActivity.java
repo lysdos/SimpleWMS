@@ -55,18 +55,26 @@ public class InboundDetailActivity extends AppCompatActivity {
     }
 
     private void openAddItem() {
-        RepositoryProvider.get().searchInventory("", new WmsCallback<List<com.wms.pda.data.model.InventoryItem>>() {
-            @Override public void onSuccess(List<com.wms.pda.data.model.InventoryItem> items) {
-                if (items == null || items.isEmpty()) {
-                    Toast.makeText(InboundDetailActivity.this, "请先在 PC 端维护商品", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                AddInboundItemDialog.show(InboundDetailActivity.this, items, dbId, () -> render());
-            }
-            @Override public void onError(int code, String msg) {
-                Toast.makeText(InboundDetailActivity.this, "加载商品失败: " + msg, Toast.LENGTH_SHORT).show();
-            }
-        });
+        AddInboundItemDialog.show(this, dbId, this::render);
+    }
+
+    private void confirmDeleteLine(InboundOrder.InboundLine l) {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_delete_line)
+                .setPositiveButton(R.string.action_delete, (d, w) -> {
+                    RepositoryProvider.get().deleteInboundItem(String.valueOf(dbId), String.valueOf(l.id),
+                            new WmsCallback<InboundOrder>() {
+                                @Override public void onSuccess(InboundOrder o) {
+                                    Toast.makeText(InboundDetailActivity.this, "已删除", Toast.LENGTH_SHORT).show();
+                                    render();
+                                }
+                                @Override public void onError(int code, String msg) {
+                                    Toast.makeText(InboundDetailActivity.this, "删除失败: " + msg, Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                })
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
     }
 
     private void doCommit() {
@@ -128,6 +136,7 @@ public class InboundDetailActivity extends AppCompatActivity {
             empty.setPadding(24, 24, 24, 24);
             llLines.addView(empty);
         } else {
+            boolean draft = o.status == Enums.DocStatus.DRAFT;
             for (InboundOrder.InboundLine l : o.lines) {
                 View row = li.inflate(R.layout.item_inbound_line, llLines, false);
                 TextView tvSkuName = row.findViewById(R.id.tv_sku_name);
@@ -150,6 +159,16 @@ public class InboundDetailActivity extends AppCompatActivity {
                     if (l.codes.size() > 3) info.append("\n  • …(+").append(l.codes.size() - 3).append(")");
                 }
                 tvInfo.setText(info.toString());
+
+                View actions = row.findViewById(R.id.ll_line_actions);
+                if (draft) {
+                    actions.setVisibility(View.VISIBLE);
+                    row.findViewById(R.id.btn_line_edit).setOnClickListener(v ->
+                            AddInboundItemDialog.showEdit(this, dbId, l, this::render));
+                    row.findViewById(R.id.btn_line_delete).setOnClickListener(v -> confirmDeleteLine(l));
+                } else {
+                    actions.setVisibility(View.GONE);
+                }
                 llLines.addView(row);
             }
         }

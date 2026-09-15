@@ -21,12 +21,16 @@ public class UhfScannerImpl implements ScannerService {
 
     private static final String TAG = "UhfScannerImpl";
     private static final long POLL_IDLE_SLEEP_MS = 20L;
+    private static final long SAME_EPC_DEBOUNCE_MS = 2000L;
 
     private volatile RFIDWithUHFUART reader;
     private final AtomicBoolean powered = new AtomicBoolean(false);
     private final AtomicBoolean scanning = new AtomicBoolean(false);
     private volatile Thread pollThread;
     private ScannerCallback cb;
+    /** 连续盘点时同一 EPC 的防抖:记录每个 EPC 最近一次上报时间 */
+    private final java.util.concurrent.ConcurrentHashMap<String, Long> lastEmitByEpc =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void init(Context ctx) throws Exception {
@@ -68,6 +72,7 @@ public class UhfScannerImpl implements ScannerService {
         }
         stopScan();
         scanning.set(true);
+        lastEmitByEpc.clear();
 
         // 启动盘点
         boolean started;
@@ -86,21 +91,10 @@ public class UhfScannerImpl implements ScannerService {
         }
         Log.i(TAG, "UHF inventory started");
 
-        // 启动轮询线程
+        // 启动轮询线程(连续盘点模式:读到标签不停,直到用户按"停止")
         pollThread = new Thread(this::pollLoop, "uhf-poll");
         pollThread.setDaemon(true);
         pollThread.start();
-
-        // 5 秒超时线程
-        Thread timeoutThread = new Thread(() -> {
-            try { Thread.sleep(5_000); } catch (InterruptedException ignored) {}
-            if (scanning.get()) {
-                stopScan();
-                if (cb != null) cb.onTimeout();
-            }
-        }, "UhfScanTimeout");
-        timeoutThread.setDaemon(true);
-        timeoutThread.start();
     }
 
     @Override
@@ -130,8 +124,8 @@ public class UhfScannerImpl implements ScannerService {
     }
 
     /**
-     * 轮询线程:持续读取 readTagFromBuffer() 直到扫描停止。
-     * 读到一个有效 EPC 就停止并回调。
+     * 轮询线程:持续读取 readTagFromBuffer() 直到用户停止扫描。
+     * 读到有效 EPC 就回调(同一 EPC 2 秒内防抖不重复上报),盘点继续跑。
      */
     private void pollLoop() {
         while (scanning.get()) {
@@ -145,16 +139,13 @@ public class UhfScannerImpl implements ScannerService {
             }
             if (info != null) {
                 String epc = info.getEPC();
-                if (epc != null && !epc.isEmpty()) {
-                    // 抓到有效 EPC → 停止扫描 + 回调
-                    scanning.set(false);
-                    try { reader.stopInventory(); } catch (Throwable ignored) {}
+                if (epc != null && !epc.isEmpty() && shouldEmit(epc)) {
+                    Log.i(TAG, "epc emitted: " + epc + " (len=" + epc.length() + ", rssi=" + info.getRssi() + ")");
                     if (cb != null) {
                         cb.onScanResult(new ScanResult(
                                 epc, ScanType.RFID_EPC, info.getRssi(),
                                 System.currentTimeMillis()));
                     }
-                    return;
                 }
             } else {
                 try { Thread.sleep(POLL_IDLE_SLEEP_MS); } catch (InterruptedException ie) {
@@ -163,5 +154,12 @@ public class UhfScannerImpl implements ScannerService {
                 }
             }
         }
+    }
+
+    /** 同一 EPC 在 DEBOUNCE 窗口内只上报一次;窗口外允许重扫(标签可能被重新放回) */
+    private boolean shouldEmit(String epc) {
+        long now = System.currentTimeMillis();
+        Long last = lastEmitByEpc.put(epc, now);
+        return last == null || now - last >= SAME_EPC_DEBOUNCE_MS;
     }
 }

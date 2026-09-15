@@ -78,6 +78,28 @@ public class InventoryLogDao {
     }
 
     /**
+     * 统计本出库单某库存单元编码的条码扫码确认次数(SCAN 类型日志)。
+     * 给条码路径 scanCodeToDraft 去重用,>0 说明已扫过。
+     */
+    public int countScannedForOutboundCode(int orderId, String code) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_log " +
+                "WHERE type = 'SCAN' AND order_id = ? AND remark = ?",
+                Integer.class, orderId, "条码扫码确认, code=" + code);
+        return n == null ? 0 : n;
+    }
+
+    /**
+     * 本出库单全部扫码确认日志的 remark(SCAN 类型)。
+     * 给 getOrder 回填已扫码编码列表用(条码 remark 含 code=,UHF remark 含 epc=)。
+     */
+    public List<String> findScanRemarksForOutbound(int orderId) {
+        return jdbc.queryForList(
+                "SELECT remark FROM inventory_log WHERE type = 'SCAN' AND order_id = ? ORDER BY id ASC",
+                String.class, orderId);
+    }
+
+    /**
      * 统计本出库单某 SKU 的"已扫码确认"件数(SCAN 类型日志条数)。
      * 注意:每扫一次 SCAN 日志=1 件,这里直接 count。
      */

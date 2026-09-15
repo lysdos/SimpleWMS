@@ -69,6 +69,7 @@ final class Mappers {
         m.remark = o.remark;
         m.status = mapStatus(o.status);
         m.createdAt = o.createdAt;
+        m.scannedCodes = o.scannedCodes;
         m.lines = new ArrayList<>();
         if (o.items != null) {
             for (Dto.OutboundOrderItem it : o.items) {
@@ -141,6 +142,43 @@ final class Mappers {
         m.outboundOrderId = it.outboundOrderId;
         m.createdBy = it.createdBy;
         m.createdAt = it.createdAt;
+        return m;
+    }
+
+    static com.wms.pda.data.model.EpcScanResult toModel(Dto.EpcScanResult r) {
+        if (r == null) return null;
+        com.wms.pda.data.model.EpcScanResult m = new com.wms.pda.data.model.EpcScanResult();
+        m.matched = r.matched != null && r.matched;
+        m.alreadyScanned = r.alreadyScanned != null && r.alreadyScanned;
+        m.reason = r.reason;
+        m.epc = r.epc;
+        m.sku = r.sku;
+        m.scannedQty = r.scannedQty;
+        m.reservedCount = r.reservedCount;
+        m.stillNeeded = r.stillNeeded;
+        return m;
+    }
+
+    static com.wms.pda.data.model.Product toModel(Dto.Product p) {
+        if (p == null) return null;
+        com.wms.pda.data.model.Product m = new com.wms.pda.data.model.Product();
+        m.id = p.id;
+        m.sku = p.sku;
+        m.name = p.name;
+        m.unit = p.unit;
+        m.quantity = p.quantity;
+        m.lowStock = p.lowStock;
+        m.defaultSupplier = p.defaultSupplier;
+        m.defaultSupplierId = p.defaultSupplierId;
+        return m;
+    }
+
+    static com.wms.pda.data.model.Supplier toModel(Dto.Supplier s) {
+        if (s == null) return null;
+        com.wms.pda.data.model.Supplier m = new com.wms.pda.data.model.Supplier();
+        m.id = s.id;
+        m.name = s.name;
+        m.enabled = s.enabled == null || s.enabled;
         return m;
     }
 

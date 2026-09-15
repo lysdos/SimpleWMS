@@ -18,6 +18,7 @@ public class OutboundOrder {
     public Enums.DocStatus status;
     public String createdAt;      // 创建时间(ISO 字符串)
     public List<Line> lines;
+    public List<String> scannedCodes; // 后端已扫码确认的库存单元编码(回看已扫标记用)
 
     public OutboundOrder() {}
 
