@@ -57,7 +57,7 @@ class StocktakeAdapter extends RecyclerView.Adapter<StocktakeAdapter.VH> {
         String keyword = o.scopeKeyword == null || o.scopeKeyword.isEmpty() ? "—" : o.scopeKeyword;
         h.tvScope.setText("范围 · " + keyword);
 
-        h.tvOperator.setText(o.operator == null ? "操作员: —" : "操作员: " + o.operator);
+        h.tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
 
         int total = o.totalCount == null ? 0 : o.totalCount;
         int counted = o.countedCount == null ? 0 : o.countedCount;

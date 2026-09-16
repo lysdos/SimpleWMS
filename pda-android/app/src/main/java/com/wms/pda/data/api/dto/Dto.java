@@ -15,6 +15,8 @@ public class Dto {
         public Long totalQuantity;
         public String totalValue;     // BigDecimal → 字符串
         public Long lowStockCount;
+        public Long expiringSoonCount; // 临期批次预警数(未过期)
+        public Long expiredCount;      // 已过期在库批次数
     }
 
     // ---- 入库 ----
@@ -23,7 +25,7 @@ public class Dto {
         public String orderNo;
         public String externalNo;
         public String remark;
-        public String operator;
+        public String createdBy;
         public Integer totalQuantity;
         public Integer itemCount;
         public String createdAt;     // ISO 字符串
@@ -44,6 +46,8 @@ public class Dto {
         public Integer afterQty;
         public String location;
         public String rowRemark;
+        public String productionDate; // yyyy-MM-dd(可空)
+        public Integer shelfLifeDays; // 保质期天数(可空)
         public String createdAt;
         public List<String> codes;   // commit 后填充的 24 位码
     }
@@ -55,7 +59,7 @@ public class Dto {
         public String customer;
         public String externalNo;
         public String remark;
-        public String operator;
+        public String createdBy;
         public Integer totalQuantity;
         public Integer itemCount;
         public String createdAt;
@@ -87,7 +91,7 @@ public class Dto {
         public String scope;          // ALL / SKU / LOCATION
         public String scopeKeyword;
         public String remark;
-        public String operator;
+        public String createdBy;
         public String status;
         public Integer totalCount;
         public Integer countedCount;
@@ -142,6 +146,7 @@ public class Dto {
         public Integer lowStock;
         public String defaultSupplier;
         public Integer defaultSupplierId;
+        public Integer defaultShelfLifeDays; // 默认保质期天数(可空)
     }
 
     // ---- 供应商(/api/suppliers,下拉选项) ----
@@ -149,6 +154,30 @@ public class Dto {
         public Integer id;
         public String name;
         public Boolean enabled;
+    }
+
+    // ---- 库位(/api/locations,调拨目标用) ----
+    public static class Location {
+        public Integer id;
+        public String code;
+        public String name;
+        public Boolean enabled;
+    }
+
+    // ---- 库存流水(最近操作用) ----
+    public static class InventoryLog {
+        public Integer id;
+        public String type;          // IN / OUT / CHECK
+        public Integer productId;
+        public String sku;
+        public String productName;
+        public Integer quantity;
+        public Integer beforeQty;
+        public Integer afterQty;
+        public String remark;
+        public String createdBy;
+        public Integer orderId;
+        public String createdAt;
     }
 
     // ---- 登录响应 ----

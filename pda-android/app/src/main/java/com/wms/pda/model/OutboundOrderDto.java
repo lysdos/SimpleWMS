@@ -9,7 +9,7 @@ public class OutboundOrderDto {
     public String customer;
     public String externalNo;
     public String remark;
-    public String operator;
+    public String createdBy;
     public Integer totalQuantity;
     public Integer itemCount;
     public String status;            // DRAFT / COMMITTED / CANCELLED

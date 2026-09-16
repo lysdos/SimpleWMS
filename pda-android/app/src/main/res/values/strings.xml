@@ -46,6 +46,8 @@
     <!-- 仪表盘 -->
     <string name="dash_welcome">您好, %1$s</string>
     <string name="dash_kpi_low_stock">库存预警 SKU</string>
+    <string name="dash_kpi_expiring_soon">临期预警批次</string>
+    <string name="dash_kpi_expired">已过期批次</string>
     <string name="dash_kpi_product_count">商品种类</string>
     <string name="dash_kpi_total_quantity">库存总件数</string>
     <string name="dash_kpi_total_value">库存总值</string>
@@ -68,12 +70,21 @@
     <string name="inbound_pick_qty">入库数量</string>
     <string name="inbound_pick_supplier">供应商(可选)</string>
     <string name="inbound_row_remark">行备注(可选)</string>
+    <string name="inbound_production_date">生产日期(可选)</string>
+    <string name="inbound_shelf_life">保质期(天,可选)</string>
     <string name="supplier_none">不指定</string>
     <string name="action_edit">编辑</string>
     <string name="action_delete">删除</string>
     <string name="msg_load_products_failed">加载商品失败</string>
     <string name="msg_no_products">请先在 PC 端维护商品</string>
     <string name="confirm_delete_line">确认删除该明细行?将连带清理其占位库存。</string>
+    <string name="inbound_edit_header_title">编辑入库单</string>
+    <string name="inbound_header_external_no_hint">外部单号(可选)</string>
+    <string name="inbound_header_remark_hint">备注(可选)</string>
+    <string name="confirm_cancel_inbound">确认取消该入库单?草稿明细与占位库存将被清理,操作不可恢复。</string>
+    <string name="action_cancel_order">取消单据</string>
+    <string name="msg_order_cancelled">已取消</string>
+    <string name="msg_header_saved">已保存</string>
 
     <!-- 出库 -->
     <string name="outbound_title">出库登记</string>
@@ -82,6 +93,9 @@
     <string name="outbound_new_title">新建出库单</string>
     <string name="outbound_detail_title">出库单详情</string>
     <string name="outbound_customer">客户/领用部门</string>
+    <string name="outbound_edit_header_title">编辑出库单</string>
+    <string name="outbound_header_customer_hint">客户/领用部门(可选)</string>
+    <string name="confirm_cancel_outbound">确认取消该出库单?草稿明细将被清理,已锁定库存将释放,操作不可恢复。</string>
 
     <!-- 库存 -->
     <string name="inventory_title">库存管理</string>
@@ -92,9 +106,11 @@
     <string name="inventory_warehouse_col">仓库</string>
     <string name="inventory_location">库位</string>
     <string name="transfer_title">库存调拨</string>
+    <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
     <string name="transfer_qty">调拨数量</string>
     <string name="scrap_title">库存报废</string>
+    <string name="scrap_reason_label">报废原因</string>
     <string name="scrap_qty">报废数量</string>
     <string name="scrap_reason">报废原因</string>
 
@@ -141,7 +157,7 @@
     <string name="warehouse_prefix_fmt">目标仓库: %1$s</string>
     <string name="outbound_warehouse_prefix_fmt">出库仓库: %1$s</string>
     <string name="created_at_fmt">创建时间: %1$s</string>
-    <string name="outbound_scan_hint">扫码出库:扫到的条码会从本单累计扣减</string>
+    <string name="outbound_scan_hint">扫码确认:扫到的条码会标记为已核实,提交出库时统一扣减</string>
     <string name="qty_fmt">× %1$d %2$s</string>
     <string name="barcode_fmt">条码 %1$s</string>
     <string name="joined_fmt">已加入: %1$s</string>

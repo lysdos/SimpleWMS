@@ -17,6 +17,8 @@ public class InboundOrderItem {
     private Integer beforeQty;
     private Integer afterQty;
     private String location;
+    private java.time.LocalDate productionDate;  // 生产日期(该行=一个生产批次,可空)
+    private Integer shelfLifeDays;               // 保质期天数(该行批次,可空)
     private String rowRemark;
     private LocalDateTime createdAt;
     /** 一物一码:该明细行所有 inventory_item 24 位编码(commit 时由 service 填充) */
@@ -44,6 +46,10 @@ public class InboundOrderItem {
     public void setAfterQty(Integer afterQty) { this.afterQty = afterQty; }
     public String getLocation() { return location; }
     public void setLocation(String location) { this.location = location; }
+    public java.time.LocalDate getProductionDate() { return productionDate; }
+    public void setProductionDate(java.time.LocalDate productionDate) { this.productionDate = productionDate; }
+    public Integer getShelfLifeDays() { return shelfLifeDays; }
+    public void setShelfLifeDays(Integer shelfLifeDays) { this.shelfLifeDays = shelfLifeDays; }
     public String getRowRemark() { return rowRemark; }
     public void setRowRemark(String rowRemark) { this.rowRemark = rowRemark; }
     public LocalDateTime getCreatedAt() { return createdAt; }

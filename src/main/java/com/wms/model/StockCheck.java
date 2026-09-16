@@ -17,7 +17,7 @@ public class StockCheck {
     private String scope;
     private String scopeKeyword;
     private String remark;
-    private String operator;
+    private String createdBy;
     private String status;
     private Integer totalCount;
     private Integer countedCount;
@@ -38,8 +38,8 @@ public class StockCheck {
     public void setScopeKeyword(String scopeKeyword) { this.scopeKeyword = scopeKeyword; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
-    public String getOperator() { return operator; }
-    public void setOperator(String operator) { this.operator = operator; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Integer getTotalCount() { return totalCount; }

@@ -45,6 +45,7 @@ import java.util.Set;
 public class OutboundDetailActivity extends AppCompatActivity {
 
     private Integer dbId;
+    private OutboundOrder currentOrder;  // 最近一次渲染的单据(编辑/取消用)
     private LinearLayout llLines;
     private MaterialButton btnComplete;
     private TextView tvProgress;
@@ -112,6 +113,13 @@ public class OutboundDetailActivity extends AppCompatActivity {
         btnBarcodeStop.setOnClickListener(v -> stopScan());
 
         findViewById(R.id.btn_clear_scans).setOnClickListener(v -> confirmClearScans());
+
+        findViewById(R.id.btn_header_edit).setOnClickListener(v -> {
+            if (currentOrder != null) EditOutboundHeaderDialog.show(this, currentOrder, this::render);
+        });
+        findViewById(R.id.btn_header_cancel).setOnClickListener(v -> {
+            if (currentOrder != null) confirmCancelOrder();
+        });
 
         btnComplete.setOnClickListener(v ->
                 RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
@@ -449,6 +457,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
     }
 
     private void doRender(OutboundOrder o) {
+        currentOrder = o;
         loadedLines = o.lines == null ? new ArrayList<>() : o.lines;
         // 以服务端扫码记录为准(跨会话/重进页面标记不丢)
         scannedCodes.clear();
@@ -465,7 +474,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 ? "外部单号: —" : "外部单号: " + o.externalNo);
 
         TextView tvOperator = findViewById(R.id.tv_operator);
-        tvOperator.setText(o.operator == null ? "操作员: —" : "操作员: " + o.operator);
+        tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
 
         TextView tvRemark = findViewById(R.id.tv_remark);
         tvRemark.setText(o.remark == null || o.remark.isEmpty()
@@ -558,8 +567,28 @@ public class OutboundDetailActivity extends AppCompatActivity {
         btnComplete.setEnabled(!done);
         findViewById(R.id.btn_clear_scans).setEnabled(!done);
         findViewById(R.id.btn_clear_scans).setAlpha(done ? 0.4f : 1f);
+        findViewById(R.id.ll_header_actions).setVisibility(o.status == Enums.DocStatus.DRAFT ? View.VISIBLE : View.GONE);
         if (done) stopScan();
         updateButtonStates();
+    }
+
+    private void confirmCancelOrder() {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_cancel_outbound)
+                .setPositiveButton(R.string.action_cancel_order, (d, w) -> {
+                    RepositoryProvider.get().cancelOutbound(String.valueOf(dbId),
+                            new WmsCallback<Void>() {
+                                @Override public void onSuccess(Void v) {
+                                    Toast.makeText(OutboundDetailActivity.this, R.string.msg_order_cancelled, Toast.LENGTH_SHORT).show();
+                                    finish();  // 取消后单据不再是草稿,返回列表
+                                }
+                                @Override public void onError(int code, String msg) {
+                                    Toast.makeText(OutboundDetailActivity.this, "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                })
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
     }
 
     /**

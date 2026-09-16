@@ -10,17 +10,10 @@ public class DashboardSnapshot {
     public int productCount;       // 商品种类数
     public int totalQuantity;      // 库存总件数
     public BigDecimal totalValue;  // 库存总值
-    public int lowStockSkuCount;   // 低库存预警 SKU 数
-    public List<OpLog> recentOps;  // 最近操作(后端暂无,空列表)
+    public int lowStockSkuCount;       // 低库存预警 SKU 数
+    public int expiringSoonCount;      // 临期批次预警数(未过期,距到期<=商品预警天数,默认30)
+    public int expiredCount;           // 已过期在库批次数
+    public List<OpLog> recentOps;      // 最近操作(后端暂无,空列表)
 
     public DashboardSnapshot() {}
-
-    public DashboardSnapshot(int productCount, int totalQuantity, BigDecimal totalValue,
-                             int lowStockSkuCount, List<OpLog> recentOps) {
-        this.productCount = productCount;
-        this.totalQuantity = totalQuantity;
-        this.totalValue = totalValue;
-        this.lowStockSkuCount = lowStockSkuCount;
-        this.recentOps = recentOps;
-    }
 }

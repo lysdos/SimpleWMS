@@ -43,6 +43,16 @@ public class InventoryItemDao {
         i.setTransferredAt(ts == null ? null : ts.toLocalDateTime());
         i.setTransferredFrom(rs.getString("transferred_from"));
         i.setTransferredTo(rs.getString("transferred_to"));
+        java.sql.Date pd = rs.getDate("production_date");
+        i.setProductionDate(pd == null ? null : pd.toLocalDate());
+        int sld = rs.getInt("shelf_life_days");
+        i.setShelfLifeDays(rs.wasNull() ? null : sld);
+        java.sql.Date ed = rs.getDate("expiry_date");
+        i.setExpiryDate(ed == null ? null : ed.toLocalDate());
+        try {   // expiry_warn_days 来自联表(findItems),普通 SELECT * 查询没有该列
+            int ewd = rs.getInt("expiry_warn_days");
+            i.setExpiryWarnDays(rs.wasNull() ? null : ewd);
+        } catch (java.sql.SQLException ignored) {}
         i.setCreatedBy(rs.getString("created_by"));
         ts = rs.getTimestamp("created_at");
         i.setCreatedAt(ts == null ? null : ts.toLocalDateTime());
@@ -54,8 +64,8 @@ public class InventoryItemDao {
     public int insert(InventoryItem i) {
         String sql = "INSERT INTO inventory_item " +
                 "(code, product_id, sku, product_name, location_code, quantity, remaining, status, " +
-                "inbound_order_id, inbound_item_id, created_by) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                "inbound_order_id, inbound_item_id, created_by, production_date, shelf_life_days, expiry_date) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -70,6 +80,9 @@ public class InventoryItemDao {
             if (i.getInboundOrderId() == null) ps.setNull(9, java.sql.Types.INTEGER); else ps.setInt(9, i.getInboundOrderId());
             if (i.getInboundItemId() == null) ps.setNull(10, java.sql.Types.INTEGER); else ps.setInt(10, i.getInboundItemId());
             ps.setString(11, i.getCreatedBy());
+            if (i.getProductionDate() == null) ps.setNull(12, java.sql.Types.DATE); else ps.setDate(12, java.sql.Date.valueOf(i.getProductionDate()));
+            if (i.getShelfLifeDays() == null) ps.setNull(13, java.sql.Types.INTEGER); else ps.setInt(13, i.getShelfLifeDays());
+            if (i.getExpiryDate() == null) ps.setNull(14, java.sql.Types.DATE); else ps.setDate(14, java.sql.Date.valueOf(i.getExpiryDate()));
             return ps;
         }, kh);
         Number k = kh.getKey();
@@ -245,25 +258,18 @@ public class InventoryItemDao {
      * @param sku     SKU 模糊匹配(可空)
      * @param location 库位精确匹配(可空)
      * @param status  IN_STOCK / OUT / SCRAPPED / TRANSFERRED / 空(=全部)
+     * @param expiryStatus EXPIRING=临期(距到期<=商品预警天数,默认30) / EXPIRED=已过期 / 空(=全部)
+     * @param expiryFrom, expiryTo 到期日范围(yyyy-MM-dd,可空)
      * @param page, pageSize
      */
     public List<InventoryItem> findItems(String sku, String location, String status,
+                                          String expiryStatus, String expiryFrom, String expiryTo,
                                           int page, int pageSize) {
-        StringBuilder sb = new StringBuilder("SELECT * FROM inventory_item WHERE 1=1");
+        StringBuilder sb = new StringBuilder("SELECT i.*, p.expiry_warn_days FROM inventory_item i " +
+                "LEFT JOIN product p ON p.id = i.product_id WHERE 1=1");
         List<Object> args = new ArrayList<>();
-        if (sku != null && !sku.isBlank()) {
-            sb.append(" AND sku LIKE ?");
-            args.add("%" + sku.trim() + "%");
-        }
-        if (location != null && !location.isBlank()) {
-            sb.append(" AND location_code = ?");
-            args.add(location.trim());
-        }
-        if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            sb.append(" AND status = ?");
-            args.add(status);
-        }
-        sb.append(" ORDER BY id DESC");
+        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo);
+        sb.append(" ORDER BY i.id DESC");
         // 导出场景:controller 传 pageSize=5000(导出全部),被 cap 成 20 = 漏数据。
         // 把上限放到 100000(只对导出生效,UI 列表仍走 pageSize=20),确保 export.csv 拿到全集。
         int lim;
@@ -280,23 +286,47 @@ public class InventoryItemDao {
         return jdbc.query(sb.toString(), ROW, args.toArray());
     }
 
-    public long countItems(String sku, String location, String status) {
-        StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM inventory_item WHERE 1=1");
+    public long countItems(String sku, String location, String status,
+                           String expiryStatus, String expiryFrom, String expiryTo) {
+        StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM inventory_item i " +
+                "LEFT JOIN product p ON p.id = i.product_id WHERE 1=1");
         List<Object> args = new ArrayList<>();
+        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo);
+        Long c = jdbc.queryForObject(sb.toString(), Long.class, args.toArray());
+        return c == null ? 0L : c;
+    }
+
+    /** findItems / countItems 共用的过滤条件(注意:外层查询用了别名 i,product 别名 p) */
+    private void appendItemFilters(StringBuilder sb, List<Object> args,
+                                   String sku, String location, String status,
+                                   String expiryStatus, String expiryFrom, String expiryTo) {
         if (sku != null && !sku.isBlank()) {
-            sb.append(" AND sku LIKE ?");
+            sb.append(" AND i.sku LIKE ?");
             args.add("%" + sku.trim() + "%");
         }
         if (location != null && !location.isBlank()) {
-            sb.append(" AND location_code = ?");
+            sb.append(" AND i.location_code = ?");
             args.add(location.trim());
         }
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            sb.append(" AND status = ?");
+            sb.append(" AND i.status = ?");
             args.add(status);
         }
-        Long c = jdbc.queryForObject(sb.toString(), Long.class, args.toArray());
-        return c == null ? 0L : c;
+        if (expiryFrom != null && !expiryFrom.isBlank()) {
+            sb.append(" AND i.expiry_date >= ?");
+            args.add(expiryFrom.trim());
+        }
+        if (expiryTo != null && !expiryTo.isBlank()) {
+            sb.append(" AND i.expiry_date <= ?");
+            args.add(expiryTo.trim());
+        }
+        if ("EXPIRED".equalsIgnoreCase(expiryStatus)) {
+            sb.append(" AND i.expiry_date IS NOT NULL AND i.expiry_date < CURDATE()");
+        } else if ("EXPIRING".equalsIgnoreCase(expiryStatus)) {
+            // 临期:未过期且距到期日 <= 该商品的预警天数(NULL=默认30天)
+            sb.append(" AND i.expiry_date IS NOT NULL AND i.expiry_date >= CURDATE()")
+              .append(" AND i.expiry_date <= CURDATE() + INTERVAL COALESCE(p.expiry_warn_days, 30) DAY");
+        }
     }
 
     /**

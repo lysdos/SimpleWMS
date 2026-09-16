@@ -8,7 +8,7 @@ public class InboundOrderDto {
     public String orderNo;
     public String externalNo;
     public String remark;
-    public String operator;
+    public String createdBy;
     public Integer totalQuantity;
     public Integer itemCount;
     public String createdAt;        // ISO 字符串,Gson 直接吃

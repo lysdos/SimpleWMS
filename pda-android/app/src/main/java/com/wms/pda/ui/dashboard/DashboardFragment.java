@@ -23,10 +23,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 
-/** 仪表盘:4 KPI(商品种类 / 库存总件数 / 库存预警 / 库存总值)+ 最近操作。 */
+/** 仪表盘:6 KPI(商品种类 / 库存总件数 / 库存预警 / 库存总值 / 临期预警 / 已过期)+ 最近操作。 */
 public class DashboardFragment extends Fragment {
 
-    private TextView kProduct, kQty, kLow, kValue;
+    private TextView kProduct, kQty, kLow, kValue, kExpiring, kExpired;
     private LinearLayout recent;
 
     @Nullable
@@ -42,11 +42,13 @@ public class DashboardFragment extends Fragment {
 
         TextView welcome = v.findViewById(R.id.tv_welcome);
         TextView tvOverview = v.findViewById(R.id.tv_overview_date);
-        kProduct = v.findViewById(R.id.kpi_product_count);
-        kQty     = v.findViewById(R.id.kpi_total_quantity);
-        kLow     = v.findViewById(R.id.kpi_low_stock);
-        kValue   = v.findViewById(R.id.kpi_total_value);
-        recent   = v.findViewById(R.id.recent_container);
+        kProduct  = v.findViewById(R.id.kpi_product_count);
+        kQty      = v.findViewById(R.id.kpi_total_quantity);
+        kLow      = v.findViewById(R.id.kpi_low_stock);
+        kValue    = v.findViewById(R.id.kpi_total_value);
+        kExpiring = v.findViewById(R.id.kpi_expiring_soon);
+        kExpired  = v.findViewById(R.id.kpi_expired);
+        recent    = v.findViewById(R.id.recent_container);
 
         welcome.setText(getString(R.string.dash_welcome, SessionStore.currentUser()));
         tvOverview.setText(R.string.dash_overview);
@@ -66,6 +68,8 @@ public class DashboardFragment extends Fragment {
                 kQty.setText(String.valueOf(snap.totalQuantity));
                 kLow.setText(String.valueOf(snap.lowStockSkuCount));
                 kValue.setText(formatValue(snap.totalValue));
+                kExpiring.setText(String.valueOf(snap.expiringSoonCount));
+                kExpired.setText(String.valueOf(snap.expiredCount));
 
                 recent.removeAllViews();
                 LayoutInflater li = LayoutInflater.from(requireContext());

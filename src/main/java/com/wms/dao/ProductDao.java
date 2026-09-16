@@ -35,6 +35,10 @@ public class ProductDao {
         p.setQuantity(rs.getInt("quantity"));
         p.setUnitPrice(rs.getBigDecimal("unit_price"));
         p.setLowStock(rs.getInt("low_stock"));
+        int dsld = rs.getInt("default_shelf_life_days");
+        p.setDefaultShelfLifeDays(rs.wasNull() ? null : dsld);
+        int ewd = rs.getInt("expiry_warn_days");
+        p.setExpiryWarnDays(rs.wasNull() ? null : ewd);
         p.setRemark(rs.getString("remark"));
         p.setCreatedAt(rs.getTimestamp("created_at") == null
                 ? null : rs.getTimestamp("created_at").toLocalDateTime());
@@ -104,7 +108,8 @@ public class ProductDao {
 
     public int insert(Product p) {
         String sql = "INSERT INTO product (sku, name, category, unit, location, " +
-                "quantity, unit_price, low_stock, remark) VALUES (?,?,?,?,?,?,?,?,?)";
+                "quantity, unit_price, low_stock, default_shelf_life_days, expiry_warn_days, remark) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
@@ -116,7 +121,9 @@ public class ProductDao {
             ps.setInt(6, p.getQuantity() == null ? 0 : p.getQuantity());
             ps.setBigDecimal(7, p.getUnitPrice() == null ? BigDecimal.ZERO : p.getUnitPrice());
             ps.setInt(8, p.getLowStock() == null ? 10 : p.getLowStock());
-            ps.setString(9, p.getRemark());
+            if (p.getDefaultShelfLifeDays() == null) ps.setNull(9, java.sql.Types.INTEGER); else ps.setInt(9, p.getDefaultShelfLifeDays());
+            if (p.getExpiryWarnDays() == null) ps.setNull(10, java.sql.Types.INTEGER); else ps.setInt(10, p.getExpiryWarnDays());
+            ps.setString(11, p.getRemark());
             return ps;
         }, kh);
         Number k = kh.getKey();
@@ -129,23 +136,26 @@ public class ProductDao {
 
     public int update(Product p) {
         String sql = "UPDATE product SET sku=?, name=?, category=?, unit=?, location=?, " +
-                "quantity=?, unit_price=?, low_stock=?, remark=? WHERE id=?";
+                "quantity=?, unit_price=?, low_stock=?, default_shelf_life_days=?, expiry_warn_days=?, " +
+                "remark=? WHERE id=?";
         return jdbc.update(sql,
                 p.getSku(), p.getName(), emptyTo(p.getCategory(), "默认"),
                 emptyTo(p.getUnit(), "件"), emptyTo(p.getLocation(), "默认库位"),
-                p.getQuantity(), p.getUnitPrice(), p.getLowStock(), p.getRemark(), p.getId());
+                p.getQuantity(), p.getUnitPrice(), p.getLowStock(),
+                p.getDefaultShelfLifeDays(), p.getExpiryWarnDays(),
+                p.getRemark(), p.getId());
     }
 
     public int delete(int id) {
         return jdbc.update("DELETE FROM product WHERE id = ?", id);
     }
 
-    /** 库存 +/- 原子操作,返回受影响行数(0 表示失败,如 SKU 不存在) */
+    /** 库存 +/- 原子操作,返回受影响行数(0=商品不存在或扣成负数被拒绝) */
     public int adjustQuantity(int id, int delta) {
         return jdbc.update(
                 "UPDATE product SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP " +
-                        "WHERE id = ?",
-                delta, id);
+                        "WHERE id = ? AND quantity + ? >= 0",
+                delta, id, delta);
     }
 
     public long count() {

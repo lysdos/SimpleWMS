@@ -6,6 +6,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
@@ -88,21 +89,33 @@ final class AddInboundItemDialog {
         EditText etQty = v.findViewById(R.id.et_qty);
         Spinner spSupplier = v.findViewById(R.id.sp_supplier);
         EditText etRowRemark = v.findViewById(R.id.et_row_remark);
+        EditText etProductionDate = v.findViewById(R.id.et_production_date);
+        EditText etShelfLife = v.findViewById(R.id.et_shelf_life);
 
         // 商品下拉
         List<String> productLabels = new ArrayList<>();
         for (Product p : products) {
             productLabels.add((p.sku == null ? "?" : p.sku) + " · " + (p.name == null ? "" : p.name));
         }
-        // 编辑模式:定位原商品并锁定(商品列表拉不到时兜底显示行上原信息)
+        // 编辑模式:定位原商品;商品列表里找不到(如商品已删)时把行上原信息插到首位兜底,
+        // 避免静默显示成第一个商品、提交时换错商品
         int productIdx = 0;
         if (editLine != null) {
+            int matched = -1;
             for (int i = 0; i < products.size(); i++) {
-                if (editLine.productId != null && editLine.productId.equals(products.get(i).id)) { productIdx = i; break; }
+                if (editLine.productId != null && editLine.productId.equals(products.get(i).id)) { matched = i; break; }
             }
-            if (productLabels.isEmpty()) {
-                productLabels.add((editLine.sku == null ? "?" : editLine.sku)
+            if (matched < 0) {
+                Product fallback = new Product();
+                fallback.id = editLine.productId;
+                fallback.sku = editLine.sku;
+                fallback.name = editLine.name;
+                products.add(0, fallback);
+                productLabels.add(0, (editLine.sku == null ? "?" : editLine.sku)
                         + " · " + (editLine.name == null ? "" : editLine.name));
+                productIdx = 0;
+            } else {
+                productIdx = matched;
             }
         }
         ArrayAdapter<String> productAd = new ArrayAdapter<>(ctx,
@@ -111,10 +124,26 @@ final class AddInboundItemDialog {
         spProduct.setAdapter(productAd);
         if (editLine != null) {
             spProduct.setSelection(Math.min(productIdx, productLabels.size() - 1));
-            spProduct.setEnabled(false);
             etQty.setText(String.valueOf(editLine.qty));
             etRowRemark.setText(editLine.rowRemark == null ? "" : editLine.rowRemark);
+            etProductionDate.setText(editLine.productionDate == null ? "" : editLine.productionDate);
+            if (editLine.shelfLifeDays != null) etShelfLife.setText(String.valueOf(editLine.shelfLifeDays));
         }
+
+        // 生产日期:只读弹出 DatePicker
+        etProductionDate.setOnClickListener(tv -> {
+            int y, m, d;
+            try {
+                String[] parts = etProductionDate.getText().toString().split("-");
+                y = Integer.parseInt(parts[0]); m = Integer.parseInt(parts[1]) - 1; d = Integer.parseInt(parts[2]);
+            } catch (Exception e) {
+                java.util.Calendar cal = java.util.Calendar.getInstance();
+                y = cal.get(java.util.Calendar.YEAR); m = cal.get(java.util.Calendar.MONTH); d = cal.get(java.util.Calendar.DAY_OF_MONTH);
+            }
+            new android.app.DatePickerDialog(ctx, (picker, yy, mm, dd) ->
+                    etProductionDate.setText(String.format("%04d-%02d-%02d", yy, mm + 1, dd)),
+                    y, m, d).show();
+        });
 
         // 供应商下拉:第一项固定"不指定"
         List<String> supplierLabels = new ArrayList<>();
@@ -129,6 +158,23 @@ final class AddInboundItemDialog {
             spSupplier.setSelection(idx >= 0 ? idx : 0);
         }
 
+        // 选商品时带出默认保质期天数(仅添加模式且用户尚未手动填保质期时)
+        spProduct.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int pos, long id) {
+                if (editLine != null || etShelfLife.getText().length() > 0) return;
+                if (pos >= 0 && pos < products.size()) {
+                    Integer dflt = products.get(pos).defaultShelfLifeDays;
+                    etShelfLife.setText(dflt != null ? String.valueOf(dflt) : "");
+                }
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+        // 初始带出(添加模式)
+        if (editLine == null && !products.isEmpty()) {
+            Integer dflt = products.get(0).defaultShelfLifeDays;
+            if (dflt != null) etShelfLife.setText(String.valueOf(dflt));
+        }
+
         AlertDialog dialog = new AlertDialog.Builder(ctx)
                 .setTitle(editLine == null ? R.string.inbound_add_item_action : R.string.action_edit)
                 .setView(v)
@@ -136,17 +182,22 @@ final class AddInboundItemDialog {
                 .setNegativeButton(R.string.action_cancel, null)
                 .create();
 
+        // 软键盘弹出时压缩 Dialog 高度,配合内容 ScrollView,聚焦字段始终可见
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(
+                    android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(btn -> {
             Integer productId;
-            if (editLine != null) {
-                productId = editLine.productId;
-            } else {
-                int pIdx = spProduct.getSelectedItemPosition();
-                if (pIdx < 0 || pIdx >= products.size()) {
-                    Toast.makeText(ctx, R.string.msg_no_products, Toast.LENGTH_SHORT).show();
-                    return;
-                }
+            int pIdx = spProduct.getSelectedItemPosition();
+            if (pIdx >= 0 && pIdx < products.size()) {
                 productId = products.get(pIdx).id;
+            } else if (editLine != null) {
+                productId = editLine.productId;   // 商品列表拉取失败时兜底用原商品
+            } else {
+                Toast.makeText(ctx, R.string.msg_no_products, Toast.LENGTH_SHORT).show();
+                return;
             }
             if (productId == null) {
                 Toast.makeText(ctx, "该商品缺少 ID,请刷新重试", Toast.LENGTH_SHORT).show();
@@ -160,6 +211,10 @@ final class AddInboundItemDialog {
             int sIdx = spSupplier.getSelectedItemPosition();
             String supplier = (sIdx > 0 && sIdx < supplierLabels.size()) ? supplierLabels.get(sIdx) : null;
             String rowRemark = etRowRemark.getText().toString().trim();
+            String productionDate = etProductionDate.getText().toString().trim();
+            if (productionDate.isEmpty()) productionDate = null;
+            Integer shelfLifeDays = null;
+            try { String sl = etShelfLife.getText().toString().trim(); if (!sl.isEmpty()) shelfLifeDays = Integer.parseInt(sl); } catch (Exception ignored) {}
 
             String orderId = String.valueOf(orderDbId);
             WmsCallback<InboundOrder> cb = new WmsCallback<InboundOrder>() {
@@ -174,10 +229,11 @@ final class AddInboundItemDialog {
             };
 
             if (editLine == null) {
-                RepositoryProvider.get().addInboundItem(orderId, productId, qty, supplier, rowRemark, cb);
+                RepositoryProvider.get().addInboundItem(orderId, productId, qty, supplier, rowRemark,
+                        productionDate, shelfLifeDays, cb);
             } else {
                 RepositoryProvider.get().updateInboundItem(orderId, String.valueOf(editLine.id),
-                        qty, supplier, rowRemark, cb);
+                        productId, qty, supplier, rowRemark, productionDate, shelfLifeDays, cb);
             }
         }));
         dialog.show();

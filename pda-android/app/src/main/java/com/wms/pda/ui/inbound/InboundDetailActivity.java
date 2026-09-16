@@ -25,6 +25,7 @@ public class InboundDetailActivity extends AppCompatActivity {
 
     private Integer dbId;          // 后端数字 id(详情接口 / commit 接口都需要)
     private String orderNo;         // 展示用单号
+    private InboundOrder currentOrder;  // 最近一次渲染的单据(编辑/取消用)
     private LinearLayout llLines;
     private MaterialButton btnComplete;
     private MaterialButton btnAddItem;
@@ -46,6 +47,13 @@ public class InboundDetailActivity extends AppCompatActivity {
         btnAddItem.setText(R.string.inbound_add_item_action);
         btnAddItem.setOnClickListener(v -> openAddItem());
         btnComplete.setOnClickListener(v -> doCommit());
+
+        findViewById(R.id.btn_header_edit).setOnClickListener(v -> {
+            if (currentOrder != null) EditInboundHeaderDialog.show(this, currentOrder, this::render);
+        });
+        findViewById(R.id.btn_header_cancel).setOnClickListener(v -> {
+            if (currentOrder != null) confirmCancelOrder();
+        });
     }
 
     @Override
@@ -107,6 +115,7 @@ public class InboundDetailActivity extends AppCompatActivity {
     }
 
     private void doRender(InboundOrder o) {
+        currentOrder = o;
         ((TextView) findViewById(R.id.tv_id)).setText(o.id);
         StatusPill.apply((TextView) findViewById(R.id.tv_status), o.status);
 
@@ -115,7 +124,7 @@ public class InboundDetailActivity extends AppCompatActivity {
                 ? "外部单号: —" : "外部单号: " + o.externalNo);
 
         TextView tvOperator = findViewById(R.id.tv_operator);
-        tvOperator.setText(o.operator == null ? "操作员: —" : "操作员: " + o.operator);
+        tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
 
         TextView tvRemark = findViewById(R.id.tv_remark);
         tvRemark.setText(o.remark == null || o.remark.isEmpty()
@@ -176,5 +185,25 @@ public class InboundDetailActivity extends AppCompatActivity {
         boolean done = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
         btnAddItem.setEnabled(!done);
         btnComplete.setEnabled(!done);
+        findViewById(R.id.ll_header_actions).setVisibility(o.status == Enums.DocStatus.DRAFT ? View.VISIBLE : View.GONE);
+    }
+
+    private void confirmCancelOrder() {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setMessage(R.string.confirm_cancel_inbound)
+                .setPositiveButton(R.string.action_cancel_order, (d, w) -> {
+                    RepositoryProvider.get().cancelInbound(String.valueOf(dbId),
+                            new WmsCallback<Void>() {
+                                @Override public void onSuccess(Void v) {
+                                    Toast.makeText(InboundDetailActivity.this, R.string.msg_order_cancelled, Toast.LENGTH_SHORT).show();
+                                    render();
+                                }
+                                @Override public void onError(int code, String msg) {
+                                    Toast.makeText(InboundDetailActivity.this, "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                })
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
     }
 }

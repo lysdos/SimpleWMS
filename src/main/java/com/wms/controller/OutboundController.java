@@ -38,13 +38,13 @@ public class OutboundController {
         Integer productId = asInt(body.get("productId"));
         Integer quantity  = asInt(body.get("quantity"));
         String remark    = asString(body.get("remark"));
-        String operator  = currentOperator(req);
+        String createdBy  = currentUsername(req);
 
         if (productId == null) throw new IllegalArgumentException("请选择商品");
         if (quantity == null)  throw new IllegalArgumentException("请输入出库数量");
         if (quantity <= 0)     throw new IllegalArgumentException("出库数量必须大于 0");
 
-        return ApiResponse.ok(outboundService.doOutbound(productId, quantity, remark, operator));
+        return ApiResponse.ok(outboundService.doOutbound(productId, quantity, remark, createdBy));
     }
 
     /**
@@ -54,7 +54,7 @@ public class OutboundController {
      */
     @PostMapping("/batch")
     public ApiResponse<OutboundOrder> outboundBatch(@RequestBody Map<String, Object> body, HttpServletRequest req) {
-        String operator = currentOperator(req);
+        String createdBy = currentUsername(req);
         String customer   = asString(body.get("customer"));
         String externalNo = asString(body.get("externalNo"));
         String orderRemark = asString(body.get("remark"));
@@ -72,7 +72,7 @@ public class OutboundController {
             it.rowRemark  = asString(r.get("rowRemark"));
             items.add(it);
         }
-        OutboundOrder order = outboundService.doOutboundBatch(items, customer, externalNo, orderRemark, operator);
+        OutboundOrder order = outboundService.doOutboundBatch(items, customer, externalNo, orderRemark, createdBy);
         return ApiResponse.ok(order);
     }
 
@@ -90,14 +90,14 @@ public class OutboundController {
             @RequestParam(required = false) String beginDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String operator,
-            @RequestParam(required = false, defaultValue = "DRAFT") String status,
+            @RequestParam(required = false) String createdBy,
+            @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         int ps = (pageSize <= 0 || pageSize > 200) ? 20 : pageSize;
         int p  = page <= 0 ? 1 : page;
-        var list = outboundService.listOrders(beginDate, endDate, keyword, operator, status, p, ps);
-        long total = outboundService.countOrders(beginDate, endDate, keyword, operator, status);
+        var list = outboundService.listOrders(beginDate, endDate, keyword, createdBy, status, p, ps);
+        long total = outboundService.countOrders(beginDate, endDate, keyword, createdBy, status);
         return ApiResponse.ok(Map.of(
                 "list", list,
                 "total", total,
@@ -109,11 +109,11 @@ public class OutboundController {
     /** 新建空草稿单(供 PDA 选/建) */
     @PostMapping("/orders")
     public ApiResponse<OutboundOrder> createDraft(@RequestBody Map<String, Object> body, HttpServletRequest req) {
-        String operator = currentOperator(req);
+        String createdBy = currentUsername(req);
         String customer   = asString(body.get("customer"));
         String externalNo = asString(body.get("externalNo"));
         String remark     = asString(body.get("remark"));
-        return ApiResponse.ok(outboundService.createDraft(customer, externalNo, remark, operator));
+        return ApiResponse.ok(outboundService.createDraft(customer, externalNo, remark, createdBy));
     }
 
     /** PDA 扫一个码,验证并加入草稿单 */
@@ -140,7 +140,7 @@ public class OutboundController {
      *  1) 校验 EPC 存在且 IN_STOCK
      *  2) 校验 EPC 所属 SKU 在出库单明细里(不在 → 不报警 success=false)
      *  3) 调 consumeForOutboundByEpc 扣 1 件 + 写 OUT 流水
-     * body: { "epc": "FE019178", "operator": "admin" 可选 }
+     * body: { "epc": "FE019178", "createdBy": "admin" 可选 }
      */
     @PostMapping("/orders/{id}/scan-epc")
     public ApiResponse<ScanResult> scanEpc(
@@ -148,9 +148,9 @@ public class OutboundController {
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
         String epc = asString(body.get("epc"));
-        String operator = asString(body.get("operator"));
-        if (operator == null || operator.isBlank()) operator = currentOperator(req);
-        return ApiResponse.ok(outboundService.scanEpc(id, epc, operator));
+        String createdBy = asString(body.get("createdBy"));
+        if (createdBy == null || createdBy.isBlank()) createdBy = currentUsername(req);
+        return ApiResponse.ok(outboundService.scanEpc(id, epc, createdBy));
     }
 
     /** 提交草稿单(DRAFT → COMMITTED) */
@@ -184,6 +184,16 @@ public class OutboundController {
         return ApiResponse.ok(data);
     }
 
+    /** 修改 DRAFT 出库单头(客户/外部单号/备注),仅 DRAFT 可改。 */
+    @PutMapping("/orders/{id}")
+    public ApiResponse<OutboundOrder> updateHeader(@PathVariable int id,
+                                                    @RequestBody Map<String, Object> body) {
+        if (body == null) throw new IllegalArgumentException("请求体不能为空");
+        return ApiResponse.ok(outboundService.updateDraftHeader(id,
+                asString(body.get("customer")), asString(body.get("externalNo")),
+                asString(body.get("remark"))));
+    }
+
     /** 取消草稿单(DRAFT → CANCELLED) */
     @PostMapping("/orders/{id}/cancel")
     public ApiResponse<Void> cancel(@PathVariable int id) {
@@ -203,7 +213,7 @@ public class OutboundController {
                                                 HttpServletRequest req) {
         String deviceCode = asString(body.get("deviceCode"));
         // 派单审计字段:用当前登录用户名,而非写死 "admin"
-        return ApiResponse.ok(outboundService.dispatchToUhf(id, deviceCode, currentOperator(req)));
+        return ApiResponse.ok(outboundService.dispatchToUhf(id, deviceCode, currentUsername(req)));
     }
 
     /**
@@ -242,7 +252,7 @@ public class OutboundController {
         sb.append("出库单号,").append(csv(o.getOrderNo())).append('\n');
         sb.append("领用方,").append(csv(o.getCustomer())).append('\n');
         sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
-        sb.append("操作员,").append(csv(o.getOperator())).append('\n');
+        sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
         sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
         sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
@@ -281,7 +291,7 @@ public class OutboundController {
         return s;
     }
 
-    private static String currentOperator(HttpServletRequest req) {
+    private static String currentUsername(HttpServletRequest req) {
         String op = (String) req.getAttribute("username");
         return (op == null || op.isBlank()) ? "操作员" : op;
     }

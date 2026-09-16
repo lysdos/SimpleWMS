@@ -146,6 +146,66 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- KPI 第三行:临期预警 + 已过期 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="@dimen/space_md">
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_orange"
+                android:layout_marginEnd="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_expiring_soon"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/warning" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_expiring_soon"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/Card.SimpleWMS"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:background="@drawable/bg_kpi_red"
+                android:layout_marginStart="@dimen/space_sm">
+
+                <TextView
+                    android:id="@+id/kpi_expired"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="28sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/danger" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/dash_kpi_expired"
+                    style="@style/Text.Caption"
+                    android:layout_marginTop="@dimen/space_xs" />
+            </LinearLayout>
+        </LinearLayout>
+
         <!-- 最近操作 -->
         <TextView
             android:layout_width="wrap_content"

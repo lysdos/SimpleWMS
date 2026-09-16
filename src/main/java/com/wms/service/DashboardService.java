@@ -1,7 +1,9 @@
 package com.wms.service;
 
+import com.wms.dao.InventoryLogDao;
 import com.wms.dao.ProductDao;
 import com.wms.model.DashboardStats;
+import com.wms.model.InventoryLog;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -17,11 +19,13 @@ import java.util.Map;
 public class DashboardService {
 
     private final ProductDao productDao;
+    private final InventoryLogDao logDao;
     private final JdbcTemplate jdbc;
 
     @Autowired
-    public DashboardService(ProductDao productDao, JdbcTemplate jdbc) {
+    public DashboardService(ProductDao productDao, InventoryLogDao logDao, JdbcTemplate jdbc) {
         this.productDao = productDao;
+        this.logDao = logDao;
         this.jdbc = jdbc;
     }
 
@@ -31,7 +35,66 @@ public class DashboardService {
         s.setTotalQuantity(productDao.sumQuantity());
         s.setTotalValue(productDao.sumValue());
         s.setLowStockCount(productDao.countLowStock());
+        s.setExpiringSoonCount(countExpiring("EXPIRING"));
+        s.setExpiredCount(countExpiring("EXPIRED"));
         return s;
+    }
+
+    /**
+     * 效期预警统计(在库批次):EXPIRING=临期(未过期,距到期<=商品预警天数,默认30) / EXPIRED=已过期。
+     * 无效期数据的批次(production_date/shelf_life 缺失)不参与。
+     */
+    private long countExpiring(String kind) {
+        String cond = "EXPIRED".equals(kind)
+                ? "i.expiry_date < CURDATE()"
+                : "i.expiry_date >= CURDATE() AND i.expiry_date <= CURDATE() + INTERVAL COALESCE(p.expiry_warn_days, 30) DAY";
+        try {
+            Long c = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM inventory_item i LEFT JOIN product p ON p.id = i.product_id " +
+                    "WHERE i.status = 'IN_STOCK' AND i.expiry_date IS NOT NULL AND " + cond,
+                    Long.class);
+            return c == null ? 0L : c;
+        } catch (Exception e) {
+            return 0L;   // 新列尚未建(迁移未跑)时不阻断仪表盘
+        }
+    }
+
+    /**
+     * 临期/过期在库批次明细(仪表盘卡片列表)。
+     * @param kind EXPIRING / EXPIRED
+     * @param limit 最多返回条数(1-100)
+     */
+    public List<Map<String, Object>> expiringItems(String kind, int limit) {
+        boolean expired = "EXPIRED".equalsIgnoreCase(kind);
+        String cond = expired
+                ? "i.expiry_date < CURDATE()"
+                : "i.expiry_date >= CURDATE() AND i.expiry_date <= CURDATE() + INTERVAL COALESCE(p.expiry_warn_days, 30) DAY";
+        int n = Math.max(1, Math.min(limit, 100));
+        String sql = "SELECT i.id, i.code, i.sku, i.product_name, i.location_code, i.remaining, " +
+                "i.production_date, i.expiry_date, p.expiry_warn_days, " +
+                "DATEDIFF(i.expiry_date, CURDATE()) AS days_left " +
+                "FROM inventory_item i LEFT JOIN product p ON p.id = i.product_id " +
+                "WHERE i.status = 'IN_STOCK' AND i.expiry_date IS NOT NULL AND " + cond + " " +
+                "ORDER BY i.expiry_date ASC LIMIT " + n;
+        List<Map<String, Object>> out = new ArrayList<>();
+        try {
+            jdbc.query(sql, rs -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", rs.getInt("id"));
+                row.put("code", rs.getString("code"));
+                row.put("sku", rs.getString("sku"));
+                row.put("productName", rs.getString("product_name"));
+                row.put("locationCode", rs.getString("location_code"));
+                row.put("remaining", rs.getInt("remaining"));
+                java.sql.Date pd = rs.getDate("production_date");
+                row.put("productionDate", pd == null ? null : pd.toString());
+                java.sql.Date ed = rs.getDate("expiry_date");
+                row.put("expiryDate", ed == null ? null : ed.toString());
+                row.put("daysLeft", rs.getInt("days_left"));
+                out.add(row);
+            });
+        } catch (Exception ignored) {}
+        return out;
     }
 
     /**
@@ -106,5 +169,10 @@ public class DashboardService {
             out.add(row);
         }
         return out;
+    }
+
+    /** 最近操作记录(排除扫码确认,默认10条) */
+    public List<InventoryLog> recentOps(int limit) {
+        return logDao.findRecent(Math.max(1, Math.min(limit, 50)));
     }
 }

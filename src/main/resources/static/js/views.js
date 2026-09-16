@@ -112,6 +112,18 @@ const Views = {
                 <div class="label">${t('dashboard.low_stock')}</div>
                 <div class="value">${stats.lowStockCount}</div>
             </div>
+            <div class="${stats.expiringSoonCount > 0 ? 'stat-card warn' : 'stat-card ok'}">
+                <div class="label">${t('dashboard.expiring_soon')}</div>
+                <div class="value">${stats.expiringSoonCount ?? 0}</div>
+            </div>
+            <div class="${stats.expiredCount > 0 ? 'stat-card danger' : 'stat-card ok'}">
+                <div class="label">${t('dashboard.expired')}</div>
+                <div class="value">${stats.expiredCount ?? 0}</div>
+            </div>
+        </div>
+        <div class="card" style="margin-top:24px;" id="expiring-card">
+            <div class="card-title">${t('dashboard.expiring.title')}</div>
+            <div id="expiring-list" style="color:var(--c-text-3);font-size:13px;">${t('common.loading')}</div>
         </div>
         <div class="split" style="margin-top:24px;">
             <div class="card">
@@ -129,6 +141,40 @@ const Views = {
                 <div id="chart-outbound-trend-legend" style="font-size:12px;color:#9ca3af;margin-top:6px;"></div>
             </div>
         </div>`;
+    },
+
+    /* 仪表盘:临期/过期批次明细列表 */
+    expiringList(expiring, expired) {
+        const badge = (expired) => expired
+            ? `<span class="badge" style="background:#fee2e2;color:#b91c1c;">${t('inventory.expiry.expired')}</span>`
+            : `<span class="badge" style="background:#fef3c7;color:#92400e;">${t('inventory.expiry.expiring')}</span>`;
+        const row = (r, isExpired) => `
+            <tr>
+                <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(r.code)}</span></td>
+                <td><strong>${escapeHtml(r.sku)}</strong></td>
+                <td>${escapeHtml(r.productName)}</td>
+                <td>${escapeHtml(r.locationCode || '-')}</td>
+                <td>${escapeHtml(r.expiryDate || '-')}</td>
+                <td>${r.daysLeft < 0 ? '0' : r.daysLeft} ${t('inventory.expiry.day')}</td>
+                <td>${badge(isExpired)}</td>
+            </tr>`;
+        const section = (title, list, isExpired, emptyKey) => `
+            <div style="margin-bottom:10px;">
+                <div style="font-size:13px;font-weight:600;margin-bottom:6px;">${title}</div>
+                ${list.length === 0
+                    ? `<div style="color:var(--c-text-3);font-size:13px;">${emptyKey}</div>`
+                    : `<div class="table-wrap"><table class="table">
+                        <thead><tr>
+                            <th>${t('inventory.col.code')}</th><th>${t('inventory.col.sku')}</th>
+                            <th>${t('inventory.col.product')}</th><th>${t('inventory.col.loc')}</th>
+                            <th>${t('dashboard.expiry.col.date')}</th><th>${t('dashboard.expiry.col.left')}</th>
+                            <th>${t('inventory.col.status')}</th>
+                        </tr></thead>
+                        <tbody>${list.map(r => row(r, isExpired)).join('')}</tbody>
+                    </table></div>`}
+            </div>`;
+        return section(t('dashboard.expiring_soon'), expiring, false, t('dashboard.expiry.empty_ok'))
+             + section(t('dashboard.expired'), expired, true, t('dashboard.expiry.empty_ok'));
     },
 
     /* ================== 2. 商品管理 ================== */
@@ -244,7 +290,7 @@ const Views = {
                 <td><span class="pill ${docStatusClass(st)}">${t('doc.' + st)}</span></td>
                 <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
-                <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                <td>${escapeHtml(o.createdBy || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
@@ -305,7 +351,7 @@ const Views = {
                 <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td>${escapeHtml(o.customer || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
-                <td>${escapeHtml(o.operator || '')} · ${formatDate(o.createdAt)}</td>
+                <td>${escapeHtml(o.createdBy || '')} · ${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
@@ -348,7 +394,7 @@ const Views = {
             ? `<option value="">${t('new_order.placeholder.pick_product')}</option>` + products.map(p => {
                 const low = p.quantity <= p.lowStock ? ` [${t('product.low_badge')}]` : '';
                 const dflt = p.defaultSupplier ? ` (${t('new_order.label.supplier')}:${escapeHtml(p.defaultSupplier)})` : '';
-                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
+                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}" data-shelf-life="${p.defaultShelfLifeDays ?? ''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
             }).join('')
             : `<option value="">${t('new_order.placeholder.no_product')}</option>`;
 
@@ -362,6 +408,12 @@ const Views = {
             const supplierCell = isIn
                 ? `<select class="select nw-supplier" style="width:150px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
                 : '';
+            const prodDateCell = isIn
+                ? `<input type="date" class="input nw-prod-date" style="width:150px;">`
+                : '';
+            const shelfCell = isIn
+                ? `<input type="number" min="1" class="input nw-shelf-life" placeholder="—" style="width:90px;">`
+                : '';
             const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:90px;">`;
             const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}" style="width:180px;">`;
             return `
@@ -369,6 +421,8 @@ const Views = {
                 <td class="num row-idx">1</td>
                 <td>${productCell}</td>
                 ${isIn ? `<td>${supplierCell}</td>` : ''}
+                ${isIn ? `<td>${prodDateCell}</td>` : ''}
+                ${isIn ? `<td>${shelfCell}</td>` : ''}
                 <td>${qtyCell}</td>
                 <td>${remarkCell}</td>
                 <td class="actions"><button class="btn-link danger" onclick="removeNewOrderRow(this)">${t('common.delete')}</button></td>
@@ -379,6 +433,8 @@ const Views = {
             ? `<th style="width:36px;">#</th>
                <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
                <th style="width:150px;">${t('new_order.label.supplier')}</th>
+               <th style="width:150px;">${t('new_order.label.production_date')}</th>
+               <th style="width:90px;">${t('new_order.label.shelf_life')}</th>
                <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
                <th>${t('new_order.label.row_remark')}</th>
                <th style="width:66px;">${t('common.actions')}</th>`
@@ -462,7 +518,7 @@ const Views = {
                 <div class="order-meta">
                     <div><label>${t('outbound_order.label.order_no')}:</label><span>${escapeHtml(o.orderNo)}</span></div>
                     <div><label>${t('outbound_order.label.created_at')}:</label><span>${formatDate(o.createdAt)}</span></div>
-                    <div><label>${t('outbound_order.label.operator')}:</label><span>${escapeHtml(o.operator || '')}</span></div>
+                    <div><label>${t('outbound_order.label.createdBy')}:</label><span>${escapeHtml(o.createdBy || '')}</span></div>
                     <div><label>${t('outbound_order.label.customer')}:</label><span>${escapeHtml(o.customer || '-')}</span></div>
                     <div><label>${t('outbound_order.label.external_no')}:</label><span>${escapeHtml(o.externalNo || '-')}</span></div>
                     <div><label>${t('outbound_order.label.remark')}:</label><span>${escapeHtml(o.remark || '-')}</span></div>
@@ -521,8 +577,8 @@ const Views = {
         const beginVal  = (filter && filter.beginDate) || '';
         const endVal    = (filter && filter.endDate)   || '';
         const kwVal     = (filter && filter.keyword)   || '';
-        const opVal     = (filter && filter.operator)  || '';
-        const statusVal = (filter && filter.status)    || 'COMMITTED';
+        const opVal     = (filter && filter.createdBy)  || '';
+        const statusVal = (filter && filter.status)    ?? '';
 
         const rows = orders.length === 0
             ? `<tr><td colspan="10" class="empty">${t('orders.empty')}</td></tr>`
@@ -542,7 +598,7 @@ const Views = {
                     <td>${escapeHtml(o.externalNo || '-')}</td>
                     <td class="num">${o.itemCount || 0}</td>
                     <td class="num">${o.totalQuantity || 0}</td>
-                    <td>${escapeHtml(o.operator || '')}</td>
+                    <td>${escapeHtml(o.createdBy || '')}</td>
                     <td>${formatDate(o.createdAt)}</td>
                     <td class="actions">
                         <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
@@ -563,10 +619,8 @@ const Views = {
                     <option value="IN"  ${type==='IN' ?'selected':''}>${t('orders.type.in')}</option>
                     <option value="OUT" ${type==='OUT'?'selected':''}>${t('orders.type.out')}</option>
                 </select>
-                <label style="font-size:13px;color:var(--c-text-3);">${t('orders.begin_label')}</label>
-                <input id="od-begin" type="date" class="input input-sm" value="${beginVal}">
-                <label style="font-size:13px;color:var(--c-text-3);">${t('orders.end_label')}</label>
-                <input id="od-end" type="date" class="input input-sm" value="${endVal}">
+                <span style="display:inline-flex;align-items:center;gap:4px;"><label style="font-size:13px;color:var(--c-text-3);">${t('orders.begin_label')}</label><input id="od-begin" type="date" class="input input-sm" value="${beginVal}"></span>
+                <span style="display:inline-flex;align-items:center;gap:4px;"><label style="font-size:13px;color:var(--c-text-3);">${t('orders.end_label')}</label><input id="od-end" type="date" class="input input-sm" value="${endVal}"></span>
                 <input id="od-kw" class="input input-sm" placeholder="${t('orders.kw_placeholder')}" value="${escapeHtml(kwVal)}" style="width:280px;">
                 <input id="od-op" class="input input-sm" placeholder="${t('orders.op_placeholder')}" value="${escapeHtml(opVal)}" style="width:140px;">
                 <label style="font-size:13px;color:var(--c-text-3);">${t('common.status')}</label>
@@ -589,7 +643,7 @@ const Views = {
                         <th>${t('orders.col.external_no')}</th>
                         <th class="num">${t('orders.col.item_count')}</th>
                         <th class="num">${t('orders.col.total_qty')}</th>
-                        <th>${t('orders.col.operator')}</th>
+                        <th>${t('orders.col.createdBy')}</th>
                         <th style="width:160px;">${t('orders.col.created_at')}</th>
                         <th style="width:100px;">${t('common.actions')}</th>
                     </tr></thead>
@@ -639,7 +693,7 @@ const Views = {
                 <div class="order-meta">
                     <div><label>${t('inbound_order.label.order_no')}:</label><span>${escapeHtml(o.orderNo)}</span></div>
                     <div><label>${t('inbound_order.label.created_at')}:</label><span>${formatDate(o.createdAt)}</span></div>
-                    <div><label>${t('inbound_order.label.operator')}:</label><span>${escapeHtml(o.operator || '')}</span></div>
+                    <div><label>${t('inbound_order.label.createdBy')}:</label><span>${escapeHtml(o.createdBy || '')}</span></div>
                     <div><label>${t('inbound_order.label.external_no')}:</label><span>${escapeHtml(o.externalNo || '-')}</span></div>
                     <div><label>${t('inbound_order.label.remark')}:</label><span>${escapeHtml(o.remark || '-')}</span></div>
                 </div>
@@ -744,6 +798,16 @@ const Views = {
             <div class="form-field">
                 <label>${t('product.form.low')}</label>
                 <input id="pf-low" type="number" min="0" class="input" value="${p.lowStock ?? 10}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label>${t('product.form.shelf_life')}</label>
+                <input id="pf-shelf-life" type="number" min="0" class="input" value="${p.defaultShelfLifeDays ?? ''}" placeholder="—">
+            </div>
+            <div class="form-field">
+                <label>${t('product.form.warn_days')}</label>
+                <input id="pf-warn-days" type="number" min="0" class="input" value="${p.expiryWarnDays ?? ''}" placeholder="30">
             </div>
         </div>
         <div class="form-row">
@@ -960,7 +1024,7 @@ const Views = {
                 <tr>
                     <td><strong>${escapeHtml(c.checkNo)}</strong></td>
                     <td>${escapeHtml(scopeLabel(c.scope))}${c.scopeKeyword ? ' / ' + escapeHtml(c.scopeKeyword) : ''}</td>
-                    <td>${escapeHtml(c.operator || '')}</td>
+                    <td>${escapeHtml(c.createdBy || '')}</td>
                     <td>${statusMap[c.status] || escapeHtml(c.status)}</td>
                     <td class="num">${c.totalCount}</td>
                     <td class="num">${c.countedCount}</td>
@@ -1001,7 +1065,7 @@ const Views = {
                     <thead><tr>
                         <th>${t('stock_check.col.check_no')}</th>
                         <th>${t('stock_check.col.scope')}</th>
-                        <th>${t('common.operator')}</th>
+                        <th>${t('common.createdBy')}</th>
                         <th>${t('common.status')}</th>
                         <th class="num">${t('stock_check.col.total')}</th>
                         <th class="num">${t('stock_check.col.counted')}</th>
@@ -1086,7 +1150,7 @@ const Views = {
             <div style="display:flex;gap:18px;margin:8px 0 16px;flex-wrap:wrap;font-size:13px;">
                 <span>${t('stock_check.detail.summary')}:<strong>${escapeHtml(c.checkNo)}</strong></span>
                 <span>${t('stock_check.detail.scope')}:<strong>${escapeHtml(scopeLabel(c.scope))}${c.scopeKeyword ? ' / ' + escapeHtml(c.scopeKeyword) : ''}</strong></span>
-                <span>${t('common.operator')}:<strong>${escapeHtml(c.operator)}</strong></span>
+                <span>${t('common.createdBy')}:<strong>${escapeHtml(c.createdBy)}</strong></span>
                 <span>${t('common.status')}:<strong>${t('doc.' + c.status)}</strong></span>
                 <span>${t('stock_check.detail.total')}:<strong>${c.totalCount} / ${c.countedCount} / ${c.diffCount}</strong></span>
                 <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
@@ -1141,8 +1205,17 @@ const Views = {
             'TRANSFERRED': `<span class="badge" style="background:#e5e7eb;color:var(--c-text-3);">${t('inventory.status.TRANSFERRED')}</span>`
         };
 
+        // 效期列:仅填了生产日期+保质期的批次显示;剩天数<0=已过期,<=预警天数=临期
+        const expiryCell = (it) => {
+            if (!it.expiryDate) return `<span style="color:#9ca3af;">—</span>`;
+            const days = Math.round((new Date(it.expiryDate + 'T00:00:00') - new Date(new Date().toISOString().slice(0,10) + 'T00:00:00')) / 86400000);
+            if (days < 0)  return `<span class="badge" style="background:#fee2e2;color:#b91c1c;">${t('inventory.expiry.expired')}</span>`;
+            if (days <= (it.expiryWarnDays ?? 30)) return `<span class="badge" style="background:#fef3c7;color:#92400e;">${t('inventory.expiry.expiring')} ${days}${t('inventory.expiry.day')}</span>`;
+            return `<span style="color:var(--c-text-3);font-size:12px;">${it.expiryDate}</span>`;
+        };
+
         const rows = items.length === 0
-            ? `<tr><td colspan="10" class="empty">${t('inventory.empty')}</td></tr>`
+            ? `<tr><td colspan="11" class="empty">${t('inventory.empty')}</td></tr>`
             : items.map(it => `
                 <tr>
                     <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(it.code)}</span></td>
@@ -1152,6 +1225,7 @@ const Views = {
                     <td class="num">${it.quantity || 0}</td>
                     <td class="num"><strong>${it.remaining || 0}</strong></td>
                     <td>${statusMap[it.status] || escapeHtml(it.status)}</td>
+                    <td>${expiryCell(it)}</td>
                     <td>${escapeHtml(it.createdBy || '-')}</td>
                     <td>${formatDate(it.createdAt)}</td>
                     <td class="actions" style="white-space:nowrap;">
@@ -1183,6 +1257,14 @@ const Views = {
                     <option value="SCRAPPED"    ${state.inventoryStatus==='SCRAPPED'?'selected':''}>${t('inventory.status.SCRAPPED')}</option>
                     <option value="TRANSFERRED" ${state.inventoryStatus==='TRANSFERRED'?'selected':''}>${t('inventory.status.TRANSFERRED')}</option>
                 </select>
+                <select id="inv-expiry" class="select" style="width:120px;">
+                    <option value=""          ${!state.inventoryExpiryStatus?'selected':''}>${t('inventory.expiry.all')}</option>
+                    <option value="EXPIRING"  ${state.inventoryExpiryStatus==='EXPIRING'?'selected':''}>${t('inventory.expiry.expiring')}</option>
+                    <option value="EXPIRED"   ${state.inventoryExpiryStatus==='EXPIRED'?'selected':''}>${t('inventory.expiry.expired')}</option>
+                </select>
+                <input type="date" id="inv-expiry-from" class="input input-sm" style="width:140px;" value="${escapeHtml(state.inventoryExpiryFrom||'')}" title="${t('inventory.expiry.from')}">
+                <span style="color:var(--c-text-3);">~</span>
+                <input type="date" id="inv-expiry-to" class="input input-sm" style="width:140px;" value="${escapeHtml(state.inventoryExpiryTo||'')}" title="${t('inventory.expiry.to')}">
                 <button class="btn btn-sm btn-primary" onclick="searchInventory()">${t('common.query')}</button>
                 <button class="btn btn-sm" onclick="resetInventoryFilter()">${t('common.reset')}</button>
                 <span style="flex:1;"></span>
@@ -1199,6 +1281,7 @@ const Views = {
                         <th class="num">${t('inventory.col.qty')}</th>
                         <th class="num">${t('inventory.col.remaining')}</th>
                         <th>${t('inventory.col.status')}</th>
+                        <th>${t('inventory.col.expiry')}</th>
                         <th>${t('inventory.col.created_by')}</th>
                         <th style="width:160px;">${t('inventory.col.created_at')}</th>
                         <th style="width:200px;">${t('common.actions')}</th>

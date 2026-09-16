@@ -48,7 +48,7 @@ class InboundDraftControllerTest {
         InboundOrder o = new InboundOrder();
         o.setId(7);
         o.setOrderNo("IN-20260907-123");
-        o.setOperator("pda-user");
+        o.setCreatedBy("pda-user");
         o.setStatus(InboundOrder.STATUS_DRAFT);
         o.setTotalQuantity(0);
         o.setItemCount(0);
@@ -59,7 +59,7 @@ class InboundDraftControllerTest {
         InboundOrder o = new InboundOrder();
         o.setId(7);
         o.setOrderNo("IN-20260907-123");
-        o.setOperator("pda-user");
+        o.setCreatedBy("pda-user");
         o.setStatus(InboundOrder.STATUS_COMMITTED);
         o.setTotalQuantity(3);
         o.setItemCount(1);

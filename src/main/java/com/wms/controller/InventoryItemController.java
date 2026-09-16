@@ -46,18 +46,21 @@ public class InventoryItemController {
 
     // ====================== 列表 + 详情 ======================
 
-    /** 列表(库存管理页)— 支持 sku / location / status 过滤 + 分页 */
+    /** 列表(库存管理页)— 支持 sku / location / status / 效期过滤 + 分页 */
     @GetMapping
     public ApiResponse<Map<String, Object>> list(
             @RequestParam(required = false) String sku,
             @RequestParam(required = false) String location,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String expiryStatus,
+            @RequestParam(required = false) String expiryFrom,
+            @RequestParam(required = false) String expiryTo,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         int ps = (pageSize <= 0 || pageSize > 200) ? 20 : pageSize;
         int p = page <= 0 ? 1 : page;
-        var list = itemService.list(sku, location, status, p, ps);
-        long total = itemService.count(sku, location, status);
+        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo, p, ps);
+        long total = itemService.count(sku, location, status, expiryStatus, expiryFrom, expiryTo);
         return ApiResponse.ok(Map.of(
                 "list", list,
                 "total", total,
@@ -159,13 +162,16 @@ public class InventoryItemController {
     public ResponseEntity<byte[]> exportCsv(
             @RequestParam(required = false) String sku,
             @RequestParam(required = false) String location,
-            @RequestParam(required = false) String status) {
-        var list = itemService.list(sku, location, status, 1, 5000);
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String expiryStatus,
+            @RequestParam(required = false) String expiryFrom,
+            @RequestParam(required = false) String expiryTo) {
+        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo, 1, 5000);
 
         StringBuilder sb = new StringBuilder();
         sb.append('﻿');
         sb.append("24位编码,SKU,商品名称,库位,原始数量,剩余数量,状态,创建人,创建时间," +
-                "入库单ID,出库单ID,报废时间,报废原因,调拨时间,调拨来源,调拨目标\n");
+                "入库单ID,出库单ID,报废时间,报废原因,调拨时间,调拨来源,调拨目标,生产日期,到期日\n");
         for (InventoryItem it : list) {
             sb.append(csv(it.getCode())).append(',')
               .append(csv(it.getSku())).append(',')
@@ -182,7 +188,9 @@ public class InventoryItemController {
               .append(csv(it.getScrappedRemark())).append(',')
               .append(csv(it.getTransferredAt() == null ? "" : it.getTransferredAt().format(FMT))).append(',')
               .append(csv(it.getTransferredFrom())).append(',')
-              .append(csv(it.getTransferredTo())).append('\n');
+              .append(csv(it.getTransferredTo())).append(',')
+              .append(csv(it.getProductionDate() == null ? "" : it.getProductionDate().toString())).append(',')
+              .append(csv(it.getExpiryDate() == null ? "" : it.getExpiryDate().toString())).append('\n');
         }
 
         byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);

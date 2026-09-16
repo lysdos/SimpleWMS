@@ -17,7 +17,7 @@ public class InventoryLog {
     private Integer beforeQty;
     private Integer afterQty;
     private String remark;
-    private String operator;
+    private String createdBy;
     private Integer orderId;
     private LocalDateTime createdAt;
 
@@ -39,8 +39,8 @@ public class InventoryLog {
     public void setAfterQty(Integer afterQty) { this.afterQty = afterQty; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
-    public String getOperator() { return operator; }
-    public void setOperator(String operator) { this.operator = operator; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public Integer getOrderId() { return orderId; }
     public void setOrderId(Integer orderId) { this.orderId = orderId; }
     public LocalDateTime getCreatedAt() { return createdAt; }

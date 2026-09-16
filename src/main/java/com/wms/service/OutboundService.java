@@ -31,14 +31,14 @@ public class OutboundService {
      * 单条出库(老接口):改为 DRAFT 语义,不再即时扣库存
      * 真实生效在 commitDraft() 里完成(adjustQuantity + consumeForOutbound + 写 OUT 流水)
      */
-    @Transactional public OutboundOrder doOutbound(int productId,int quantity,String remark,String operator){
+    @Transactional public OutboundOrder doOutbound(int productId,int quantity,String remark,String createdBy){
         BatchItem i=new BatchItem();i.productId=productId;i.quantity=quantity;i.rowRemark=remark;
-        return doOutboundBatch(List.of(i),null,null,remark,operator,null);
+        return doOutboundBatch(List.of(i),null,null,remark,createdBy,null);
     }
-    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String operator){return doOutboundBatch(items,customer,externalNo,orderRemark,operator,null);}
-    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String operator,Integer orderId){
+    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String createdBy){return doOutboundBatch(items,customer,externalNo,orderRemark,createdBy,null);}
+    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String createdBy,Integer orderId){
         if(items==null||items.isEmpty())throw new IllegalArgumentException("出库明细不能为空");
-        if(operator==null||operator.isBlank())operator="操作员";
+        if(createdBy==null||createdBy.isBlank())createdBy="操作员";
         Map<Integer,BatchItem> m=new LinkedHashMap<>();
         for(BatchItem r:items){
             if(r.productId==null)throw new IllegalArgumentException("请选择商品");
@@ -71,7 +71,7 @@ public class OutboundService {
         o.setCustomer(blank(customer));
         o.setExternalNo(blank(externalNo));
         o.setRemark(blank(orderRemark));
-        o.setOperator(operator);
+        o.setCreatedBy(createdBy);
         o.setStatus(OutboundOrder.STATUS_DRAFT);  // INSERT SQL 已写 status 列
         o.setTotalQuantity(m.values().stream().mapToInt(x->x.quantity).sum());
         o.setItemCount(m.size());
@@ -91,7 +91,7 @@ public class OutboundService {
         o=orderDao.findOrderById(id);o.setItems(orderDao.findItemsByOrderId(id));
         return o;
     }
-    @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String operator){if(operator==null||operator.isBlank())operator="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setOperator(operator);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
+    @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String createdBy){if(createdBy==null||createdBy.isBlank())createdBy="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setCreatedBy(createdBy);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
     @Transactional public OutboundOrder scanCodeToDraft(int orderId, String code) {
         OutboundOrder o = requireDraft(orderId);
         InventoryItem inv = itemDao.findByCode(code);
@@ -110,7 +110,7 @@ public class OutboundService {
         // commitDraft 的"未扫码直接提交"留痕统计也自动恢复准确。
         String fullCode = inv.getCode();
         if (logDao.countScannedForOutboundCode(orderId, fullCode) == 0) {
-            String operator = o.getOperator();
+            String operator = o.getCreatedBy();
             if (operator == null || operator.isBlank()) operator = "操作员";
             InventoryLog log = new InventoryLog();
             log.setType(InventoryLog.TYPE_SCAN);
@@ -121,7 +121,7 @@ public class OutboundService {
             log.setBeforeQty(0);
             log.setAfterQty(0);
             log.setRemark("条码扫码确认, code=" + fullCode);
-            log.setOperator(operator);
+            log.setCreatedBy(operator);
             log.setOrderId(orderId);
             logDao.insert(log);
         }
@@ -146,7 +146,7 @@ public class OutboundService {
         String scanNote = (scannedCount >= lockedCount)
                 ? null
                 : ("未扫码直接提交(已扫 " + scannedCount + " / 锁定 " + lockedCount + ")");
-        String operator=o.getOperator();
+        String operator=o.getCreatedBy();
         if(operator==null||operator.isBlank())operator="操作员";
         // ====== 关键:先把订单状态从 DRAFT 切到 COMMITTED(带 WHERE 守卫)======
         // 第二个 commit 因状态不再 DRAFT 拿不到 0 行,直接抛错;否则下面 adjustQuantity
@@ -168,7 +168,7 @@ public class OutboundService {
 
     /** 写一条出库流水(OUT),commitDraft 时调用。
      *  scanNote 非空表示"未扫码直接提交",拼到备注里留痕(不阻断提交)。 */
-    private void persistOutboundLog(OutboundOrderItem it,String operator,int orderId,int before,int after,String scanNote){
+    private void persistOutboundLog(OutboundOrderItem it,String createdBy,int orderId,int before,int after,String scanNote){
         InventoryLog log=new InventoryLog();
         log.setType(InventoryLog.TYPE_OUT);
         log.setProductId(it.getProductId());
@@ -182,9 +182,17 @@ public class OutboundService {
             remark=(remark==null||remark.isBlank())?("["+scanNote+"]"):(remark+" ["+scanNote+"]");
         }
         log.setRemark(remark);
-        log.setOperator(operator);
+        log.setCreatedBy(createdBy);
         log.setOrderId(orderId);
         logDao.insert(log);
+    }
+    /** 修改 DRAFT 出库单头(客户/外部单号/备注),仅 DRAFT 可改。返回最新单。 */
+    @Transactional public OutboundOrder updateDraftHeader(int id, String customer, String externalNo, String remark){
+        requireDraft(id);
+        if (orderDao.updateHeader(id, blank(customer), blank(externalNo), blank(remark)) == 0) {
+            throw new IllegalStateException("出库单已被并发处理,放弃本次编辑");
+        }
+        return getOrder(id);
     }
     @Transactional public void cancelDraft(int id){
         OutboundOrder o=requireDraft(id);
@@ -240,7 +248,7 @@ public class OutboundService {
      *  4) 重复扫同一个码 → 报"已扫过"(同一码只能确认一次)
      */
     @Transactional
-    public ScanResult scanEpc(int orderId, String epc, String operator) {
+    public ScanResult scanEpc(int orderId, String epc, String createdBy) {
         if (epc == null || epc.isBlank()) {
             return ScanResult.fail("EPC 不能为空");
         }
@@ -256,7 +264,7 @@ public class OutboundService {
         }
 
         OutboundOrder o = requireDraft(orderId);
-        if (operator == null || operator.isBlank()) operator = o.getOperator();
+        if (createdBy == null || createdBy.isBlank()) createdBy = o.getCreatedBy();
 
         // 方案 A:只接受"本单 RESERVED"的码
         InventoryItem inv = itemDao.findReservedByEpcForOrder(epc, orderId);
@@ -306,7 +314,7 @@ public class OutboundService {
         log.setBeforeQty(0);
         log.setAfterQty(0);
         log.setRemark("UHF 扫码确认, epc=" + epc);
-        log.setOperator(operator);
+        log.setCreatedBy(createdBy);
         log.setOrderId(orderId);
         logDao.insert(log);
 
@@ -376,7 +384,7 @@ public class OutboundService {
      * @return 完整的出库单(含明细)
      */
     @Transactional
-    public OutboundOrder dispatchToUhf(int orderId, String deviceCode, String operator) {
+    public OutboundOrder dispatchToUhf(int orderId, String deviceCode, String createdBy) {
         if (deviceCode == null || deviceCode.isBlank()) {
             throw new IllegalArgumentException("deviceCode 不能为空");
         }
@@ -388,7 +396,7 @@ public class OutboundService {
         if (o.getUhfDispatchedAt() != null) {
             throw new IllegalStateException("该出库单已下发到 UHF (" + o.getUhfDeviceCode() + "),不能重复下发");
         }
-        int n = orderDao.dispatchToUhf(orderId, deviceCode.trim(), operator);
+        int n = orderDao.dispatchToUhf(orderId, deviceCode.trim(), createdBy);
         if (n == 0) {
             throw new IllegalStateException("下发失败(并发冲突或状态变更),请重试");
         }

@@ -1,72 +1,120 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="@dimen/space_lg">
+    android:fillViewport="true"
+    android:scrollbars="none">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/inbound_pick_product"
-        style="@style/Text.Caption" />
-
-    <Spinner
-        android:id="@+id/sp_product"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input" />
-
-    <TextView
-        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/inbound_pick_qty"
-        style="@style/Text.Caption" />
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg">
 
-    <EditText
-        android:id="@+id/et_qty"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:paddingStart="@dimen/space_md"
-        android:paddingEnd="@dimen/space_md"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
-        android:inputType="number" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/inbound_pick_product"
+            style="@style/Text.Caption" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/inbound_pick_supplier"
-        style="@style/Text.Caption" />
+        <Spinner
+            android:id="@+id/sp_product"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input" />
 
-    <Spinner
-        android:id="@+id/sp_supplier"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_pick_qty"
+            style="@style/Text.Caption" />
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/inbound_row_remark"
-        style="@style/Text.Caption" />
+        <EditText
+            android:id="@+id/et_qty"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="number" />
 
-    <EditText
-        android:id="@+id/et_row_remark"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:paddingStart="@dimen/space_md"
-        android:paddingEnd="@dimen/space_md"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
-        android:inputType="text" />
-</LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_pick_supplier"
+            style="@style/Text.Caption" />
+
+        <Spinner
+            android:id="@+id/sp_supplier"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_row_remark"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_row_remark"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="text"
+            android:hint="@string/inbound_row_remark" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_production_date"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_production_date"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:focusable="false"
+            android:clickable="true"
+            android:hint="yyyy-MM-dd" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_shelf_life"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_shelf_life"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="number" />
+    </LinearLayout>
+</ScrollView>

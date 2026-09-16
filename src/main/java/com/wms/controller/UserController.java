@@ -52,8 +52,8 @@ public class UserController {
     }
 
     /**
-     * 删除用户 — 不级联删业务记录(inventory_log.operator /
-     * inbound_order.operator / outbound_order.operator 是 VARCHAR,
+     * 删除用户 — 不级联删业务记录(inventory_log.created_by /
+     * inbound_order.created_by / outbound_order.created_by 是 VARCHAR,
      * 不是外键,天然不级联)。
      * 业务校验由 UserService.delete 负责:不能删自己/最后一名 ADMIN。
      */

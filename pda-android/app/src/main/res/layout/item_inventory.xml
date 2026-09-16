@@ -86,13 +86,13 @@
         android:layout_marginTop="@dimen/space_sm">
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_print"
+            android:id="@+id/btn_transfer"
             style="@style/Widget.SimpleWMS.Button.Outlined"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginEnd="@dimen/space_sm"
-            android:text="@string/action_print"
+            android:text="@string/action_transfer"
             app:strokeColor="@color/primary" />
 
         <com.google.android.material.button.MaterialButton

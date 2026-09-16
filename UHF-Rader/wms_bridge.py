@@ -194,7 +194,7 @@ def load_expected_epcs(order_id):
 def scan_epc(order_id, epc):
     """调后端 scan-epc 接口。EPC 必须是 24 位 hex(12 字节 = 96 bit UHF Gen2)。
 
-    operator 用当前登录用户(全用户支持);没登录时回退到 env 默认账号。
+    createdBy 用当前登录用户(全用户支持);没登录时回退到 env 默认账号。
     """
     if not epc:
         return {"matched": False, "reason": "EPC 为空"}
@@ -210,7 +210,7 @@ def scan_epc(order_id, epc):
         if not login():
             return {"matched": False, "reason": "登录失败"}
     r = _http_post(f"/api/outbound/orders/{order_id}/scan-epc",
-                   {"epc": e, "operator": (state.user or WMS_USERNAME)},
+                   {"epc": e, "createdBy": (state.user or WMS_USERNAME)},
                    headers=hdrs or {})
     if r.get("code") == 0:
         return r.get("data", {"matched": False, "reason": "返回为空"})

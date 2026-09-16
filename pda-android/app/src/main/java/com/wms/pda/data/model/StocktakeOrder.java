@@ -11,7 +11,7 @@ public class StocktakeOrder {
     public String id;             // 后端 checkNo(展示用单号)
     public String scope;          // ALL / SKU / LOCATION
     public String scopeKeyword;   // scope 过滤值
-    public String operator;       // 操作员
+    public String createdBy;       // 创建人
     public Integer totalCount;    // 行数
     public Integer countedCount;  // 已扫行数
     public Integer diffCount;     // 差异行数
@@ -23,14 +23,14 @@ public class StocktakeOrder {
     public StocktakeOrder() {}
 
     public StocktakeOrder(Integer dbId, String id, String scope, String scopeKeyword,
-                         String operator, Integer totalCount, Integer countedCount,
+                         String createdBy, Integer totalCount, Integer countedCount,
                          Integer diffCount, String remark, Enums.DocStatus status,
                          String createdAt, List<Line> lines) {
         this.dbId = dbId;
         this.id = id;
         this.scope = scope;
         this.scopeKeyword = scopeKeyword;
-        this.operator = operator;
+        this.createdBy = createdBy;
         this.totalCount = totalCount;
         this.countedCount = countedCount;
         this.diffCount = diffCount;

@@ -83,20 +83,56 @@ public class RemoteWmsRepository implements WmsRepository {
     // ---- 仪表盘 ----
     @Override
     public void loadDashboard(WmsCallback<DashboardSnapshot> cb) {
+        // 先拉 stats,再拉 recent-ops,合并后回调
         api.get("/api/dashboard/stats", Dto.DashboardStats.class, new ApiClient.Callback<Dto.DashboardStats>() {
             @Override public void onSuccess(Dto.DashboardStats s) {
-                DashboardSnapshot snap = new DashboardSnapshot(
-                        nz(s == null ? null : s.productCount),
-                        nz(s == null ? null : s.totalQuantity),
-                        s == null || s.totalValue == null ? java.math.BigDecimal.ZERO
-                                : new java.math.BigDecimal(s.totalValue),
-                        nz(s == null ? null : s.lowStockCount),
-                        new ArrayList<OpLog>()  // TODO: 接 /api/dashboard/recent-ops
-                );
-                cb.onSuccess(snap);
+                DashboardSnapshot snap = new DashboardSnapshot();
+                snap.productCount = nz(s == null ? null : s.productCount);
+                snap.totalQuantity = nz(s == null ? null : s.totalQuantity);
+                snap.totalValue = s == null || s.totalValue == null ? java.math.BigDecimal.ZERO
+                        : new java.math.BigDecimal(s.totalValue);
+                snap.lowStockSkuCount = nz(s == null ? null : s.lowStockCount);
+                snap.expiringSoonCount = nz(s == null ? null : s.expiringSoonCount);
+                snap.expiredCount = nz(s == null ? null : s.expiredCount);
+                // 拉最近操作(失败不阻断)
+                Type logListType = new com.google.gson.reflect.TypeToken<List<Dto.InventoryLog>>(){}.getType();
+                api.get("/api/dashboard/recent-ops?limit=10", logListType, new ApiClient.Callback<List<Dto.InventoryLog>>() {
+                    @Override public void onSuccess(List<Dto.InventoryLog> logs) {
+                        snap.recentOps = new ArrayList<>();
+                        if (logs != null) {
+                            for (Dto.InventoryLog l : logs) {
+                                OpLog op = new OpLog();
+                                op.time = l.createdAt == null ? "" : l.createdAt.length() > 16 ? l.createdAt.substring(0, 16).replace("T", " ") : l.createdAt;
+                                op.type = mapLogType(l.type);
+                                op.refNo = l.orderId == null ? "" : "#" + l.orderId;
+                                op.summary = (l.productName == null ? "" : l.productName)
+                                        + (l.quantity == null ? "" : " ×" + l.quantity)
+                                        + (l.remark == null || l.remark.isEmpty() ? "" : " (" + l.remark + ")");
+                                snap.recentOps.add(op);
+                            }
+                        }
+                        cb.onSuccess(snap);
+                    }
+                    @Override public void onError(int code, String msg) {
+                        snap.recentOps = new ArrayList<>();
+                        cb.onSuccess(snap);
+                    }
+                });
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
+    }
+
+    private static String mapLogType(String type) {
+        if (type == null) return "操作";
+        switch (type) {
+            case "IN":       return "入库";
+            case "OUT":      return "出库";
+            case "CHECK":    return "盘点";
+            case "TRANSFER": return "调拨";
+            case "SCRAP":    return "报废";
+            default:         return type;
+        }
     }
 
     // ---- 入库 ----
@@ -157,12 +193,15 @@ public class RemoteWmsRepository implements WmsRepository {
 
     @Override
     public void addInboundItem(String orderId, int productId, int quantity, String supplier,
-                               String rowRemark, WmsCallback<InboundOrder> cb) {
+                               String rowRemark, String productionDate, Integer shelfLifeDays,
+                               WmsCallback<InboundOrder> cb) {
         Map<String, Object> body = new HashMap<>();
         body.put("productId", productId);
         body.put("quantity", quantity);
         if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
         if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        if (productionDate != null && !productionDate.isEmpty()) body.put("productionDate", productionDate);
+        if (shelfLifeDays != null) body.put("shelfLifeDays", shelfLifeDays);
         api.post("/api/inbound/orders/" + orderId + "/items", body,
                 Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
             @Override public void onSuccess(Dto.InboundOrder o) {
@@ -182,12 +221,29 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void updateInboundItem(String orderId, String itemId, int quantity, String supplier,
-                                  String rowRemark, WmsCallback<InboundOrder> cb) {
+    public void updateInboundHeader(String orderId, String externalNo, String remark,
+                                    WmsCallback<InboundOrder> cb) {
         Map<String, Object> body = new HashMap<>();
+        if (externalNo != null && !externalNo.isEmpty()) body.put("externalNo", externalNo);
+        if (remark != null && !remark.isEmpty()) body.put("remark", remark);
+        api.put("/api/inbound/orders/" + orderId, body,
+                Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
+            @Override public void onSuccess(Dto.InboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void updateInboundItem(String orderId, String itemId, int productId, int quantity,
+                                  String supplier, String rowRemark, String productionDate,
+                                  Integer shelfLifeDays, WmsCallback<InboundOrder> cb) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("productId", productId);
         body.put("quantity", quantity);
         if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
         if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        if (productionDate != null && !productionDate.isEmpty()) body.put("productionDate", productionDate);
+        if (shelfLifeDays != null) body.put("shelfLifeDays", shelfLifeDays);
         api.put("/api/inbound/orders/" + orderId + "/items/" + itemId, body,
                 Dto.InboundOrder.class, new ApiClient.Callback<Dto.InboundOrder>() {
             @Override public void onSuccess(Dto.InboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
@@ -337,6 +393,20 @@ public class RemoteWmsRepository implements WmsRepository {
         });
     }
 
+    @Override
+    public void updateOutboundHeader(String orderId, String customer, String externalNo,
+                                     String remark, WmsCallback<OutboundOrder> cb) {
+        Map<String, Object> body = new HashMap<>();
+        if (customer != null && !customer.isEmpty()) body.put("customer", customer);
+        if (externalNo != null && !externalNo.isEmpty()) body.put("externalNo", externalNo);
+        if (remark != null && !remark.isEmpty()) body.put("remark", remark);
+        api.put("/api/outbound/orders/" + orderId, body,
+                Dto.OutboundOrder.class, new ApiClient.Callback<Dto.OutboundOrder>() {
+            @Override public void onSuccess(Dto.OutboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
     // ---- 库存 ----
     @Override
     public void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb) {
@@ -367,19 +437,44 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void transfer(String sku, String fromWh, String toWh, int qty, WmsCallback<Void> cb) {
-        // 后端 transfer 是按 inventory_item.id 操作的,PDA 端按 sku 不行;降级为弹错。
-        cb.onError(501, "PDA 暂不支持按 SKU 调拨,请用扫码按 inventory_item 操作");
+    public void listLocations(WmsCallback<List<String>> cb) {
+        Type t = new TypeToken<List<Dto.Location>>(){}.getType();
+        api.get("/api/locations", t, new ApiClient.Callback<List<Dto.Location>>() {
+            @Override public void onSuccess(List<Dto.Location> list) {
+                List<String> out = new ArrayList<>();
+                if (list != null) {
+                    for (Dto.Location l : list) {
+                        if ((l.enabled == null || l.enabled) && l.code != null && !l.code.isEmpty()) {
+                            out.add(l.code);
+                        }
+                    }
+                }
+                cb.onSuccess(out);
+            }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
     }
 
     @Override
-    public void scrap(String sku, String warehouse, int qty, String reason, WmsCallback<Void> cb) {
-        cb.onError(501, "PDA 暂不支持按 SKU 报废,请用扫码按 inventory_item 操作");
+    public void transfer(int itemId, String toLocation, WmsCallback<Void> cb) {
+        Map<String, String> body = new HashMap<>();
+        body.put("toLocation", toLocation);
+        api.post("/api/inventory/items/" + itemId + "/transfer", body,
+                Void.class, new ApiClient.Callback<Void>() {
+            @Override public void onSuccess(Void v) { cb.onSuccess(null); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
     }
 
     @Override
-    public void printBarcode(String sku, WmsCallback<Void> cb) {
-        cb.onError(501, "条码打印请走 PC 端");
+    public void scrap(int itemId, String reason, WmsCallback<Void> cb) {
+        Map<String, String> body = new HashMap<>();
+        body.put("remark", reason);
+        api.post("/api/inventory/items/" + itemId + "/scrap", body,
+                Void.class, new ApiClient.Callback<Void>() {
+            @Override public void onSuccess(Void v) { cb.onSuccess(null); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
     }
 
     // ---- 盘点 ----

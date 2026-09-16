@@ -150,7 +150,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 : "LOCATION".equals(o.scope) ? "动碰盘"
                 : (o.scope == null ? "—" : o.scope);
         tvMode.setText("盘点方式: " + scopeLabel);
-        tvOperator.setText("操作员: " + (o.operator == null ? "—" : o.operator));
+        tvOperator.setText("创建人: " + (o.createdBy == null ? "—" : o.createdBy));
         tvCreated.setText(getString(R.string.created_at_fmt, o.createdAt == null ? "—" : o.createdAt));
 
         llLines.removeAllViews();

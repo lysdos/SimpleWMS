@@ -84,7 +84,10 @@ function showModal(title, bodyHtml, onOk) {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = bodyHtml;
     document.getElementById('modal-mask').hidden = false;
-    const newOk = freshModalOk();
+    // 文案也必须每次重置:上一个弹窗可能把按钮改成"关闭"(如条码/详情),
+    // 不重置的话下一个提交型弹窗会继承"关闭"文案。需要自定义文案的调用方
+    // 会在 showModal 之后调 freshModalOk(自己的文案),覆盖顺序不受影响。
+    const newOk = freshModalOk(onOk ? t('common.confirm') : t('common.close'));
     // onOk 可能是同步函数(返回 true/false 决定是否关闭)或返回 Promise。
     // 之前只识别同步 false,Promise 一律被吞 → 校验/网络错误时弹窗也关闭、输入丢失。
     newOk.addEventListener('click', async () => {

@@ -34,21 +34,21 @@ public class StockCheckService {
      * 创建盘点单 — 立即把当前在库单元(IN_STOCK)按 scope 快照到 stock_check_item。
      */
     @Transactional
-    public StockCheck create(String scope, String keyword, String remark, String operator) {
+    public StockCheck create(String scope, String keyword, String remark, String createdBy) {
         if (scope == null || scope.isBlank()) scope = StockCheck.SCOPE_ALL;
         if (!StockCheck.SCOPE_ALL.equals(scope) &&
             !StockCheck.SCOPE_SKU.equals(scope) &&
             !StockCheck.SCOPE_LOCATION.equals(scope)) {
             throw new IllegalArgumentException("scope 必须是 ALL / SKU / LOCATION");
         }
-        if (operator == null || operator.isBlank()) operator = "操作员";
+        if (createdBy == null || createdBy.isBlank()) createdBy = "操作员";
 
         StockCheck c = new StockCheck();
         c.setCheckNo(genCheckNo());
         c.setScope(scope);
         c.setScopeKeyword(keyword);
         c.setRemark(remark);
-        c.setOperator(operator);
+        c.setCreatedBy(createdBy);
         c.setStatus(StockCheck.STATUS_DRAFT);
         c.setTotalCount(0);
         c.setCountedCount(0);

@@ -11,7 +11,7 @@ public class OutboundOrder {
     public String id;             // 后端 orderNo(展示用单号)
     public String customer;       // 客户/部门
     public String externalNo;     // 外部单号
-    public String operator;       // 操作员
+    public String createdBy;       // 创建人
     public Integer totalQuantity; // 出库总件数(后端字段)
     public Integer itemCount;     // 出库行数(后端字段)
     public String remark;         // 备注
@@ -23,14 +23,14 @@ public class OutboundOrder {
     public OutboundOrder() {}
 
     public OutboundOrder(Integer dbId, String id, String customer, String externalNo,
-                         String operator, Integer totalQuantity, Integer itemCount,
+                         String createdBy, Integer totalQuantity, Integer itemCount,
                          String remark, Enums.DocStatus status, String createdAt,
                          List<Line> lines) {
         this.dbId = dbId;
         this.id = id;
         this.customer = customer;
         this.externalNo = externalNo;
-        this.operator = operator;
+        this.createdBy = createdBy;
         this.totalQuantity = totalQuantity;
         this.itemCount = itemCount;
         this.remark = remark;

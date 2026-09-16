@@ -53,14 +53,14 @@ public class InboundService {
      * 单条入库(老接口):改为 DRAFT 语义,不再即时写 inventory_log
      * 调用方(controller)负责后续 commit。返回创建出来的 DRAFT InboundOrder
      */
-    public InboundOrder doInbound(int productId, int quantity, String remark, String operator) {
+    public InboundOrder doInbound(int productId, int quantity, String remark, String createdBy) {
         List<BatchItem> items = new ArrayList<>();
         BatchItem it = new BatchItem();
         it.productId = productId;
         it.quantity = quantity;
         it.rowRemark = remark;
         items.add(it);
-        return doInboundBatch(items, null, remark, operator, null);
+        return doInboundBatch(items, null, remark, createdBy, null);
     }
 
     /**
@@ -76,17 +76,17 @@ public class InboundService {
     public InboundOrder doInboundBatch(List<BatchItem> items,
                                        String externalNo,
                                        String orderRemark,
-                                       String operator,
+                                       String createdBy,
                                        Integer orderId) {
         if (orderId != null) {
             // DRAFT 单追加明细分支
-            return addItemsToDraftInternal(orderId, items, operator);
+            return addItemsToDraftInternal(orderId, items, createdBy);
         }
 
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("入库明细不能为空");
         }
-        if (operator == null || operator.isBlank()) operator = "操作员";
+        if (createdBy == null || createdBy.isBlank()) createdBy = "操作员";
 
         // 1. 校验 + 标准化 supplier(空串归一为 null)
         for (BatchItem b : items) {
@@ -103,7 +103,7 @@ public class InboundService {
         order.setOrderNo(genOrderNo());
         order.setExternalNo(blankToNull(externalNo));
         order.setRemark(blankToNull(orderRemark));
-        order.setOperator(operator);
+        order.setCreatedBy(createdBy);
         order.setStatus(InboundOrder.STATUS_DRAFT);
         order.setTotalQuantity(0);
         order.setItemCount(0);
@@ -111,7 +111,7 @@ public class InboundService {
         order.setId(newOrderId);
 
         // 3. 写明细 + 生成 PENDING 单元(不调 adjustQuantity、不写 inventory_log)
-        return addItemsToDraftInternal(newOrderId, items, operator);
+        return addItemsToDraftInternal(newOrderId, items, createdBy);
     }
 
     @Transactional(readOnly = true)
@@ -125,15 +125,15 @@ public class InboundService {
     /** 分页查询入库单列表(不含明细,详情另调 getOrder) */
     @Transactional(readOnly = true)
     public List<InboundOrder> listOrders(String beginDate, String endDate,
-                                          String keyword, String operator, String status,
+                                          String keyword, String createdBy, String status,
                                           int page, int pageSize) {
-        return orderDao.findOrders(beginDate, endDate, keyword, operator, status, page, pageSize);
+        return orderDao.findOrders(beginDate, endDate, keyword, createdBy, status, page, pageSize);
     }
 
     @Transactional(readOnly = true)
     public long countOrders(String beginDate, String endDate,
-                            String keyword, String operator, String status) {
-        return orderDao.countOrders(beginDate, endDate, keyword, operator, status);
+                            String keyword, String createdBy, String status) {
+        return orderDao.countOrders(beginDate, endDate, keyword, createdBy, status);
     }
 
     // ============================================================
@@ -144,14 +144,14 @@ public class InboundService {
      * 创建空草稿入库单。返回完整 InboundOrder(id 已生成,status=DRAFT,total_quantity=0,item_count=0)。
      */
     @Transactional
-    public InboundOrder createDraft(String externalNo, String remark, String operator) {
-        if (operator == null || operator.isBlank()) operator = "操作员";
+    public InboundOrder createDraft(String externalNo, String remark, String createdBy) {
+        if (createdBy == null || createdBy.isBlank()) createdBy = "操作员";
 
         InboundOrder order = new InboundOrder();
         order.setOrderNo(genOrderNo());
         order.setExternalNo(blankToNull(externalNo));
         order.setRemark(blankToNull(remark));
-        order.setOperator(operator);
+        order.setCreatedBy(createdBy);
         order.setStatus(InboundOrder.STATUS_DRAFT);
         order.setTotalQuantity(0);
         order.setItemCount(0);
@@ -173,9 +173,22 @@ public class InboundService {
     }
 
     /**
-     * 修改 DRAFT 单明细行(数量/供应商/行备注),仅 DRAFT 可改,商品不可换。
+     * 修改 DRAFT 单头(外部单号/备注),仅 DRAFT 可改。返回最新单。
+     */
+    @Transactional
+    public InboundOrder updateDraftHeader(int orderId, String externalNo, String remark) {
+        requireDraftOrder(orderId);
+        if (orderDao.updateHeader(orderId, blankToNull(externalNo), blankToNull(remark)) == 0) {
+            throw new IllegalStateException("入库单已被并发处理,放弃本次编辑");
+        }
+        return getOrder(orderId);
+    }
+
+    /**
+     * 修改 DRAFT 单明细行(商品/数量/供应商/行备注),仅 DRAFT 可改。
      * 数量增减同步增删 PENDING 占位单元(未生效,不动库存/流水);
-     * commit 时按行 quantity 统一激活,数量差值在占位阶段即可平衡。
+     * 换商品时清空该行全部旧占位码,按新商品+新数量重建,并同步行上的
+     * sku/名称/单价/库位快照;commit 时按行 quantity 统一激活。
      */
     @Transactional
     public InboundOrder updateDraftItem(int orderId, int itemId, BatchItem patch) {
@@ -190,15 +203,45 @@ public class InboundService {
         }
         int oldQty = item.getQuantity() == null ? 0 : item.getQuantity();
         int newQty = patch.quantity;
-        if (newQty > oldQty) {
+        String operator = order.getCreatedBy();
+        if (operator == null || operator.isBlank()) operator = "操作员";
+
+        boolean productChanged = patch.productId != null
+                && !patch.productId.equals(item.getProductId());
+        Product product = productDao.findById(
+                        productChanged ? patch.productId : item.getProductId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "商品不存在, id=" + (productChanged ? patch.productId : item.getProductId())));
+
+        // 批次效期:patch 未提供时沿用行上现值(避免只改数量/供应商就把效期抹掉)
+        java.time.LocalDate effProdDate = patch.productionDate != null
+                ? patch.productionDate : item.getProductionDate();
+        Integer effShelfDays = patch.shelfLifeDays != null
+                ? patch.shelfLifeDays : item.getShelfLifeDays();
+
+        if (productChanged) {
+            // 换商品:旧商品占位码全部作废,按新商品+新数量重建
+            itemDao.deletePendingByInboundItem(itemId, Integer.MAX_VALUE);
+            BatchItem regen = new BatchItem();
+            regen.productId = product.getId();
+            regen.quantity = newQty;
+            regen.supplier = blankToNull(patch.supplier);
+            regen.rowRemark = blankToNull(patch.rowRemark);
+            regen.productionDate = effProdDate;
+            regen.shelfLifeDays = effShelfDays;
+            List<InventoryItem> generated = processItemBatch(regen, operator, orderId);
+            for (InventoryItem u : generated) {
+                itemDao.updateInboundItemId(itemId, u.getId());
+            }
+        } else if (newQty > oldQty) {
             // 补占位单元
             BatchItem extra = new BatchItem();
             extra.productId = item.getProductId();
             extra.quantity = newQty - oldQty;
             extra.supplier = blankToNull(patch.supplier);
             extra.rowRemark = blankToNull(patch.rowRemark);
-            String operator = order.getOperator();
-            if (operator == null || operator.isBlank()) operator = "操作员";
+            extra.productionDate = effProdDate;
+            extra.shelfLifeDays = effShelfDays;
             List<InventoryItem> generated = processItemBatch(extra, operator, orderId);
             for (InventoryItem u : generated) {
                 itemDao.updateInboundItemId(itemId, u.getId());
@@ -206,7 +249,19 @@ public class InboundService {
         } else if (newQty < oldQty) {
             itemDao.deletePendingByInboundItem(itemId, oldQty - newQty);
         }
-        orderDao.updateItem(itemId, newQty, blankToNull(patch.supplier), blankToNull(patch.rowRemark));
+
+        // 行快照同步(换商品时 sku/名称/单价/库位一并更新)
+        item.setProductId(product.getId());
+        item.setSku(product.getSku());
+        item.setProductName(product.getName());
+        item.setUnitPrice(product.getUnitPrice() == null ? BigDecimal.ZERO : product.getUnitPrice());
+        item.setLocation(blankToNull(product.getLocation()));
+        item.setQuantity(newQty);
+        item.setSupplier(blankToNull(patch.supplier));
+        item.setProductionDate(effProdDate);
+        item.setShelfLifeDays(effShelfDays);
+        item.setRowRemark(blankToNull(patch.rowRemark));
+        orderDao.updateItem(item);
         orderDao.refreshAggregates(orderId);
         return getOrder(orderId);
     }
@@ -254,7 +309,7 @@ public class InboundService {
         // 把该单所有 PENDING 库存单元 → IN_STOCK + remaining=1(每件真正"入"库)
         // + 累加 product.quantity + 写 inventory_log
         List<InboundOrderItem> items = orderDao.findItemsByOrderId(orderId);
-        String operator = order.getOperator();
+        String operator = order.getCreatedBy();
         if (operator == null || operator.isBlank()) operator = "操作员";
         activateItemsAndLog(items, operator, orderId);
 
@@ -270,7 +325,7 @@ public class InboundService {
      * 累加 product.quantity,写 inventory_log。
      * commitDraft 与 doInboundBatch 复用。
      */
-    private void activateItemsAndLog(List<InboundOrderItem> items, String operator, int orderId) {
+    private void activateItemsAndLog(List<InboundOrderItem> items, String createdBy, int orderId) {
         for (InboundOrderItem item : items) {
             if (item.getProductId() == null || item.getQuantity() == null) continue;
             Product p = productDao.findById(item.getProductId())
@@ -282,7 +337,7 @@ public class InboundService {
             // 把该行所有 PENDING 库存单元升级为 IN_STOCK + remaining=1
             itemDao.activateByInboundItem(item.getId());
             // 写一条 IN 流水
-            persistInventoryLog(item, operator, orderId, before, after);
+            persistInventoryLog(item, createdBy, orderId, before, after);
         }
     }
 
@@ -315,7 +370,7 @@ public class InboundService {
      * 内部方法:把 items 追加到指定 DRAFT 单(doInboundBatch 非空 orderId 分支 / addItemToDraft 调)。
      * 注意:同 (productId, supplier) 仍在本批内合并,但不与单据已有明细合并(简化:PDA 单次 add 一次性就好)。
      */
-    private InboundOrder addItemsToDraftInternal(int orderId, List<BatchItem> items, String operator) {
+    private InboundOrder addItemsToDraftInternal(int orderId, List<BatchItem> items, String createdBy) {
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("入库明细不能为空");
         }
@@ -324,8 +379,8 @@ public class InboundService {
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以追加明细, 当前 status=" + order.getStatus());
         }
-        if (operator == null || operator.isBlank()) operator = order.getOperator();
-        if (operator == null || operator.isBlank()) operator = "操作员";
+        if (createdBy == null || createdBy.isBlank()) createdBy = order.getCreatedBy();
+        if (createdBy == null || createdBy.isBlank()) createdBy = "操作员";
 
         // 校验 + 标准化
         for (BatchItem b : items) {
@@ -354,7 +409,7 @@ public class InboundService {
         }
 
         for (BatchItem b : merged.values()) {
-            List<InventoryItem> codes = processItemBatch(b, operator, orderId);
+            List<InventoryItem> codes = processItemBatch(b, createdBy, orderId);
             InboundOrderItem itemEntity = persistOrderItem(b, orderId, codes);
             // 不写 inventory_log,不调整 product.quantity — commit 才生效
         }
@@ -367,11 +422,15 @@ public class InboundService {
     /** 生成 N 个 inventory_item 24 位码并落库(仅作码占位)。返回所有生成的 InventoryItem 实体
      *  注意:此阶段 inventory_item 状态为 PENDING + remaining=0,不入库总库存、不调 productDao.adjustQuantity、
      *  不写 inventory_log。真正的"生效"在 commitDraft() 里完成。*/
-    private List<InventoryItem> processItemBatch(BatchItem b, String operator, int orderId) {
+    private List<InventoryItem> processItemBatch(BatchItem b, String createdBy, int orderId) {
         Product p = productDao.findById(b.productId)
                 .orElseThrow(() -> new IllegalArgumentException("商品不存在, id=" + b.productId));
         b._beforeQty = p.getQuantity();        // 提交前快照;commit 时真正做 adjustQuantity
         b._afterQty = p.getQuantity();
+
+        // 批次效期:生产日期+保质期天数都有才推得到期日;任一缺失则不参与效期预警
+        java.time.LocalDate expiry = (b.productionDate != null && b.shelfLifeDays != null && b.shelfLifeDays > 0)
+                ? b.productionDate.plusDays(b.shelfLifeDays) : null;
 
         String locCode = blankToNull(p.getLocation()) == null ? "默认库位" : p.getLocation();
         List<InventoryItem> generated = new ArrayList<>();
@@ -385,7 +444,10 @@ public class InboundService {
             ii.setRemaining(0);               // 占位期剩余 0
             ii.setStatus(InventoryItem.STATUS_PENDING);  // 待入库
             ii.setInboundOrderId(orderId);
-            ii.setCreatedBy(operator);
+            ii.setProductionDate(b.productionDate);
+            ii.setShelfLifeDays(b.shelfLifeDays);
+            ii.setExpiryDate(expiry);
+            ii.setCreatedBy(createdBy);
             // 生成 24 位编码;冲突自动重试(UNIQUE 索引兜底)
             for (int attempt = 0; attempt < 8; attempt++) {
                 ii.setCode(codeGenerator.generate(p.getSku()));
@@ -416,6 +478,8 @@ public class InboundService {
         it.setBeforeQty(b._beforeQty);
         it.setAfterQty(b._afterQty);
         it.setLocation(blankToNull(p.getLocation()));
+        it.setProductionDate(b.productionDate);
+        it.setShelfLifeDays(b.shelfLifeDays);
         it.setRowRemark(b.rowRemark);
         orderDao.insertItem(it);
         // 回填 inventory_item.inbound_item_id(每件实物→它所属的明细行)
@@ -435,7 +499,7 @@ public class InboundService {
     }
 
     /** 写一条入库流水(IN)。commitDraft 时调用,before/after 来自 productDao.adjustQuantity 前后值 */
-    private void persistInventoryLog(InboundOrderItem itemEntity, String operator, int orderId,
+    private void persistInventoryLog(InboundOrderItem itemEntity, String createdBy, int orderId,
                                     int before, int after) {
         InventoryLog log = new InventoryLog();
         log.setType(InventoryLog.TYPE_IN);
@@ -446,7 +510,7 @@ public class InboundService {
         log.setBeforeQty(before);
         log.setAfterQty(after);
         log.setRemark(itemEntity.getRowRemark());
-        log.setOperator(operator);
+        log.setCreatedBy(createdBy);
         log.setOrderId(orderId);
         logDao.insert(log);
     }
@@ -491,6 +555,8 @@ public class InboundService {
         public Integer quantity;
         public String supplier;   // 行级供应商(可选)
         public String rowRemark;
+        public java.time.LocalDate productionDate;  // 批次生产日期(可选)
+        public Integer shelfLifeDays;               // 批次保质期天数(可选)
 
         // 内部传递用(由 processItemBatch 设置,供 persistOrderItem/persistInventoryLog 读)
         Integer _beforeQty;

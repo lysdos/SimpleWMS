@@ -13,6 +13,8 @@ public class Product {
     private Integer quantity;
     private BigDecimal unitPrice;
     private Integer lowStock;
+    private Integer defaultShelfLifeDays;   // 默认保质期天数(入库时预填,可空)
+    private Integer expiryWarnDays;         // 临期预警天数(NULL=默认30天)
     private String remark;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -58,6 +60,10 @@ public class Product {
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
     public Integer getLowStock() { return lowStock; }
     public void setLowStock(Integer lowStock) { this.lowStock = lowStock; }
+    public Integer getDefaultShelfLifeDays() { return defaultShelfLifeDays; }
+    public void setDefaultShelfLifeDays(Integer defaultShelfLifeDays) { this.defaultShelfLifeDays = defaultShelfLifeDays; }
+    public Integer getExpiryWarnDays() { return expiryWarnDays; }
+    public void setExpiryWarnDays(Integer expiryWarnDays) { this.expiryWarnDays = expiryWarnDays; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
     public LocalDateTime getCreatedAt() { return createdAt; }

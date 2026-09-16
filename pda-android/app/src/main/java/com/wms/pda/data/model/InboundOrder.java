@@ -9,7 +9,7 @@ public class InboundOrder {
     public Integer dbId;          // 后端数据库自增 id(详情接口需要)
     public String id;             // 后端 orderNo(展示用单号)
     public String externalNo;     // 外部单号
-    public String operator;       // 操作员
+    public String createdBy;       // 创建人
     public Integer totalQuantity; // 入库总件数(后端字段)
     public Integer itemCount;     // 入库行数(后端字段)
     public String remark;         // 备注
@@ -19,12 +19,12 @@ public class InboundOrder {
 
     public InboundOrder() {}
 
-    public InboundOrder(String id, String externalNo, String operator, Integer totalQuantity,
+    public InboundOrder(String id, String externalNo, String createdBy, Integer totalQuantity,
                         Integer itemCount, String remark, Enums.DocStatus status,
                         String createdAt, List<InboundLine> lines) {
         this.id = id;
         this.externalNo = externalNo;
-        this.operator = operator;
+        this.createdBy = createdBy;
         this.totalQuantity = totalQuantity;
         this.itemCount = itemCount;
         this.remark = remark;
@@ -44,6 +44,8 @@ public class InboundOrder {
         public Integer afterQty;
         public String location;     // 库位
         public String rowRemark;    // 行级备注
+        public String productionDate; // 生产日期(yyyy-MM-dd,可空)
+        public Integer shelfLifeDays; // 保质期天数(可空)
         public int qty;             // 后端 quantity
         public String uom;          // 后端无此字段,PDA 端占位 "件"
         public List<String> codes;  // commit 后生成的 24 位码

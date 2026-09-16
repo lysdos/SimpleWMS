@@ -134,7 +134,7 @@ public class StockCheckController {
         sb.append("盘点单号,").append(csv(c.getCheckNo())).append('\n');
         sb.append("范围,").append(csv(scopeLabel(c.getScope()))).append('\n');
         sb.append("关键字,").append(csv(c.getScopeKeyword())).append('\n');
-        sb.append("操作员,").append(csv(c.getOperator())).append('\n');
+        sb.append("创建人,").append(csv(c.getCreatedBy())).append('\n');
         sb.append("备注,").append(csv(c.getRemark())).append('\n');
         sb.append("状态,").append(csv(statusLabel(c.getStatus()))).append('\n');
         sb.append("创建时间,").append(csv(c.getCreatedAt() == null ? "" : c.getCreatedAt().toString())).append('\n');

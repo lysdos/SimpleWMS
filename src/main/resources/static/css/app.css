@@ -266,7 +266,7 @@ a:hover { color: var(--c-brand-hover); }
    仪表盘统计
    ============================================================ */
 .stat-grid {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 18px;
 }
 .stat-card {
     background: var(--c-bg-elev);
@@ -289,6 +289,8 @@ a:hover { color: var(--c-brand-hover); }
 .stat-card.warn { border-left-color: var(--c-danger); }
 .stat-card.warn .value { color: var(--c-danger); }
 .stat-card.ok   { border-left-color: var(--c-success); }
+.stat-card.danger { border-left-color: var(--c-danger); }
+.stat-card.danger .value { color: var(--c-danger); }
 .stat-card.gold { border-left-color: var(--c-warn); }
 
 /* ============================================================

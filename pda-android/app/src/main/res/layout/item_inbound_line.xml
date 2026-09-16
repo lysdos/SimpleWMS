@@ -3,7 +3,10 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="@dimen/space_md">
+    android:paddingStart="@dimen/space_md"
+    android:paddingTop="@dimen/space_md"
+    android:paddingEnd="@dimen/space_md"
+    android:paddingBottom="@dimen/space_sm">
 
     <TextView
         android:id="@+id/tv_sku_name"
@@ -19,6 +22,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
+        android:baselineAligned="false"
         android:layout_marginTop="@dimen/space_xs">
 
         <TextView
@@ -51,33 +55,30 @@
         android:visibility="gone"
         android:gravity="end">
 
-        <com.google.android.material.button.MaterialButton
+        <TextView
             android:id="@+id/btn_line_edit"
             android:layout_width="wrap_content"
-            android:layout_height="@dimen/touch_min"
-            android:minWidth="0dp"
+            android:layout_height="36dp"
+            android:gravity="center"
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
             android:text="@string/action_edit"
+            android:textColor="@color/primary"
             android:textSize="@dimen/text_caption"
-            android:backgroundTint="@color/bg_subtle"
-            android:textColor="@color/text_secondary" />
+            android:textStyle="bold"
+            android:background="?android:attr/selectableItemBackground" />
 
-        <com.google.android.material.button.MaterialButton
+        <TextView
             android:id="@+id/btn_line_delete"
             android:layout_width="wrap_content"
-            android:layout_height="@dimen/touch_min"
-            android:minWidth="0dp"
-            android:layout_marginStart="@dimen/space_xs"
+            android:layout_height="36dp"
+            android:gravity="center"
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
             android:text="@string/action_delete"
+            android:textColor="@color/danger"
             android:textSize="@dimen/text_caption"
-            android:backgroundTint="@color/danger"
-            android:textColor="@color/on_primary" />
+            android:textStyle="bold"
+            android:background="?android:attr/selectableItemBackground" />
     </LinearLayout>
 </LinearLayout>

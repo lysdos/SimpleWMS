@@ -29,7 +29,7 @@ public class InboundOrderDao {
         o.setOrderNo(rs.getString("order_no"));
         o.setExternalNo(rs.getString("external_no"));
         o.setRemark(rs.getString("remark"));
-        o.setOperator(rs.getString("operator"));
+        o.setCreatedBy(rs.getString("created_by"));
         o.setTotalQuantity(rs.getInt("total_quantity"));
         o.setItemCount(rs.getInt("item_count"));
         java.sql.Timestamp ts = rs.getTimestamp("created_at");
@@ -58,6 +58,10 @@ public class InboundOrderDao {
         it.setBeforeQty(rs.getInt("before_qty"));
         it.setAfterQty(rs.getInt("after_qty"));
         it.setLocation(rs.getString("location"));
+        java.sql.Date pd = rs.getDate("production_date");
+        it.setProductionDate(pd == null ? null : pd.toLocalDate());
+        int sld = rs.getInt("shelf_life_days");
+        it.setShelfLifeDays(rs.wasNull() ? null : sld);
         it.setRowRemark(rs.getString("row_remark"));
         java.sql.Timestamp ts = rs.getTimestamp("created_at");
         it.setCreatedAt(ts == null ? null : ts.toLocalDateTime());
@@ -67,14 +71,14 @@ public class InboundOrderDao {
     /** 插入入库单主表,返回自增 id */
     public int insertOrder(InboundOrder o) {
         String sql = "INSERT INTO inbound_order (order_no, external_no, remark, " +
-                "operator, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?)";
+                "created_by, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, new String[]{"id"});
             ps.setString(1, o.getOrderNo());
             ps.setString(2, o.getExternalNo());
             ps.setString(3, o.getRemark());
-            ps.setString(4, o.getOperator());
+            ps.setString(4, o.getCreatedBy());
             ps.setInt(5, o.getTotalQuantity() == null ? 0 : o.getTotalQuantity());
             ps.setInt(6, o.getItemCount() == null ? 0 : o.getItemCount());
             ps.setString(7, o.getStatus() == null ? InboundOrder.STATUS_DRAFT : o.getStatus());
@@ -90,8 +94,9 @@ public class InboundOrderDao {
 
     public int insertItem(InboundOrderItem it) {
         String sql = "INSERT INTO inbound_order_item (order_id, product_id, sku, product_name, " +
-                "supplier, quantity, unit_price, before_qty, after_qty, location, row_remark) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+                "supplier, quantity, unit_price, before_qty, after_qty, location, row_remark, " +
+                "production_date, shelf_life_days) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         int rows = jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -106,6 +111,8 @@ public class InboundOrderDao {
             ps.setInt(9, it.getAfterQty() == null ? 0 : it.getAfterQty());
             if (it.getLocation() == null) ps.setNull(10, java.sql.Types.VARCHAR); else ps.setString(10, it.getLocation());
             if (it.getRowRemark() == null) ps.setNull(11, java.sql.Types.VARCHAR); else ps.setString(11, it.getRowRemark());
+            if (it.getProductionDate() == null) ps.setNull(12, java.sql.Types.DATE); else ps.setDate(12, java.sql.Date.valueOf(it.getProductionDate()));
+            if (it.getShelfLifeDays() == null) ps.setNull(13, java.sql.Types.INTEGER); else ps.setInt(13, it.getShelfLifeDays());
             return ps;
         }, kh);
         Number k = kh.getKey();
@@ -149,16 +156,29 @@ public class InboundOrderDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    /** 更新 DRAFT 单明细行(数量/供应商/行备注),返回影响行数 */
-    public int updateItem(int itemId, int quantity, String supplier, String rowRemark) {
+    /** 更新 DRAFT 单明细行(商品快照/数量/供应商/行备注/批次效期),返回影响行数 */
+    public int updateItem(InboundOrderItem it) {
         return jdbc.update(
-                "UPDATE inbound_order_item SET quantity = ?, supplier = ?, row_remark = ? WHERE id = ?",
-                quantity, supplier, rowRemark, itemId);
+                "UPDATE inbound_order_item SET product_id = ?, sku = ?, product_name = ?, " +
+                        "unit_price = ?, location = ?, quantity = ?, supplier = ?, row_remark = ?, " +
+                        "production_date = ?, shelf_life_days = ? " +
+                        "WHERE id = ?",
+                it.getProductId(), it.getSku(), it.getProductName(),
+                it.getUnitPrice(), it.getLocation(),
+                it.getQuantity(), it.getSupplier(), it.getRowRemark(),
+                it.getProductionDate(), it.getShelfLifeDays(), it.getId());
     }
 
     /** 删除 DRAFT 单单条明细行,返回影响行数 */
     public int deleteItem(int itemId) {
         return jdbc.update("DELETE FROM inbound_order_item WHERE id = ?", itemId);
+    }
+
+    /** 更新 DRAFT 单头(外部单号/备注),仅 DRAFT 生效(防并发提交/取消后改写),返回影响行数 */
+    public int updateHeader(int orderId, String externalNo, String remark) {
+        return jdbc.update(
+                "UPDATE inbound_order SET external_no = ?, remark = ? WHERE id = ? AND status = ?",
+                externalNo, remark, orderId, InboundOrder.STATUS_DRAFT);
     }
 
     public InboundOrder findOrderById(int id) {
@@ -181,7 +201,7 @@ public class InboundOrderDao {
      * 分页: page, pageSize
      */
     public List<InboundOrder> findOrders(String beginDate, String endDate,
-                                        String keyword, String operator, String status,
+                                        String keyword, String createdBy, String status,
                                         int page, int pageSize) {
         StringBuilder sb = new StringBuilder("SELECT * FROM inbound_order WHERE 1=1");
         List<Object> args = new ArrayList<>();
@@ -198,9 +218,9 @@ public class InboundOrderDao {
             String like = "%" + keyword.trim() + "%";
             args.add(like); args.add(like); args.add(like);
         }
-        if (operator != null && !operator.isBlank()) {
-            sb.append(" AND operator = ?");
-            args.add(operator);
+        if (createdBy != null && !createdBy.isBlank()) {
+            sb.append(" AND created_by = ?");
+            args.add(createdBy);
         }
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             sb.append(" AND status = ?");
@@ -214,7 +234,7 @@ public class InboundOrderDao {
     }
 
     public long countOrders(String beginDate, String endDate,
-                            String keyword, String operator, String status) {
+                            String keyword, String createdBy, String status) {
         StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM inbound_order WHERE 1=1");
         List<Object> args = new ArrayList<>();
         if (beginDate != null && !beginDate.isBlank() && !"all".equalsIgnoreCase(beginDate)) {
@@ -230,9 +250,9 @@ public class InboundOrderDao {
             String like = "%" + keyword.trim() + "%";
             args.add(like); args.add(like); args.add(like);
         }
-        if (operator != null && !operator.isBlank()) {
-            sb.append(" AND operator = ?");
-            args.add(operator);
+        if (createdBy != null && !createdBy.isBlank()) {
+            sb.append(" AND created_by = ?");
+            args.add(createdBy);
         }
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             sb.append(" AND status = ?");

@@ -45,7 +45,7 @@ class OutboundDraftControllerTest {
         OutboundOrder o = new OutboundOrder();
         o.setId(11);
         o.setOrderNo("OUT-20260907-456");
-        o.setOperator("pda-user");
+        o.setCreatedBy("pda-user");
         o.setStatus(OutboundOrder.STATUS_DRAFT);
         o.setTotalQuantity(0);
         o.setItemCount(0);

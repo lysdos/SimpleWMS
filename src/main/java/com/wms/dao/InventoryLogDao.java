@@ -26,7 +26,7 @@ public class InventoryLogDao {
         l.setBeforeQty(rs.getInt("before_qty"));
         l.setAfterQty(rs.getInt("after_qty"));
         l.setRemark(rs.getString("remark"));
-        l.setOperator(rs.getString("operator"));
+        l.setCreatedBy(rs.getString("created_by"));
         int oid = rs.getInt("order_id");
         l.setOrderId(rs.wasNull() ? null : oid);
         l.setCreatedAt(rs.getTimestamp("created_at") == null
@@ -40,7 +40,7 @@ public class InventoryLogDao {
 
     public int insert(InventoryLog log) {
         String sql = "INSERT INTO inventory_log (type, product_id, sku, product_name, " +
-                "quantity, before_qty, after_qty, remark, operator, order_id) " +
+                "quantity, before_qty, after_qty, remark, created_by, order_id) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
@@ -53,7 +53,7 @@ public class InventoryLogDao {
             ps.setInt(6, log.getBeforeQty());
             ps.setInt(7, log.getAfterQty());
             ps.setString(8, log.getRemark());
-            ps.setString(9, log.getOperator());
+            ps.setString(9, log.getCreatedBy());
             if (log.getOrderId() == null) ps.setNull(10, java.sql.Types.INTEGER);
             else ps.setInt(10, log.getOrderId());
             return ps;
@@ -134,5 +134,12 @@ public class InventoryLogDao {
         return jdbc.update(
                 "DELETE FROM inventory_log WHERE type = 'SCAN' AND order_id = ?",
                 orderId);
+    }
+
+    /** 查询最近操作记录(排除 SCAN 扫码确认,按时间倒序) */
+    public List<InventoryLog> findRecent(int limit) {
+        return jdbc.query(
+                "SELECT * FROM inventory_log WHERE type != 'SCAN' ORDER BY created_at DESC, id DESC LIMIT ?",
+                ROW, Math.max(1, Math.min(limit, 50)));
     }
 }

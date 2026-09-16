@@ -70,6 +70,8 @@ public class ProductController {
         p.setLocation((String) body.get("location"));
         p.setRemark((String) body.get("remark"));
         p.setLowStock(asInt(body.get("lowStock")));
+        p.setDefaultShelfLifeDays(asInt(body.get("defaultShelfLifeDays")));
+        p.setExpiryWarnDays(asInt(body.get("expiryWarnDays")));
         p.setUnitPrice(asBigDecimal(body.get("unitPrice")));
         p.setQuantity(asInt(body.get("quantity")));
         if (p.getQuantity() == null) p.setQuantity(0);

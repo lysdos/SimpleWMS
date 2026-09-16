@@ -26,7 +26,7 @@ public class StockCheckDao {
         c.setScope(rs.getString("scope"));
         c.setScopeKeyword(rs.getString("scope_keyword"));
         c.setRemark(rs.getString("remark"));
-        c.setOperator(rs.getString("operator"));
+        c.setCreatedBy(rs.getString("created_by"));
         c.setStatus(rs.getString("status"));
         c.setTotalCount(rs.getInt("total_count"));
         c.setCountedCount(rs.getInt("counted_count"));
@@ -64,7 +64,7 @@ public class StockCheckDao {
 
     public int insertCheck(StockCheck c) {
         String sql = "INSERT INTO stock_check (check_no, scope, scope_keyword, remark, " +
-                "operator, status, total_count, counted_count, diff_count) " +
+                "created_by, status, total_count, counted_count, diff_count) " +
                 "VALUES (?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
@@ -73,7 +73,7 @@ public class StockCheckDao {
             ps.setString(2, c.getScope());
             ps.setString(3, c.getScopeKeyword());
             ps.setString(4, c.getRemark());
-            ps.setString(5, c.getOperator());
+            ps.setString(5, c.getCreatedBy());
             ps.setString(6, c.getStatus() == null ? StockCheck.STATUS_DRAFT : c.getStatus());
             ps.setInt(7, c.getTotalCount() == null ? 0 : c.getTotalCount());
             ps.setInt(8, c.getCountedCount() == null ? 0 : c.getCountedCount());

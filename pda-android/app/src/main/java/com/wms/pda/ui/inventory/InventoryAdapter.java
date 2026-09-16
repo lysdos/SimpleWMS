@@ -17,8 +17,8 @@ import java.util.List;
 class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
 
     interface Callbacks {
-        void onPrint(String code);
-        void onScrap(String code, String warehouse, int onHand);
+        void onTransfer(InventoryItem item);
+        void onScrap(InventoryItem item);
     }
 
     private final List<InventoryItem> data = new ArrayList<>();
@@ -69,8 +69,8 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         }
 
-        h.btnPrint.setOnClickListener(v -> cb.onPrint(i.code));
-        h.btnScrap.setOnClickListener(v -> cb.onScrap(i.code, i.locationCode, qty));
+        h.btnTransfer.setOnClickListener(v -> cb.onTransfer(i));
+        h.btnScrap.setOnClickListener(v -> cb.onScrap(i));
     }
 
     @Override
@@ -78,7 +78,7 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
 
     static class VH extends RecyclerView.ViewHolder {
         final TextView tvSku, tvName, tvCode, tvLocation, tvQty, tvStatus;
-        final View btnPrint, btnScrap;
+        final View btnTransfer, btnScrap;
         VH(View v) {
             super(v);
             tvSku     = v.findViewById(R.id.tv_sku);
@@ -87,7 +87,7 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
             tvLocation = v.findViewById(R.id.tv_location);
             tvQty     = v.findViewById(R.id.tv_qty);
             tvStatus  = v.findViewById(R.id.tv_status);
-            btnPrint  = v.findViewById(R.id.btn_print);
+            btnTransfer = v.findViewById(R.id.btn_transfer);
             btnScrap  = v.findViewById(R.id.btn_scrap);
         }
     }

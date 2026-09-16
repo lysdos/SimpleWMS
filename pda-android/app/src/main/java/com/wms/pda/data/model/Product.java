@@ -10,4 +10,5 @@ public class Product {
     public Integer lowStock;
     public String defaultSupplier;
     public Integer defaultSupplierId;
+    public Integer defaultShelfLifeDays; // 默认保质期天数(入库预填,可空)
 }

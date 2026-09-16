@@ -27,10 +27,14 @@ public interface WmsRepository {
     void createInbound(String supplier, String warehouse, String remark, WmsCallback<InboundOrder> cb);
     /** 选商品+数量+库位+备注追加到 DRAFT 单。返回最新单(含 items[]) */
     void addInboundItem(String orderId, int productId, int quantity, String supplier,
-                        String rowRemark, WmsCallback<InboundOrder> cb);
-    /** 修改 DRAFT 单明细行(商品不可换) */
-    void updateInboundItem(String orderId, String itemId, int quantity, String supplier,
-                           String rowRemark, WmsCallback<InboundOrder> cb);
+                        String rowRemark, String productionDate, Integer shelfLifeDays,
+                        WmsCallback<InboundOrder> cb);
+    /** 修改 DRAFT 单头(外部单号/备注) */
+    void updateInboundHeader(String orderId, String externalNo, String remark, WmsCallback<InboundOrder> cb);
+    /** 修改 DRAFT 单明细行(可换商品,换时后端重建占位码) */
+    void updateInboundItem(String orderId, String itemId, int productId, int quantity,
+                           String supplier, String rowRemark, String productionDate,
+                           Integer shelfLifeDays, WmsCallback<InboundOrder> cb);
     /** 删除 DRAFT 单明细行 */
     void deleteInboundItem(String orderId, String itemId, WmsCallback<InboundOrder> cb);
     /** 商品列表(添加明细选商品用,去重后的商品而非库存单元) */
@@ -52,12 +56,18 @@ public interface WmsRepository {
     void resetOutboundScans(String orderId, WmsCallback<Integer> cb);
     void commitOutbound(String orderId, WmsCallback<OutboundOrder> cb);
     void cancelOutbound(String orderId, WmsCallback<Void> cb);
+    /** 修改 DRAFT 出库单头(客户/外部单号/备注) */
+    void updateOutboundHeader(String orderId, String customer, String externalNo,
+                              String remark, WmsCallback<OutboundOrder> cb);
 
     // ---- 库存 ----
     void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb);
-    void transfer(String sku, String fromWh, String toWh, int qty, WmsCallback<Void> cb);
-    void scrap(String sku, String warehouse, int qty, String reason, WmsCallback<Void> cb);
-    void printBarcode(String sku, WmsCallback<Void> cb);
+    /** 启用库位代码列表(调拨目标下拉用) */
+    void listLocations(WmsCallback<List<String>> cb);
+    /** 调拨库存单元到目标库位 */
+    void transfer(int itemId, String toLocation, WmsCallback<Void> cb);
+    /** 报废库存单元 */
+    void scrap(int itemId, String reason, WmsCallback<Void> cb);
 
     // ---- 盘点 ----
     void listStocktake(boolean onlyPending, WmsCallback<List<StocktakeOrder>> cb);

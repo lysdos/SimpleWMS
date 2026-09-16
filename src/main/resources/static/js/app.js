@@ -13,11 +13,14 @@ const state = {
     inventoryKw: '',
     inventoryLoc: '',
     inventoryStatus: 'IN_STOCK',
+    inventoryExpiryStatus: '',
+    inventoryExpiryFrom: '',
+    inventoryExpiryTo: '',
     inventoryPage: 1,
     stockCheckFilter: { beginDate: '', endDate: '', status: '' },
     stockCheckPage: 1,
     orderType: 'IN',
-    orderFilter: { beginDate: '', endDate: '', keyword: '', operator: '', status: 'COMMITTED' },
+    orderFilter: { beginDate: '', endDate: '', keyword: '', createdBy: '', status: 'COMMITTED' },
     orderPage: 1,
     inboundCardStatus: 'ALL',
     outboundCardStatus: 'ALL',
@@ -81,6 +84,21 @@ async function loadDashboard() {
             (out || []).map(r => ({ date: r.date, value: r.quantity })),
             { color: '#f59e0b', fillColor: 'rgba(245,158,11,0.12)' });
     });
+    renderExpiringList();
+}
+
+async function renderExpiringList() {
+    const el = document.getElementById('expiring-list');
+    if (!el) return;
+    try {
+        const [expiring, expired] = await Promise.all([
+            api.get('/api/dashboard/expiring?kind=EXPIRING&limit=10').catch(() => []),
+            api.get('/api/dashboard/expiring?kind=EXPIRED&limit=10').catch(() => [])
+        ]);
+        el.innerHTML = Views.expiringList(expiring || [], expired || []);
+    } catch (e) {
+        el.innerHTML = `<span style="color:var(--c-text-3);">—</span>`;
+    }
 }
 
 async function loadProducts() {
@@ -171,6 +189,9 @@ async function loadInventory() {
     if (state.inventoryKw)     qs.set('sku', state.inventoryKw);
     if (state.inventoryLoc)    qs.set('location', state.inventoryLoc);
     if (state.inventoryStatus) qs.set('status', state.inventoryStatus);
+    if (state.inventoryExpiryStatus) qs.set('expiryStatus', state.inventoryExpiryStatus);
+    if (state.inventoryExpiryFrom)   qs.set('expiryFrom', state.inventoryExpiryFrom);
+    if (state.inventoryExpiryTo)     qs.set('expiryTo', state.inventoryExpiryTo);
     qs.set('page', String(state.inventoryPage || 1));
     qs.set('pageSize', '20');
     const data = await api.get('/api/inventory/items?' + qs.toString());
@@ -509,7 +530,7 @@ async function loadOrders() {
     if (f.beginDate) qs.set('beginDate', f.beginDate);
     if (f.endDate)   qs.set('endDate',   f.endDate);
     if (f.keyword)   qs.set('keyword',   f.keyword);
-    if (f.operator)  qs.set('operator',  f.operator);
+    if (f.createdBy)  qs.set('createdBy',  f.createdBy);
     if (f.status)    qs.set('status',    f.status);
     qs.set('page', String(state.orderPage || 1));
     qs.set('pageSize', '20');
@@ -524,14 +545,14 @@ function searchOrders() {
         beginDate: document.getElementById('od-begin').value || '',
         endDate:   document.getElementById('od-end').value   || '',
         keyword:   document.getElementById('od-kw').value    || '',
-        operator:  document.getElementById('od-op').value    || '',
-        status:    document.getElementById('od-status').value || 'COMMITTED'
+        createdBy:  document.getElementById('od-op').value    || '',
+        status:    document.getElementById('od-status').value ?? 'COMMITTED'
     };
     state.orderPage = 1;
     loadOrders();
 }
 function resetOrderFilter() {
-    state.orderFilter = { beginDate: '', endDate: '', keyword: '', operator: '', status: 'COMMITTED' };
+    state.orderFilter = { beginDate: '', endDate: '', keyword: '', createdBy: '', status: '' };
     state.orderPage = 1;
     loadOrders();
 }
@@ -729,6 +750,8 @@ function readProductForm() {
         isDefault: sid === defNum
     }));
 
+    const shelfLifeRaw = document.getElementById('pf-shelf-life').value.trim();
+    const warnDaysRaw  = document.getElementById('pf-warn-days').value.trim();
     return {
         sku, name,
         category : document.getElementById('pf-cat').value.trim(),
@@ -737,6 +760,8 @@ function readProductForm() {
         quantity : Number(document.getElementById('pf-qty').value || 0),
         unitPrice: Number(document.getElementById('pf-price').value || 0),
         lowStock : Number(document.getElementById('pf-low').value || 10),
+        defaultShelfLifeDays: shelfLifeRaw === '' ? null : Number(shelfLifeRaw),
+        expiryWarnDays      : warnDaysRaw  === '' ? null : Number(warnDaysRaw),
         remark   : document.getElementById('pf-remark').value.trim(),
         suppliers
     };
@@ -857,12 +882,16 @@ function searchInventory() {
     state.inventoryKw     = document.getElementById('inv-kw').value.trim();
     state.inventoryLoc    = document.getElementById('inv-loc').value;
     state.inventoryStatus = document.getElementById('inv-status').value || 'IN_STOCK';
+    state.inventoryExpiryStatus = document.getElementById('inv-expiry').value || '';
+    state.inventoryExpiryFrom   = document.getElementById('inv-expiry-from').value || '';
+    state.inventoryExpiryTo     = document.getElementById('inv-expiry-to').value || '';
     state.inventoryPage = 1;
     updateInventoryExportHref();
     loadInventory();
 }
 function resetInventoryFilter() {
     state.inventoryKw = ''; state.inventoryLoc = ''; state.inventoryStatus = 'IN_STOCK';
+    state.inventoryExpiryStatus = ''; state.inventoryExpiryFrom = ''; state.inventoryExpiryTo = '';
     state.inventoryPage = 1;
     updateInventoryExportHref();
     loadInventory();
@@ -874,6 +903,9 @@ function updateInventoryExportHref() {
     if (state.inventoryKw)     qs.set('sku', state.inventoryKw);
     if (state.inventoryLoc)    qs.set('location', state.inventoryLoc);
     if (state.inventoryStatus) qs.set('status', state.inventoryStatus);
+    if (state.inventoryExpiryStatus) qs.set('expiryStatus', state.inventoryExpiryStatus);
+    if (state.inventoryExpiryFrom)   qs.set('expiryFrom', state.inventoryExpiryFrom);
+    if (state.inventoryExpiryTo)     qs.set('expiryTo', state.inventoryExpiryTo);
     const q = qs.toString();
     a.href = '/api/inventory/items/export.csv' + (q ? '?' + q : '');
 }
@@ -973,6 +1005,12 @@ function onNewOrderProductChange() {
     const tr = this.closest('tr');
     const sup = tr.querySelector('.nw-supplier');
     if (sup && !sup.value) sup.value = def;
+    // 入库行:带出商品默认保质期天数(可改)
+    const shelf = tr.querySelector('.nw-shelf-life');
+    if (shelf && !shelf.value) {
+        const dfltShelf = opt.getAttribute('data-shelf-life') || '';
+        if (dfltShelf !== '') shelf.value = dfltShelf;
+    }
 }
 
 function addNewOrderRow() {
@@ -983,6 +1021,10 @@ function addNewOrderRow() {
     clone.querySelector('.nw-qty').value = '';
     const sup = clone.querySelector('.nw-supplier');
     if (sup) sup.value = '';
+    const pd = clone.querySelector('.nw-prod-date');
+    if (pd) pd.value = '';
+    const shelf = clone.querySelector('.nw-shelf-life');
+    if (shelf) shelf.value = '';
     clone.querySelector('.nw-row-remark').value = '';
     tbody.appendChild(clone);
     clone.querySelector('.nw-product').addEventListener('change', onNewOrderProductChange);
@@ -997,6 +1039,10 @@ function removeNewOrderRow(btn) {
         tr.querySelector('.nw-qty').value = '';
         const sup = tr.querySelector('.nw-supplier');
         if (sup) sup.value = '';
+        const pd = tr.querySelector('.nw-prod-date');
+        if (pd) pd.value = '';
+        const shelf = tr.querySelector('.nw-shelf-life');
+        if (shelf) shelf.value = '';
         tr.querySelector('.nw-row-remark').value = '';
         return;
     }
@@ -1021,13 +1067,21 @@ function readNewOrderItems() {
         const quantity  = Number(qtyRaw);
         const supEl     = tr.querySelector('.nw-supplier');
         const supplier  = supEl ? supEl.value.trim() : '';
+        const prodDateEl = tr.querySelector('.nw-prod-date');
+        const productionDate = prodDateEl ? prodDateEl.value : '';
+        const shelfEl = tr.querySelector('.nw-shelf-life');
+        const shelfRaw = shelfEl ? shelfEl.value.trim() : '';
+        const shelfLifeDays = shelfRaw === '' ? null : Number(shelfRaw);
         const rowRemark = tr.querySelector('.nw-row-remark').value.trim();
         if (!productId && !qtyRaw) return;
         if (!productId) { toast(t('new_order.err.no_product'), 'error'); hasError = true; return; }
         if (!Number.isFinite(quantity) || quantity <= 0) {
             toast(t('new_order.err.qty_invalid'), 'error'); hasError = true; return;
         }
-        items.push({ productId, quantity, supplier, rowRemark });
+        items.push({
+            productId, quantity, supplier, rowRemark,
+            productionDate, shelfLifeDays
+        });
     });
     return hasError ? null : items;
 }

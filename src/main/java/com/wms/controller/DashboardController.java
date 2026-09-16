@@ -2,6 +2,7 @@ package com.wms.controller;
 
 import com.wms.model.ApiResponse;
 import com.wms.model.DashboardStats;
+import com.wms.model.InventoryLog;
 import com.wms.service.DashboardService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,5 +41,20 @@ public class DashboardController {
     public ApiResponse<List<Map<String, Object>>> outboundTrend(
             @RequestParam(defaultValue = "30") int days) {
         return ApiResponse.ok(dashboardService.outboundTrend(days));
+    }
+
+    /** 临期/过期在库批次明细(kind=EXPIRING|EXPIRED,limit 1-100) */
+    @GetMapping("/expiring")
+    public ApiResponse<List<Map<String, Object>>> expiring(
+            @RequestParam(defaultValue = "EXPIRING") String kind,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ApiResponse.ok(dashboardService.expiringItems(kind, limit));
+    }
+
+    /** 最近操作记录(排除扫码确认) */
+    @GetMapping("/recent-ops")
+    public ApiResponse<List<InventoryLog>> recentOps(
+            @RequestParam(defaultValue = "10") int limit) {
+        return ApiResponse.ok(dashboardService.recentOps(limit));
     }
 }

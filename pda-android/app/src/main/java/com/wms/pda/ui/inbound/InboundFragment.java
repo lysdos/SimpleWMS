@@ -18,6 +18,7 @@ import com.wms.pda.R;
 import com.wms.pda.data.model.InboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
+import android.widget.Toast;
 
 import java.util.List;
 
@@ -47,12 +48,15 @@ public class InboundFragment extends Fragment {
         btnNew.setEnabled(false);  // 加载完成前禁用
 
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
-        adapter = new InboundAdapter(o -> {
-            Intent i = new Intent(requireContext(), InboundDetailActivity.class);
-            i.putExtra("orderId", o.id);
-            if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
-            startActivity(i);
-        });
+        adapter = new InboundAdapter(
+                o -> {
+                    Intent i = new Intent(requireContext(), InboundDetailActivity.class);
+                    i.putExtra("orderId", o.id);
+                    if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
+                    startActivity(i);
+                },
+                o -> EditInboundHeaderDialog.show(requireContext(), o, this::reload),
+                this::confirmCancelOrder);
         list.setAdapter(adapter);
 
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
@@ -71,6 +75,26 @@ public class InboundFragment extends Fragment {
     public void onResume() {
         super.onResume();
         reload();
+    }
+
+    private void confirmCancelOrder(InboundOrder o) {
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setMessage(R.string.confirm_cancel_inbound)
+                .setPositiveButton(R.string.action_cancel_order, (d, w) ->
+                        RepositoryProvider.get().cancelInbound(String.valueOf(o.dbId),
+                                new WmsCallback<Void>() {
+                                    @Override public void onSuccess(Void v) {
+                                        if (!isAdded()) return;
+                                        Toast.makeText(requireContext(), R.string.msg_order_cancelled, Toast.LENGTH_SHORT).show();
+                                        reload();
+                                    }
+                                    @Override public void onError(int code, String msg) {
+                                        if (!isAdded()) return;
+                                        Toast.makeText(requireContext(), "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    }
+                                }))
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
     }
 
     private void reload() {

@@ -41,6 +41,11 @@ public class InventoryItem {
     private String transferredFrom;
     private String transferredTo;
 
+    private java.time.LocalDate productionDate;   // 生产日期(批次,可空)
+    private Integer shelfLifeDays;                // 保质期天数(批次,可空)
+    private java.time.LocalDate expiryDate;       // 到期日=生产日期+保质期天数(可空;空=不参与效期预警)
+    private Integer expiryWarnDays;               // 联表展示(product.expiry_warn_days),不存表
+
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -79,6 +84,14 @@ public class InventoryItem {
     public void setTransferredFrom(String transferredFrom) { this.transferredFrom = transferredFrom; }
     public String getTransferredTo() { return transferredTo; }
     public void setTransferredTo(String transferredTo) { this.transferredTo = transferredTo; }
+    public java.time.LocalDate getProductionDate() { return productionDate; }
+    public void setProductionDate(java.time.LocalDate productionDate) { this.productionDate = productionDate; }
+    public Integer getShelfLifeDays() { return shelfLifeDays; }
+    public void setShelfLifeDays(Integer shelfLifeDays) { this.shelfLifeDays = shelfLifeDays; }
+    public java.time.LocalDate getExpiryDate() { return expiryDate; }
+    public void setExpiryDate(java.time.LocalDate expiryDate) { this.expiryDate = expiryDate; }
+    public Integer getExpiryWarnDays() { return expiryWarnDays; }
+    public void setExpiryWarnDays(Integer expiryWarnDays) { this.expiryWarnDays = expiryWarnDays; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }

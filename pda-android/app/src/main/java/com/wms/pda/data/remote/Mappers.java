@@ -24,7 +24,7 @@ final class Mappers {
         m.dbId = o.id;
         m.id = o.orderNo == null ? ("o-" + o.id) : o.orderNo;
         m.externalNo = o.externalNo;
-        m.operator = o.operator;
+        m.createdBy = o.createdBy;
         m.totalQuantity = o.totalQuantity;
         m.itemCount = o.itemCount;
         m.remark = o.remark;
@@ -50,6 +50,8 @@ final class Mappers {
         l.afterQty = it.afterQty;
         l.location = it.location;
         l.rowRemark = it.rowRemark;
+        l.productionDate = it.productionDate;
+        l.shelfLifeDays = it.shelfLifeDays;
         l.qty = it.quantity == null ? 0 : it.quantity;
         l.uom = "件";  // 后端未持久化单位,PDA 端占位
         l.codes = it.codes;
@@ -63,7 +65,7 @@ final class Mappers {
         m.id = o.orderNo == null ? ("o-" + o.id) : o.orderNo;
         m.customer = o.customer;
         m.externalNo = o.externalNo;
-        m.operator = o.operator;
+        m.createdBy = o.createdBy;
         m.totalQuantity = o.totalQuantity;
         m.itemCount = o.itemCount;
         m.remark = o.remark;
@@ -99,7 +101,7 @@ final class Mappers {
         s.id = c.checkNo == null ? ("c-" + c.id) : c.checkNo;
         s.scope = c.scope;
         s.scopeKeyword = c.scopeKeyword;
-        s.operator = c.operator;
+        s.createdBy = c.createdBy;
         s.totalCount = c.totalCount;
         s.countedCount = c.countedCount;
         s.diffCount = c.diffCount;
@@ -170,6 +172,7 @@ final class Mappers {
         m.lowStock = p.lowStock;
         m.defaultSupplier = p.defaultSupplier;
         m.defaultSupplierId = p.defaultSupplierId;
+        m.defaultShelfLifeDays = p.defaultShelfLifeDays;
         return m;
     }
 

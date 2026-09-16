@@ -15,7 +15,7 @@ public class InboundOrder {
     private String orderNo;
     private String externalNo;
     private String remark;
-    private String operator;
+    private String createdBy;
     private Integer totalQuantity;
     private Integer itemCount;
     private LocalDateTime createdAt;
@@ -30,8 +30,8 @@ public class InboundOrder {
     public void setExternalNo(String externalNo) { this.externalNo = externalNo; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
-    public String getOperator() { return operator; }
-    public void setOperator(String operator) { this.operator = operator; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public Integer getTotalQuantity() { return totalQuantity; }
     public void setTotalQuantity(Integer totalQuantity) { this.totalQuantity = totalQuantity; }
     public Integer getItemCount() { return itemCount; }

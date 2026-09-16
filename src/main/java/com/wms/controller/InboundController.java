@@ -35,13 +35,13 @@ public class InboundController {
         Integer productId = asInt(body.get("productId"));
         Integer quantity  = asInt(body.get("quantity"));
         String remark    = asString(body.get("remark"));
-        String operator  = currentOperator(req);
+        String createdBy  = currentUsername(req);
 
         if (productId == null) throw new IllegalArgumentException("请选择商品");
         if (quantity == null)  throw new IllegalArgumentException("请输入入库数量");
         if (quantity <= 0)     throw new IllegalArgumentException("入库数量必须大于 0");
 
-        return ApiResponse.ok(inboundService.doInbound(productId, quantity, remark, operator));
+        return ApiResponse.ok(inboundService.doInbound(productId, quantity, remark, createdBy));
     }
 
     /**
@@ -52,7 +52,7 @@ public class InboundController {
      */
     @PostMapping("/batch")
     public ApiResponse<InboundOrder> inboundBatch(@RequestBody Map<String, Object> body, HttpServletRequest req) {
-        String operator = currentOperator(req);
+        String createdBy = currentUsername(req);
         String externalNo = asString(body.get("externalNo"));
         String orderRemark = asString(body.get("remark"));
 
@@ -68,9 +68,11 @@ public class InboundController {
             it.quantity   = asInt(r.get("quantity"));
             it.supplier   = asString(r.get("supplier"));
             it.rowRemark  = asString(r.get("rowRemark"));
+            it.productionDate = asDate(r.get("productionDate"));
+            it.shelfLifeDays  = asInt(r.get("shelfLifeDays"));
             items.add(it);
         }
-        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, operator, null);
+        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, createdBy, null);
         return ApiResponse.ok(order);
     }
 
@@ -93,14 +95,14 @@ public class InboundController {
             @RequestParam(required = false) String beginDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String operator,
-            @RequestParam(required = false, defaultValue = "DRAFT") String status,
+            @RequestParam(required = false) String createdBy,
+            @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize) {
         int ps = (pageSize <= 0 || pageSize > 200) ? 20 : pageSize;
         int p  = page <= 0 ? 1 : page;
-        var list = inboundService.listOrders(beginDate, endDate, keyword, operator, status, p, ps);
-        long total = inboundService.countOrders(beginDate, endDate, keyword, operator, status);
+        var list = inboundService.listOrders(beginDate, endDate, keyword, createdBy, status, p, ps);
+        long total = inboundService.countOrders(beginDate, endDate, keyword, createdBy, status);
         return ApiResponse.ok(Map.of(
                 "list", list,
                 "total", total,
@@ -121,10 +123,10 @@ public class InboundController {
     @PostMapping("/orders")
     public ApiResponse<InboundOrder> createDraft(@RequestBody Map<String, Object> body,
                                                   HttpServletRequest req) {
-        String operator = currentOperator(req);
+        String createdBy = currentUsername(req);
         String externalNo = asString(body == null ? null : body.get("externalNo"));
         String remark = asString(body == null ? null : body.get("remark"));
-        InboundOrder o = inboundService.createDraft(externalNo, remark, operator);
+        InboundOrder o = inboundService.createDraft(externalNo, remark, createdBy);
         return ApiResponse.ok(o);
     }
 
@@ -147,21 +149,38 @@ public class InboundController {
         it.quantity = quantity;
         it.supplier = asString(body.get("supplier"));
         it.rowRemark = asString(body.get("rowRemark"));
+        it.productionDate = asDate(body.get("productionDate"));
+        it.shelfLifeDays  = asInt(body.get("shelfLifeDays"));
         return ApiResponse.ok(inboundService.addItemToDraft(id, it));
     }
 
     /**
-     * 修改 DRAFT 单明细行(数量/供应商/行备注;商品不可换)。
-     * body: { "quantity": 5, "supplier": "可选", "rowRemark": "可选" }
+     * 修改 DRAFT 单头(外部单号/备注)。仅 DRAFT 可改。
+     * body: { "externalNo": "可选", "remark": "可选" }
+     */
+    @PutMapping("/orders/{id}")
+    public ApiResponse<InboundOrder> updateHeader(@PathVariable int id,
+                                                  @RequestBody Map<String, Object> body) {
+        if (body == null) throw new IllegalArgumentException("请求体不能为空");
+        return ApiResponse.ok(inboundService.updateDraftHeader(id,
+                asString(body.get("externalNo")), asString(body.get("remark"))));
+    }
+
+    /**
+     * 修改 DRAFT 单明细行(数量/供应商/行备注;productId 变更时换商品并重建占位码)。
+     * body: { "quantity": 5, "productId": 3(可选,换商品时传), "supplier": "可选", "rowRemark": "可选" }
      */
     @PutMapping("/orders/{id}/items/{itemId}")
     public ApiResponse<InboundOrder> updateItem(@PathVariable int id, @PathVariable int itemId,
                                                 @RequestBody Map<String, Object> body) {
         if (body == null) throw new IllegalArgumentException("请求体不能为空");
         InboundService.BatchItem it = new InboundService.BatchItem();
+        it.productId = asInt(body.get("productId"));
         it.quantity = asInt(body.get("quantity"));
         it.supplier = asString(body.get("supplier"));
         it.rowRemark = asString(body.get("rowRemark"));
+        it.productionDate = asDate(body.get("productionDate"));
+        it.shelfLifeDays  = asInt(body.get("shelfLifeDays"));
         return ApiResponse.ok(inboundService.updateDraftItem(id, itemId, it));
     }
 
@@ -201,7 +220,7 @@ public class InboundController {
         sb.append('\ufeff');
         sb.append("入库单号,").append(csv(o.getOrderNo())).append('\n');
         sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
-        sb.append("操作员,").append(csv(o.getOperator())).append('\n');
+        sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
         sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
         sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
@@ -242,7 +261,7 @@ public class InboundController {
         return s;
     }
 
-    private static String currentOperator(HttpServletRequest req) {
+    private static String currentUsername(HttpServletRequest req) {
         String op = (String) req.getAttribute("username");
         return (op == null || op.isBlank()) ? "操作员" : op;
     }
@@ -255,5 +274,12 @@ public class InboundController {
     }
     private static String asString(Object o) {
         return o == null ? null : o.toString().trim();
+    }
+    /** yyyy-MM-dd 字符串 → LocalDate;空/非法返回 null(效期字段均可选) */
+    private static java.time.LocalDate asDate(Object o) {
+        String s = asString(o);
+        if (s == null || s.isEmpty()) return null;
+        try { return java.time.LocalDate.parse(s); }
+        catch (Exception e) { return null; }
     }
 }

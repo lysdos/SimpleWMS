@@ -52,7 +52,7 @@ class StockCheckScanControllerTest {
         c.setCheckNo("CHK-20260907-789");
         c.setScope(StockCheck.SCOPE_ALL);
         c.setStatus(StockCheck.STATUS_DRAFT);
-        c.setOperator("pda-user");
+        c.setCreatedBy("pda-user");
         c.setTotalCount(2);
         c.setCountedCount(1);
         c.setDiffCount(0);
