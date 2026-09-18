@@ -538,6 +538,21 @@ public class InventoryItemDao {
                 InventoryItem.STATUS_TRANSFERRED, toLocation, id);
     }
 
+    /**
+     * 统计某商品名下"未终结"的库存单元数(IN_STOCK / PENDING / RESERVED)。
+     * 供删除商品前的占用校验:这三类单元还会参与业务
+     * (IN_STOCK 可出库、PENDING 等入库单提交、RESERVED 被出库草稿锁定),
+     * 商品行一旦被删,出库单提交时的 FIFO 扣减就查不到商品了。
+     * OUT / SCRAPPED / TRANSFERRED 是终态,不再参与业务,不阻塞删除。
+     */
+    public int countActiveByProductId(int productId) {
+        Integer c = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_item WHERE product_id = ? " +
+                "AND status IN ('IN_STOCK', 'PENDING', 'RESERVED')",
+                Integer.class, productId);
+        return c == null ? 0 : c;
+    }
+
     /** 简单统计:在库总数(供仪表盘参考) */
     public Long sumRemaining() {
         Long v = jdbc.queryForObject(

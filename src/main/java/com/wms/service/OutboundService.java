@@ -153,7 +153,10 @@ public class OutboundService {
         // 会被并发重放、库存会被扣两次。
         // commitReservations 还在本事务里;若这一步影响 0 行,事务回滚即撤销前面改动。
         for(OutboundOrderItem x:lines){
-            Product p=productDao.findById(x.getProductId()).orElseThrow(()->new IllegalArgumentException("商品不存在"));
+            // 商品行没了属于服务端数据不一致(不是客户端请求错),所以抛 IllegalStateException → 409,
+            // 而不是 IllegalArgumentException → 400:后者会让前端显示成"用户选错了商品"
+            Product p=productDao.findById(x.getProductId()).orElseThrow(()->
+                    new IllegalStateException("数据不一致:商品已删除,无法完成出库扣减, productId=" + x.getProductId()));
             int before=p.getQuantity();
             if(productDao.adjustQuantity(p.getId(),-x.getQuantity())==0)throw new IllegalStateException("出库失败");
             int after=before-x.getQuantity();
