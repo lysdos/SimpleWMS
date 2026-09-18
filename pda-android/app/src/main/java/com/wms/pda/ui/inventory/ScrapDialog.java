@@ -3,8 +3,7 @@ package com.wms.pda.ui.inventory;
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ArrayAdapter;
-import android.widget.Spinner;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -15,29 +14,25 @@ import com.wms.pda.data.model.InventoryItem;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 
-/** 报废对话框:一物一码,固定报废 1 件,只需选原因。 */
+/**
+ * 报废对话框:一物一码,固定报废 1 件。
+ * 原因**选填、自由文本**,与 Web 端口径一致(此前是固定下拉选项,只能从 5 个预设里挑)。
+ */
 final class ScrapDialog {
     private ScrapDialog() {}
-
-    private static final String[] REASONS = { "过期", "损坏", "性能不达标", "客户退货", "其它" };
 
     static void show(Context ctx, InventoryItem item, Runnable onDone) {
         View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_scrap_simple, null, false);
         TextView tvInfo = v.findViewById(R.id.tv_info);
-        Spinner spReason = v.findViewById(R.id.sp_reason);
+        EditText etReason = v.findViewById(R.id.et_reason);
 
         tvInfo.setText((item.sku == null ? "?" : item.sku) + " · " + (item.code == null ? "" : item.code));
-
-        ArrayAdapter<String> ad = new ArrayAdapter<>(ctx,
-                android.R.layout.simple_spinner_item, REASONS);
-        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spReason.setAdapter(ad);
 
         new AlertDialog.Builder(ctx)
                 .setTitle(R.string.scrap_title)
                 .setView(v)
                 .setPositiveButton(R.string.action_confirm, (d, w) -> {
-                    String reason = (String) spReason.getSelectedItem();
+                    String reason = etReason.getText() == null ? "" : etReason.getText().toString().trim();
                     RepositoryProvider.get().scrap(item.id, reason,
                             new WmsCallback<Void>() {
                                 @Override public void onSuccess(Void v) {

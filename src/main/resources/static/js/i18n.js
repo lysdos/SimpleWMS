@@ -420,6 +420,8 @@ const I18N = (() => {
         'inventory.status.OUT':     { 'zh-CN': '已出库',                   'en-US': 'Out' },
         'inventory.status.SCRAPPED':{ 'zh-CN': '已报废',                   'en-US': 'Scrapped' },
         'inventory.status.TRANSFERRED':{ 'zh-CN': '已调拨',                'en-US': 'Transferred' },
+        'inventory.status.PENDING':{ 'zh-CN': '待入库',                    'en-US': 'Pending Inbound' },
+        'inventory.status.RESERVED':{ 'zh-CN': '已预留',                   'en-US': 'Reserved' },
 
         /* ---------- 库存盘点 ---------- */
         'stock_check.title':   { 'zh-CN': '库存盘点',                      'en-US': 'Stock Checks' },

@@ -209,6 +209,9 @@ public class InventoryItemController {
             case "OUT":         return "已出库";
             case "SCRAPPED":    return "已报废";
             case "TRANSFERRED": return "已调拨";
+            // 这两个状态此前没映射,导出时会吐英文原值(库里 20 个入库草稿占位单元就是 PENDING)
+            case "PENDING":     return "待入库";
+            case "RESERVED":    return "已预留";
             default: return s;
         }
     }

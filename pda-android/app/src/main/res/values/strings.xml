@@ -111,9 +111,8 @@
     <string name="transfer_target_warehouse">调入仓库</string>
     <string name="transfer_qty">调拨数量</string>
     <string name="scrap_title">库存报废</string>
-    <string name="scrap_reason_label">报废原因</string>
-    <string name="scrap_qty">报废数量</string>
-    <string name="scrap_reason">报废原因</string>
+    <string name="scrap_reason_label">报废原因(可选)</string>
+    <string name="scrap_reason_hint">例如:过期 / 损坏 / 测试报废 ...</string>
 
     <!-- 盘点 -->
     <string name="stocktake_title">库存盘点</string>

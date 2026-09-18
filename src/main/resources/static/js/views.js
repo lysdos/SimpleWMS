@@ -1349,6 +1349,8 @@ const Views = {
 
         const statusMap = {
             'IN_STOCK'   : `<span class="badge ok">${t('inventory.status.IN_STOCK')}</span>`,
+            'PENDING'    : `<span class="badge" style="background:#fef3c7;color:#92400e;">${t('inventory.status.PENDING')}</span>`,
+            'RESERVED'   : `<span class="badge" style="background:#e5e7eb;color:var(--c-text-2);">${t('inventory.status.RESERVED')}</span>`,
             'OUT'        : `<span class="badge low">${t('inventory.status.OUT')}</span>`,
             'SCRAPPED'   : `<span class="badge" style="background:#e5e7eb;color:var(--c-text-3);">${t('inventory.status.SCRAPPED')}</span>`,
             'TRANSFERRED': `<span class="badge" style="background:#e5e7eb;color:var(--c-text-3);">${t('inventory.status.TRANSFERRED')}</span>`
@@ -1401,7 +1403,10 @@ const Views = {
                     ${locOpts}
                 </select>
                 <select id="inv-status" class="select" style="width:120px;">
+                    <option value=""            ${state.inventoryStatus===''?'selected':''}>${t('common.all')}</option>
                     <option value="IN_STOCK"    ${state.inventoryStatus==='IN_STOCK'?'selected':''}>${t('inventory.status.IN_STOCK')}</option>
+                    <option value="PENDING"     ${state.inventoryStatus==='PENDING'?'selected':''}>${t('inventory.status.PENDING')}</option>
+                    <option value="RESERVED"    ${state.inventoryStatus==='RESERVED'?'selected':''}>${t('inventory.status.RESERVED')}</option>
                     <option value="OUT"         ${state.inventoryStatus==='OUT'?'selected':''}>${t('inventory.status.OUT')}</option>
                     <option value="SCRAPPED"    ${state.inventoryStatus==='SCRAPPED'?'selected':''}>${t('inventory.status.SCRAPPED')}</option>
                     <option value="TRANSFERRED" ${state.inventoryStatus==='TRANSFERRED'?'selected':''}>${t('inventory.status.TRANSFERRED')}</option>

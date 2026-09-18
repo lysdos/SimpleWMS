@@ -21,10 +21,17 @@
         android:text="@string/scrap_reason_label"
         style="@style/Text.Caption" />
 
-    <Spinner
-        android:id="@+id/sp_reason"
+    <EditText
+        android:id="@+id/et_reason"
         android:layout_width="match_parent"
         android:layout_height="@dimen/touch_min"
         android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input" />
+        android:background="@drawable/bg_input"
+        android:paddingStart="@dimen/space_md"
+        android:paddingEnd="@dimen/space_md"
+        android:hint="@string/scrap_reason_hint"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_hint"
+        android:inputType="text"
+        android:maxLength="255" />
 </LinearLayout>

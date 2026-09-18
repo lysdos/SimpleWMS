@@ -64,6 +64,14 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
         } else if ("TRANSFERRED".equals(status)) {
             h.tvStatus.setText("已调拨");
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
+        } else if ("PENDING".equals(status)) {
+            // 入库草稿单生成的占位单元,入库单提交后才变为在库
+            h.tvStatus.setText("待入库");
+            h.tvStatus.setBackgroundResource(R.drawable.bg_pill_warning);
+        } else if ("RESERVED".equals(status)) {
+            // 已被某张出库草稿单预留(锁定),出库单提交后变为已出库
+            h.tvStatus.setText("已预留");
+            h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         } else {
             h.tvStatus.setText(status);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);

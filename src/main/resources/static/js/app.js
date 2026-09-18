@@ -1111,7 +1111,8 @@ function readLocationForm() {
 function searchInventory() {
     state.inventoryKw     = document.getElementById('inv-kw').value.trim();
     state.inventoryLoc    = document.getElementById('inv-loc').value;
-    state.inventoryStatus = document.getElementById('inv-status').value || 'IN_STOCK';
+    // 不能用 || 'IN_STOCK':下拉新增了"全部"(空值),|| 会把它强行改回在库,导致选了"全部"没反应
+    state.inventoryStatus = document.getElementById('inv-status')?.value ?? 'IN_STOCK';
     state.inventoryExpiryStatus = document.getElementById('inv-expiry').value || '';
     state.inventoryExpiryFrom   = document.getElementById('inv-expiry-from').value || '';
     state.inventoryExpiryTo     = document.getElementById('inv-expiry-to').value || '';
@@ -1169,7 +1170,7 @@ function scrapInventory(id, code) {
             ${escapeHtml(code)}
         </div>
         <label style="display:block;font-size:13px;color:var(--c-text-2);margin-bottom:4px;">${t('inventory.modal.scrap_reason')}</label>
-        <textarea id="scrap-remark" class="input" rows="3" placeholder="${t('inventory.modal.scrap_placeholder')}"></textarea>
+        <textarea id="scrap-remark" class="input" rows="3" maxlength="255" placeholder="${t('inventory.modal.scrap_placeholder')}"></textarea>
     `, async () => {
         try {
             await api.post(`/api/inventory/items/${id}/scrap`, {
