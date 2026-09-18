@@ -82,7 +82,7 @@ public class OutboundController {
     @GetMapping("/orders/{id}")
     public ApiResponse<OutboundOrder> getOrder(@PathVariable int id) {
         OutboundOrder o = outboundService.getOrder(id);
-        if (o == null) throw new IllegalArgumentException("出库单不存在, id=" + id);
+        if (o == null) throw new NotFoundException("出库单不存在, id=" + id);
         return ApiResponse.ok(o);
     }
 
@@ -262,7 +262,7 @@ public class OutboundController {
     @GetMapping(value = "/orders/{id}/export.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<byte[]> exportCsv(@PathVariable int id) {
         OutboundOrder o = outboundService.getOrder(id);
-        if (o == null) throw new IllegalArgumentException("出库单不存在, id=" + id);
+        if (o == null) throw new NotFoundException("出库单不存在, id=" + id);
 
         StringBuilder sb = new StringBuilder();
         sb.append('\ufeff');

@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.UserDao;
 import com.wms.model.AppUser;
 import org.slf4j.Logger;
@@ -76,7 +77,7 @@ public class UserService {
     }
 
     public AppUser get(int id) {
-        return userDao.findById(id).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        return userDao.findById(id).orElseThrow(() -> new NotFoundException("用户不存在"));
     }
 
     public List<AppUser> list() {
@@ -113,14 +114,14 @@ public class UserService {
         if (newRaw == null || newRaw.length() < 6) throw new IllegalArgumentException("密码至少 6 位");
         // 不校验存在性的话,对不存在的 id 会静默更新 0 行并返回成功,
         // 前端弹"重置成功"但实际什么都没做
-        if (userDao.findById(id).isEmpty()) throw new IllegalArgumentException("用户不存在");
+        if (userDao.findById(id).isEmpty()) throw new NotFoundException("用户不存在");
         userDao.updatePassword(id, passwordService.hash(newRaw), true);
     }
 
     @Transactional
     public AppUser updateRole(int id, String role) {
         if (!"ADMIN".equals(role) && !"OPERATOR".equals(role)) throw new IllegalArgumentException("角色必须为 ADMIN / OPERATOR");
-        AppUser u = userDao.findById(id).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        AppUser u = userDao.findById(id).orElseThrow(() -> new NotFoundException("用户不存在"));
         u.setRole(role);
         userDao.updateRole(id, role);
         return u;
@@ -128,6 +129,9 @@ public class UserService {
 
     @Transactional
     public void changeOwnPassword(int id, String oldRaw, String newRaw) {
+        // 这里刻意**保持** IllegalArgumentException:AuthController.changeOwn 专门 catch 它
+        // 返回 400("改自己密码"这类输入校验错误)。改成 NotFoundException 会漏出那个 catch,
+        // 变成 404 —— 全项目唯一一处"不改"的存在性校验,别顺手统一。
         AppUser u = userDao.findById(id).orElseThrow(() -> new IllegalArgumentException("用户不存在"));
         if (!passwordService.verify(oldRaw, u.getPasswordHash())) {
             throw new IllegalArgumentException("原密码错误");
@@ -138,7 +142,7 @@ public class UserService {
 
     @Transactional
     public void setEnabled(int id, boolean enabled) {
-        if (userDao.findById(id).isEmpty()) throw new IllegalArgumentException("用户不存在");
+        if (userDao.findById(id).isEmpty()) throw new NotFoundException("用户不存在");
         userDao.setEnabled(id, enabled);
     }
 
@@ -156,7 +160,7 @@ public class UserService {
             throw new IllegalArgumentException("不能删除当前登录的用户");
         }
         AppUser target = userDao.findById(id).orElseThrow(() ->
-                new IllegalArgumentException("用户不存在, id=" + id));
+                new NotFoundException("用户不存在, id=" + id));
         if ("ADMIN".equals(target.getRole())) {
             long adminCount = userDao.listAll().stream()
                     .filter(u -> "ADMIN".equals(u.getRole()))

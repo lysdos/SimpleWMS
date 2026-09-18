@@ -252,7 +252,7 @@ public class StockCheckService {
 
         // 2) 查 inventory_item by code
         InventoryItem inv = itemDao.findByCode(code);
-        if (inv == null) throw new IllegalArgumentException("码不存在");
+        if (inv == null) throw new NotFoundException("码不存在");
 
         // 3) 在本盘点单明细中找对应行
         StockCheckItem line = dao.findItemsByCheckId(checkId).stream()

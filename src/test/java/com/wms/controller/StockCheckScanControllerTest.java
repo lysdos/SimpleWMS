@@ -98,9 +98,10 @@ class StockCheckScanControllerTest {
 
     @Test
     void scanCode_notFound_404() throws Exception {
-        // brief:码不存在 → IllegalArgumentException("码不存在") → GlobalExceptionHandler 映射 404
+        // brief:码不存在 → NotFoundException("码不存在") → GlobalExceptionHandler 映射 404
+        // (此前靠消息前缀分流,那段已删除,异常类型必须跟着换)
         when(stockCheckService.scanCodeToCheck(anyInt(), anyString()))
-                .thenThrow(new IllegalArgumentException("码不存在"));
+                .thenThrow(new NotFoundException("码不存在"));
 
         String body = "{\"code\":\"DOES_NOT_EXIST\"}";
         mvc.perform(post("/api/stock-checks/33/scan")

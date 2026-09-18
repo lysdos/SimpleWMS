@@ -147,6 +147,10 @@ public class ProductDao {
     }
 
     public int delete(int id) {
+        // product_supplier 在 schema 里没有外键(只有注释标注 → product.id),所以删商品时
+        // 必须显式清关联行,否则会留下指向已删商品的孤儿记录。调用方 ProductService.delete
+        // 带 @Transactional,两条语句同一事务。
+        jdbc.update("DELETE FROM product_supplier WHERE product_id = ?", id);
         return jdbc.update("DELETE FROM product WHERE id = ?", id);
     }
 

@@ -285,7 +285,7 @@ public class InboundService {
 
     private InboundOrder requireDraftOrder(int orderId) {
         InboundOrder order = orderDao.findOrderById(orderId);
-        if (order == null) throw new IllegalArgumentException("入库单不存在, id=" + orderId);
+        if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以修改明细, 当前 status=" + order.getStatus());
         }
@@ -298,7 +298,7 @@ public class InboundService {
     @Transactional
     public InboundOrder commitDraft(int orderId) {
         InboundOrder order = orderDao.findOrderById(orderId);
-        if (order == null) throw new IllegalArgumentException("入库单不存在, id=" + orderId);
+        if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以提交, 当前 status=" + order.getStatus());
         }
@@ -349,7 +349,7 @@ public class InboundService {
     @Transactional
     public void cancelDraft(int orderId) {
         InboundOrder order = orderDao.findOrderById(orderId);
-        if (order == null) throw new IllegalArgumentException("入库单不存在, id=" + orderId);
+        if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以取消, 当前 status=" + order.getStatus());
         }
@@ -376,7 +376,7 @@ public class InboundService {
             throw new IllegalArgumentException("入库明细不能为空");
         }
         InboundOrder order = orderDao.findOrderById(orderId);
-        if (order == null) throw new IllegalArgumentException("入库单不存在, id=" + orderId);
+        if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以追加明细, 当前 status=" + order.getStatus());
         }

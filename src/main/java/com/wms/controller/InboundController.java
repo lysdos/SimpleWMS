@@ -82,7 +82,7 @@ public class InboundController {
     @GetMapping("/orders/{id}")
     public ApiResponse<InboundOrder> getOrder(@PathVariable int id) {
         InboundOrder o = inboundService.getOrder(id);
-        if (o == null) throw new IllegalArgumentException("入库单不存在, id=" + id);
+        if (o == null) throw new NotFoundException("入库单不存在, id=" + id);
         // COMMITTED 单子的 inbound_order_item.codes 需要从 inventory_item 查,补一次 codes
         if (InboundOrder.STATUS_COMMITTED.equals(o.getStatus())) {
             InboundOrder withCodes = inboundService.getOrderWithCodes(id);
@@ -216,7 +216,7 @@ public class InboundController {
     @GetMapping(value = "/orders/{id}/export.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<byte[]> exportCsv(@PathVariable int id) {
         InboundOrder o = inboundService.getOrder(id);
-        if (o == null) throw new IllegalArgumentException("入库单不存在, id=" + id);
+        if (o == null) throw new NotFoundException("入库单不存在, id=" + id);
 
         StringBuilder sb = new StringBuilder();
         sb.append('\ufeff');

@@ -25,7 +25,7 @@
 | 400 | 参数错误:`IllegalArgumentException` 普通错 / 路径参数类型不匹配 / 缺必填查询参数 | 400 |
 | 401 | JWT 缺失 / 无效 / 过期(`JwtAuthFilter` 拦截) | 401 |
 | 403 | 缺角色(`@RequireRole`) | 403 |
-| 404 | 资源不存在:**路径上的**资源查不到 → 抛 `NotFoundException`;另有少数 service 走 `IllegalArgumentException` 文本前缀兜底(`码不存在` / `出库单不存在, id=` / `入库单不存在, id=` / `用户不存在`)。划分口径见 §1.2.2 | 404 |
+| 404 | 资源不存在:抛 `NotFoundException`(**唯一机制**,状态码与提示语文案无关)。划分口径见 §1.2.2 | 404 |
 | 405 | 路径匹配但 HTTP 方法不支持 | 405 |
 | 406 | 客户端 `Accept` 无法满足(Spring 自身处理,**响应体为空**) | — |
 | 409 | 业务冲突(库存不足 / 状态不对) | 409 |
@@ -33,7 +33,7 @@
 | 422 | 不可处理实体(扫码校验失败) | 422 |
 | 500 | 服务器异常 | 500 |
 
-`GlobalExceptionHandler.badArg` 根据抛出位置文本前缀在 400 / 404 之间分流(参见 `database-schema.md` 与 `prd-input-backend.md` B6)。前缀是**精确匹配的固定清单**(见上表 404 行),不是"包含'不存在'即为 404" —— 例如 `SKU 不存在` 会落到 400。
+`GlobalExceptionHandler.badArg` 现在**只负责 400**(`IllegalArgumentException` = 请求参数/内容有问题)。404 一律由 `NotFoundException` 给出,不靠消息文案判断。
 
 #### 1.2.1 404 一定是真 404(2026-09-18 起)
 
@@ -60,7 +60,9 @@
 
 **已知例外**:`OutboundService.commitDraft` 在 FIFO 扣减时若商品已不存在抛 `商品不存在` → 400。这既不是路径资源也不属于请求体输入,而是**数据不一致**(商品被删但库存单元还在),严格说该按 409/500 处理;目前维持 400 未改。
 
-`GlobalExceptionHandler.badArg` 那个按消息文本前缀分流的兜底仍然存在(供 `用户不存在`、`码不存在`、出入库单不存在等尚未迁移的抛出点使用),但**新代码不要再依赖它** —— 直接用 `NotFoundException`,别再靠消息文案决定状态码。
+**已退役(2026-09-18)**:`badArg` 曾经按消息文本前缀(`码不存在` / `出库单不存在, id=` / `入库单不存在, id=` / `用户不存在`)把部分 `IllegalArgumentException` 分流成 404 —— 那等于让**状态码取决于提示语文案**(改一句话就可能悄悄改掉响应码,而不在清单里的"xx不存在"会落到 400)。现全部改为抛 `NotFoundException`。
+
+唯一例外:`UserService.changeOwnPassword` 的存在性校验**保持** `IllegalArgumentException` —— 它被 `AuthController` 专门 catch 成 400("改自己密码"属输入校验)。别去"顺手统一"它。
 
 ### 1.3 鉴权
 

@@ -135,9 +135,11 @@ class OutboundDraftControllerTest {
 
     @Test
     void scanCode_notFound_404() throws Exception {
-        // brief:不存在 → throw IllegalArgumentException("码不存在") → 404
+        // brief:不存在 → throw NotFoundException("码不存在") → 404
+        // (此前抛 IllegalArgumentException 靠 GlobalExceptionHandler 的消息前缀分流才拿到 404,
+        //  那段前缀匹配已删除,所以这里必须抛 NotFoundException)
         when(outboundService.scanCodeToDraft(eq(11), anyString()))
-                .thenThrow(new IllegalArgumentException("码不存在"));
+                .thenThrow(new NotFoundException("码不存在"));
 
         String body = "{\"code\":\"DOES_NOT_EXIST\"}";
         mvc.perform(post("/api/outbound/orders/11/scan")

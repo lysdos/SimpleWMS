@@ -16,18 +16,17 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    /** 参数错误 */
+    /**
+     * 参数错误 → 400。
+     * 注意:"资源不存在"**不要**走这里 —— 抛 {@link NotFoundException}(→404)。
+     * 这里曾用消息文本前缀({"码不存在" / "出库单不存在, id=" / ...})把部分 400 分流成 404,
+     * 那等于让状态码取决于提示语文案:改一句话就可能悄悄改掉响应码,而不在清单里的
+     * "xx不存在" 又会落到 400。2026-09-18 已把那些抛出点统一改抛 NotFoundException。
+     */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Void>> badArg(IllegalArgumentException e) {
-        // 业务约定:消息以 "码不存在" 或 "出库单不存在, id" 开头 → 资源不存在 → 404
-        String msg = e.getMessage() == null ? "" : e.getMessage();
-        if (msg.startsWith("码不存在") || msg.startsWith("出库单不存在, id=")
-                || msg.startsWith("入库单不存在, id=") || msg.startsWith("用户不存在")) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(ApiResponse.fail(404, msg));
-        }
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(400, msg));
+                .body(ApiResponse.fail(400, e.getMessage()));
     }
 
     /** 业务规则冲突(库存不足等) */

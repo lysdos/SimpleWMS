@@ -2,6 +2,7 @@ package com.wms.service;
 
 import com.wms.dao.InventoryItemDao;
 import com.wms.dao.InventoryLogDao;
+import com.wms.controller.NotFoundException;
 import com.wms.dao.OutboundOrderDao;
 import com.wms.dao.ProductDao;
 import com.wms.model.ExpectedEpc;
@@ -95,7 +96,7 @@ public class OutboundService {
     @Transactional public OutboundOrder scanCodeToDraft(int orderId, String code) {
         OutboundOrder o = requireDraft(orderId);
         InventoryItem inv = itemDao.findByCode(code);
-        if (inv == null) throw new IllegalArgumentException("码不存在");
+        if (inv == null) throw new NotFoundException("码不存在");
         if (InventoryItem.STATUS_OUT.equals(inv.getStatus())) throw new IllegalStateException("已出库");
         if (InventoryItem.STATUS_SCRAPPED.equals(inv.getStatus())) throw new IllegalStateException("已报废");
         // 只允许扫描已锁定给本单的 RESERVED 单元(扫码确认,不改数量)
@@ -259,7 +260,7 @@ public class OutboundService {
     @Transactional(readOnly = true)
     public List<com.wms.model.ExpectedEpc> loadExpectedEpcs(int orderId) {
         OutboundOrder o = orderDao.findOrderById(orderId);
-        if (o == null) throw new IllegalArgumentException("出库单不存在, id=" + orderId);
+        if (o == null) throw new NotFoundException("出库单不存在, id=" + orderId);
         return itemDao.findExpectedEpcsForOutbound(orderId);
     }
 
@@ -361,7 +362,7 @@ public class OutboundService {
         return logDao.deleteScansForOutbound(orderId);
     }
 
-    private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new IllegalArgumentException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
+    private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new NotFoundException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
 
     @Transactional(readOnly=true)
     public OutboundOrder getOrder(int id) {
@@ -413,7 +414,7 @@ public class OutboundService {
             throw new IllegalArgumentException("deviceCode 不能为空");
         }
         OutboundOrder o = orderDao.findOrderById(orderId);
-        if (o == null) throw new IllegalArgumentException("出库单不存在, id=" + orderId);
+        if (o == null) throw new NotFoundException("出库单不存在, id=" + orderId);
         if (!OutboundOrder.STATUS_DRAFT.equals(o.getStatus())) {
             throw new IllegalStateException("只能下发 DRAFT 状态的出库单, 当前=" + o.getStatus());
         }
@@ -450,7 +451,7 @@ public class OutboundService {
             throw new IllegalArgumentException("deviceCode 不能为空");
         }
         OutboundOrder o = orderDao.findOrderById(orderId);
-        if (o == null) throw new IllegalArgumentException("出库单不存在, id=" + orderId);
+        if (o == null) throw new NotFoundException("出库单不存在, id=" + orderId);
         if (o.getUhfDispatchedAt() == null) {
             throw new IllegalStateException("该出库单尚未下发到 UHF,不能认领");
         }
