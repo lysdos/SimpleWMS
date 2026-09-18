@@ -304,7 +304,7 @@ const Views = {
                 <td>${escapeHtml(o.createdBy || '')}</td>
                 <td>${formatDate(o.createdAt)}</td>
                 <td class="actions">
-                    <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
+                    <button class="btn-link" onclick="viewOrderDetail(${o.id}, 'IN')">${t('common.view')}</button>
                     ${actionBtns}
                 </td>
             </tr>`;
@@ -386,7 +386,7 @@ const Views = {
                 <td>${escapeHtml(o.createdBy || '')}</td>
                 <td>${formatDate(o.createdAt)}</td>
                 <td class="actions">
-                    <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
+                    <button class="btn-link" onclick="viewOrderDetail(${o.id}, 'OUT')">${t('common.view')}</button>
                     ${actionBtns}
                 </td>
             </tr>`;

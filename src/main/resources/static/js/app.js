@@ -767,7 +767,10 @@ async function submitEditOrder(type, orderId) {
 }
 
 async function viewOrderDetail(id, typeHint) {
-    const tt = typeHint || state.orderType || 'IN';
+    // 单类型必须由调用方给出。曾经回落到全局 state.orderType(出入库单页面的下拉),
+    // 而它默认 'ALL'、切过出库单就变 'OUT' —— 于是入库登记点"查看"会去查 /api/outbound,
+    // 同 id 存在出库单时直接弹出错单据。这里不再读任何共享状态。
+    const tt = typeHint || 'IN';
     const base = tt === 'IN' ? '/api/inbound' : '/api/outbound';
     if (state._viewingOrder === id) return;
     state._viewingOrder = id;
