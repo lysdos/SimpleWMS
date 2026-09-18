@@ -166,39 +166,46 @@ public class ScanManager {
 
 ```java
 public class ApiClient {
-    private final SessionStore session;
-    private final OkHttpClient http;
-    private final String baseUrl;
+    public ApiClient();                       // 内部读 SessionStore 的 baseUrl
+    public void refreshBaseUrl();             // 用户改了服务器地址后调用
+    public void setToken(String token);
 
-    public ApiClient(SessionStore session);  // 自动构造,内部读 session.baseUrl
-    public <T> ApiResponse<T> get(String path, Class<T> dataType);
-    public <T> ApiResponse<T> post(String path, Object body, Class<T> dataType);
-    public <T> ApiResponse<T> put(String path, Object body, Class<T> dataType);
+    public <T> void get(String path, Class<T> dataType, Callback<T> cb);
+    public <T> void get(String path, Type dataType, Callback<T> cb);   // 泛型集合用
+    public <T> void post(String path, Object body, Class<T> dataType, Callback<T> cb);
+    public <T> void put(String path, Object body, Class<T> dataType, Callback<T> cb);
+    public <T> void delete(String path, Class<T> dataType, Callback<T> cb);
 }
 ```
 
 构造流程:
-1. `baseUrl = trimTrailingSlash(session.baseUrl ?: BuildConfig.API_BASE_URL)`
+1. `baseUrl = trimTrailingSlash(SessionStore.baseUrl ?: BuildConfig.API_BASE_URL)`
 2. `OkHttpClient` + 拦截器自动加 `Authorization: Bearer <token>`
 3. connect 10s / read 30s
 
-请求流程:
-1. 解析外层 `ApiResponse`(Gson)
-2. `ar.code == 401` → `session.clear()` + 抛 `ApiException(ERR_AUTH)`
-3. `ar.code != 0` → 抛 `ApiException(ar.code, ar.message)`
-4. 二次 `gson.fromJson(JsonObject, dataType)` 解析 `data`
+请求流程(全部异步,回调切回主线程):
+1. 非 2xx → 先尝试把 body 当 `ApiResponse` 解析,取到 `message` 就用它,否则退回 `HTTP <code>: <body>` → `onError(-2, msg)`
+2. 2xx → 解析外层 `ApiResponse`;解析失败 → `onError(-3, ...)`
+3. `ar.code != 0` → `onError(ar.code, ar.message)`(业务码原样透传)
+4. `gson.toJsonTree(data)` 再二次解析成 `dataType` → `onSuccess(data)`
 
-### 5.2 `ApiException`
+### 5.2 `Callback` 与错误码约定
 
 ```java
-public class ApiException extends Exception {
-    public static final int ERR_NETWORK = -1;
-    public static final int ERR_HTTP    = -2;
-    public static final int ERR_PARSE   = -3;
-    public static final int ERR_AUTH    = 401;
-    public ApiException(int code, String msg);
+public interface Callback<T> {
+    void onSuccess(T data);
+    void onError(int code, String msg);
 }
 ```
+
+| code | 含义 |
+|---|---|
+| 后端业务码(`400/404/409/422` 等) | HTTP 2xx,但 body 里 `code != 0` |
+| `-1` | 网络不可达 |
+| `-2` | 非 2xx(已尽量取 body 里的 `message`) |
+| `-3` | 响应读取 / JSON 解析失败 |
+
+⚠️ **当前没有 401 特殊处理**:令牌过期不会清 session、也不会跳登录页,只是和其它非 2xx 一样回调一条错误消息(此时 body 的 `message` 是"未登录"/"token 无效或已过期")。若要做"过期自动登出",需要在 `ApiClient` 里对 401 单独处理并清 `SessionStore` + 跳登录 —— **尚未实现,文档此前描述的 `ApiException` 类并不存在**。
 
 ## 6. DTO 列表(`com.wms.pda.model`)
 

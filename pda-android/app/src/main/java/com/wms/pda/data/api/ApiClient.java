@@ -25,7 +25,7 @@ import okhttp3.ResponseBody;
  * 真实后端 HTTP 客户端。OkHttp 3.12 + JWT 拦截器 + ApiResponse 解析。
  * 所有方法异步;回调统一切到主线程。
  *
- * 不抛 checked exception;失败转 ApiException(网络 -1 / HTTP -2 / 业务 code / 401)。
+ * 不抛异常:所有失败都走 Callback.onError(网络 -1 / 非 2xx -2 / 解析 -3 / 后端业务码原样透传)。
  */
 public class ApiClient {
 

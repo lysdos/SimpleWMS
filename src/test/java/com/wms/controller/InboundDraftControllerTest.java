@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,12 +82,17 @@ class InboundDraftControllerTest {
         return o;
     }
 
+    /**
+     * 不传 status = 不过滤(= 全部)。后端曾默认 DRAFT,但 Web 端出入库单列表要默认
+     * 展示全部,默认值改由调用方显式传(PDA 传 DRAFT、Web 传 ALL);DAO 对
+     * null/空/"ALL" 一律不加过滤条件。
+     */
     @Test
-    void listOrders_defaultStatusDraft() throws Exception {
+    void listOrders_noStatus_meansAll() throws Exception {
         // mock service 返回一个空列表 + total=0
-        when(inboundService.listOrders(any(), any(), any(), any(), eq("DRAFT"), eq(1), eq(20)))
+        when(inboundService.listOrders(any(), any(), any(), any(), isNull(), eq(1), eq(20)))
                 .thenReturn(new ArrayList<>());
-        when(inboundService.countOrders(any(), any(), any(), any(), eq("DRAFT")))
+        when(inboundService.countOrders(any(), any(), any(), any(), isNull()))
                 .thenReturn(0L);
 
         mvc.perform(get("/api/inbound/orders"))
@@ -94,9 +100,9 @@ class InboundDraftControllerTest {
            .andExpect(jsonPath("$.code").value(0))
            .andExpect(jsonPath("$.data.total").value(0));
 
-        // 关键验证:即使前端没传 status,service 也收到 "DRAFT"
-        verify(inboundService).listOrders(any(), any(), any(), any(), eq("DRAFT"), eq(1), eq(20));
-        verify(inboundService).countOrders(any(), any(), any(), any(), eq("DRAFT"));
+        // 关键验证:没传 status 时原样透传 null,由 DAO 决定"不过滤"
+        verify(inboundService).listOrders(any(), any(), any(), any(), isNull(), eq(1), eq(20));
+        verify(inboundService).countOrders(any(), any(), any(), any(), isNull());
     }
 
     @Test

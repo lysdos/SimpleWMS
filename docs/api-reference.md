@@ -166,7 +166,7 @@
 **查询**:
 | 方法 | URL | 参数 |
 |---|---|---|
-| GET | `/orders?beginDate&endDate&keyword&operator&status&page&pageSize` | status 默认 `DRAFT`(PDA 用);status=ALL 看全部 |
+| GET | `/orders?beginDate&endDate&keyword&operator&status&page&pageSize` | 不传 `status`(或传 `ALL`) = 不过滤、返回全部;PDA 显式传 `DRAFT`,Web 显式传 `ALL` |
 | GET | `/orders/{id}` | 含 items + 每行 codes(commit 后有) |
 | GET | `/orders/{id}/export.csv` | UTF-8 BOM + 双引号转义,Excel/Numbers 兼容 |
 
@@ -186,7 +186,7 @@
 | POST | `/orders/{id}/commit` | — | `OutboundOrder`(status=COMMITTED,FIFO 扣减) | 409 非 DRAFT / 空单 |
 | POST | `/orders/{id}/cancel` | — | `{code:0}` | 409 非 DRAFT |
 
-**查询**:同入库,`status` 默认 DRAFT。
+**查询**:同入库,不传 `status`(或传 `ALL`) = 不过滤。
 
 ### 2.9 库存单元 — `/api/inventory/items`
 

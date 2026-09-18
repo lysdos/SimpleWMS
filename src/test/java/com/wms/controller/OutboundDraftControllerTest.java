@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -79,11 +80,12 @@ class OutboundDraftControllerTest {
         return o;
     }
 
+    /** 不传 status = 不过滤(= 全部),语义同 InboundDraftControllerTest 的同名用例 */
     @Test
-    void listOrders_defaultStatusDraft() throws Exception {
-        when(outboundService.listOrders(any(), any(), any(), any(), eq("DRAFT"), eq(1), eq(20)))
+    void listOrders_noStatus_meansAll() throws Exception {
+        when(outboundService.listOrders(any(), any(), any(), any(), isNull(), eq(1), eq(20)))
                 .thenReturn(new ArrayList<>());
-        when(outboundService.countOrders(any(), any(), any(), any(), eq("DRAFT")))
+        when(outboundService.countOrders(any(), any(), any(), any(), isNull()))
                 .thenReturn(0L);
 
         mvc.perform(get("/api/outbound/orders"))
@@ -91,8 +93,9 @@ class OutboundDraftControllerTest {
            .andExpect(jsonPath("$.code").value(0))
            .andExpect(jsonPath("$.data.total").value(0));
 
-        verify(outboundService).listOrders(any(), any(), any(), any(), eq("DRAFT"), eq(1), eq(20));
-        verify(outboundService).countOrders(any(), any(), any(), any(), eq("DRAFT"));
+        // 关键验证:没传 status 时原样透传 null,由 DAO 决定"不过滤"
+        verify(outboundService).listOrders(any(), any(), any(), any(), isNull(), eq(1), eq(20));
+        verify(outboundService).countOrders(any(), any(), any(), any(), isNull());
     }
 
     @Test
