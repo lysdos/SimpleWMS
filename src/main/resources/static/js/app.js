@@ -6,10 +6,18 @@
 const state = {
     products: [],
     productsKw: '',
+    productsSupplier: '',
     suppliers: [],
     supplierKw: '',
+    supplierStatus: '',
     locations: [],
     locationKw: '',
+    locationStatus: '',
+    userKw: '',
+    userRole: '',
+    userStatus: '',
+    userDateFrom: '',
+    userDateTo: '',
     inventoryKw: '',
     inventoryLoc: '',
     inventoryStatus: 'IN_STOCK',
@@ -19,11 +27,16 @@ const state = {
     inventoryPage: 1,
     stockCheckFilter: { beginDate: '', endDate: '', status: '' },
     stockCheckPage: 1,
-    orderType: 'IN',
-    orderFilter: { beginDate: '', endDate: '', keyword: '', createdBy: '', status: 'COMMITTED' },
+    orderType: 'ALL',
+    orderFilter: { beginDate: '', endDate: '', keyword: '', createdBy: '', status: '' },
     orderPage: 1,
+    orderPageSize: 10,
     inboundCardStatus: 'ALL',
+    inboundRecentPage: 1,
+    inboundRecentPageSize: 10,
     outboundCardStatus: 'ALL',
+    outboundRecentPage: 1,
+    outboundRecentPageSize: 10,
     currentRole: null,
     currentUser: null
 };
@@ -103,15 +116,17 @@ async function renderExpiringList() {
 
 async function loadProducts() {
     setActive('products');
-    const products = await api.get('/api/products' + (state.productsKw
-        ? '?keyword=' + encodeURIComponent(state.productsKw) : ''));
+    await ensureSuppliers();
+    const qs = new URLSearchParams();
+    if (state.productsKw) qs.set('keyword', state.productsKw);
+    if (state.productsSupplier) qs.set('supplier', state.productsSupplier);
+    const products = await api.get('/api/products' + (qs.toString() ? '?' + qs.toString() : ''));
     state.products = products;
-    document.getElementById('view').innerHTML = Views.products(products, state.productsKw);
+    document.getElementById('view').innerHTML = Views.products(products, state.suppliers, state.productsKw, state.productsSupplier);
 }
 
 async function loadInbound() {
     setActive('inbound');
-    state.orderType = 'IN';
     await ensureProducts();
     document.getElementById('view').innerHTML = Views.inbound(state.products, []);
     await renderInboundRecent();
@@ -119,7 +134,6 @@ async function loadInbound() {
 
 async function loadOutbound() {
     setActive('outbound');
-    state.orderType = 'OUT';
     await ensureProducts();
     document.getElementById('view').innerHTML = Views.outbound(state.products, []);
     await renderOutboundRecent();
@@ -127,12 +141,18 @@ async function loadOutbound() {
 
 async function renderInboundRecent() {
     const st = state.inboundCardStatus || 'ALL';
-    const url = '/api/inbound/orders?status=' + encodeURIComponent(st) + '&pageSize=10';
+    const page = state.inboundRecentPage || 1;
+    const pageSize = state.inboundRecentPageSize || 10;
+    const url = '/api/inbound/orders?status=' + encodeURIComponent(st) + '&page=' + page + '&pageSize=' + pageSize;
     try {
         const d = await api.get(url);
         const rows = (d && d.list) || [];
+        const total = (d && d.total) || 0;
+        const pages = Math.max(1, Math.ceil(total / pageSize));
         const tb = document.getElementById('inbound-recent-tbody');
         if (tb) tb.innerHTML = Views.inboundRecentRows(rows);
+        const pager = document.getElementById('inbound-recent-pager');
+        if (pager) pager.innerHTML = Views.recentPager('inbound', page, pages, total, pageSize);
         const title = document.getElementById('inbound-recent-title');
         if (title) title.textContent = t('inbound.recent_title');
         Views.applyCardTabs('inbound', st);
@@ -141,12 +161,18 @@ async function renderInboundRecent() {
 
 async function renderOutboundRecent() {
     const st = state.outboundCardStatus || 'ALL';
-    const url = '/api/outbound/orders?status=' + encodeURIComponent(st) + '&pageSize=10';
+    const page = state.outboundRecentPage || 1;
+    const pageSize = state.outboundRecentPageSize || 10;
+    const url = '/api/outbound/orders?status=' + encodeURIComponent(st) + '&page=' + page + '&pageSize=' + pageSize;
     try {
         const d = await api.get(url);
         const rows = (d && d.list) || [];
+        const total = (d && d.total) || 0;
+        const pages = Math.max(1, Math.ceil(total / pageSize));
         const tb = document.getElementById('outbound-recent-tbody');
         if (tb) tb.innerHTML = Views.outboundRecentRows(rows);
+        const pager = document.getElementById('outbound-recent-pager');
+        if (pager) pager.innerHTML = Views.recentPager('outbound', page, pages, total, pageSize);
         const title = document.getElementById('outbound-recent-title');
         if (title) title.textContent = t('outbound.recent_title');
         Views.applyCardTabs('outbound', st);
@@ -160,6 +186,29 @@ function setInboundCardStatus(st) {
 
 function setOutboundCardStatus(st) {
     state.outboundCardStatus = st;
+    state.outboundRecentPage = 1;
+    renderOutboundRecent();
+}
+
+function gotoInboundRecentPage(p) {
+    state.inboundRecentPage = Math.max(1, p);
+    renderInboundRecent();
+}
+
+function gotoOutboundRecentPage(p) {
+    state.outboundRecentPage = Math.max(1, p);
+    renderOutboundRecent();
+}
+
+function changeInboundRecentPageSize(el) {
+    state.inboundRecentPageSize = parseInt(el.value, 10) || 10;
+    state.inboundRecentPage = 1;
+    renderInboundRecent();
+}
+
+function changeOutboundRecentPageSize(el) {
+    state.outboundRecentPageSize = parseInt(el.value, 10) || 10;
+    state.outboundRecentPage = 1;
     renderOutboundRecent();
 }
 
@@ -171,14 +220,20 @@ async function ensureProducts() {
 
 async function loadSuppliers() {
     setActive('suppliers');
-    state.suppliers = await api.get('/api/suppliers' + (state.supplierKw ? '?keyword=' + encodeURIComponent(state.supplierKw) : ''));
-    document.getElementById('view').innerHTML = Views.suppliers(state.suppliers);
+    const qs = new URLSearchParams();
+    if (state.supplierKw) qs.set('keyword', state.supplierKw);
+    if (state.supplierStatus) qs.set('status', state.supplierStatus);
+    state.suppliers = await api.get('/api/suppliers' + (qs.toString() ? '?' + qs.toString() : ''));
+    document.getElementById('view').innerHTML = Views.suppliers(state.suppliers, state.supplierStatus);
 }
 
 async function loadLocations() {
     setActive('locations');
-    state.locations = await api.get('/api/locations' + (state.locationKw ? '?keyword=' + encodeURIComponent(state.locationKw) : ''));
-    document.getElementById('view').innerHTML = Views.locations(state.locations);
+    const qs = new URLSearchParams();
+    if (state.locationKw) qs.set('keyword', state.locationKw);
+    if (state.locationStatus) qs.set('status', state.locationStatus);
+    state.locations = await api.get('/api/locations' + (qs.toString() ? '?' + qs.toString() : ''));
+    document.getElementById('view').innerHTML = Views.locations(state.locations, state.locationStatus);
 }
 
 async function loadInventory() {
@@ -465,27 +520,55 @@ async function printAllOutboundBarcodes(orderId) {
 async function openStockCheckDetail(id) {
     try {
         const c = await api.get('/api/stock-checks/' + id);
-        showModal(t('stock_check.modal.title.detail') + ' ' + c.checkNo, Views.stockCheckDetail(c), async () => {
-            if (c.status === 'DRAFT' && c.countedCount === c.totalCount) {
-                try {
-                    const updated = await api.post(`/api/stock-checks/${c.id}/commit`);
-                    toast(t('stock_check.btn.committed_diff', { n: updated.diffCount }), 'success');
-                    await loadStockChecks();
-                } catch (e) { toast(e.message, 'error'); return false; }
-            } else if (c.status === 'DRAFT') {
-                toast(t('stock_check.err.uncounted', { n: c.totalCount - c.countedCount }), 'error');
-                return false;
-            } else {
+        showModal(t('stock_check.modal.title.detail') + ' ' + c.checkNo, Views.stockCheckDetail(c));
+        const modal = document.querySelector('.modal');
+        if (modal) modal.classList.add('modal-wide');
+        // 底部按钮行是 sticky 贴底的,去掉 body 底部内边距才能贴到真正的底边
+        const mbody = document.getElementById('modal-body');
+        if (mbody) mbody.style.paddingBottom = '0';
+        // 导出菜单:点击按钮向上弹出(全部/盘盈/盘亏),选中后带 filter 下载
+        const expBtn = document.getElementById('sc-export-btn');
+        const expMenu = document.getElementById('sc-export-menu');
+        if (expBtn && expMenu) {
+            expBtn.onclick = (ev) => {
+                ev.stopPropagation();
+                if (!expMenu.hidden) { expMenu.hidden = true; return; }
+                expMenu.hidden = false;
+                // 明细很少时 modal-body 很矮,向上弹出会被裁剪 → 上方放不下就向下弹
+                const btnRect = expBtn.getBoundingClientRect();
+                const bodyRect = document.getElementById('modal-body').getBoundingClientRect();
+                const menuH = expMenu.getBoundingClientRect().height;
+                expMenu.classList.toggle('down', (btnRect.top - bodyRect.top) < menuH + 8);
+            };
+            expMenu.querySelectorAll('button').forEach(b => {
+                b.onclick = (ev) => {
+                    ev.stopPropagation();
+                    expMenu.hidden = true;
+                    const f = b.dataset.filter;
+                    const fname = `stock-check-${c.checkNo || c.id}${f === 'all' ? '' : f === 'over' ? '-盘盈' : '-盘亏'}.csv`;
+                    api.download(`/api/stock-checks/${c.id}/export.csv?filter=${f}`, fname)
+                        .catch(e => toast(e.message, 'error'));
+                };
+            });
+            // 点击弹窗其它位置收起菜单
+            const mbodyEl = document.getElementById('modal-body');
+            if (mbodyEl) mbodyEl.onclick = () => { expMenu.hidden = true; };
+        }
+        const commitBtn = document.getElementById('sc-commit-btn');
+        if (commitBtn) commitBtn.onclick = async () => {
+            try {
+                const updated = await api.post(`/api/stock-checks/${c.id}/commit`);
+                toast(t('stock_check.btn.committed_diff', { n: updated.diffCount }), 'success');
                 closeModal();
-            }
-        });
-        const exp = document.getElementById('sc-export-btn');
-        if (exp) exp.onclick = () => api.download(`/api/stock-checks/${c.id}/export.csv`, `stock-check-${c.id}.csv`).catch(e => toast(e.message, 'error'));
+                await loadStockChecks();
+            } catch (e) { toast(e.message, 'error'); }
+        };
         const cancelBtn = document.getElementById('sc-cancel-btn');
         if (cancelBtn) cancelBtn.onclick = async () => {
             try {
                 await api.post(`/api/stock-checks/${c.id}/cancel`);
                 toast(t('common.success.cancel'), 'success');
+                closeModal();
                 await loadStockChecks();
             } catch (e) { toast(e.message, 'error'); }
         };
@@ -507,9 +590,6 @@ async function openStockCheckDetail(id) {
                 } catch (e) { toast(e.message, 'error'); }
             };
         });
-        freshModalOk(c.status === 'DRAFT'
-            ? ((c.countedCount === c.totalCount) ? t('stock_check.btn.commit') : t('common.close'))
-            : t('common.close'));
     } catch (e) {
         toast(e.message, 'error');
     }
@@ -524,7 +604,7 @@ async function loadUsers() {
 /* ---------- 出入库单(列表 + 详情) ---------- */
 async function loadOrders() {
     setActive('orders');
-    const tt = state.orderType || 'IN';
+    const tt = state.orderType || 'ALL';
     const f = state.orderFilter || {};
     const qs = new URLSearchParams();
     if (f.beginDate) qs.set('beginDate', f.beginDate);
@@ -533,27 +613,30 @@ async function loadOrders() {
     if (f.createdBy)  qs.set('createdBy',  f.createdBy);
     if (f.status)    qs.set('status',    f.status);
     qs.set('page', String(state.orderPage || 1));
-    qs.set('pageSize', '20');
-    const url = (tt === 'IN' ? '/api/inbound/orders' : '/api/outbound/orders') + '?' + qs.toString();
+    qs.set('pageSize', String(state.orderPageSize || 10));
+    const url = (tt === 'ALL' ? '/api/orders' : (tt === 'IN' ? '/api/inbound/orders' : '/api/outbound/orders')) + '?' + qs.toString();
     const data = await api.get(url);
     document.getElementById('view').innerHTML = Views.orders(tt, data, f);
 }
 
 function searchOrders() {
-    state.orderType  = document.getElementById('od-type').value || 'IN';
+    state.orderType  = document.getElementById('od-type').value || 'ALL';
     state.orderFilter = {
         beginDate: document.getElementById('od-begin').value || '',
         endDate:   document.getElementById('od-end').value   || '',
         keyword:   document.getElementById('od-kw').value    || '',
         createdBy:  document.getElementById('od-op').value    || '',
-        status:    document.getElementById('od-status').value ?? 'COMMITTED'
+        status:    document.getElementById('od-status').value ?? ''
     };
+    state.orderPageSize = parseInt(document.getElementById('od-page-size')?.value, 10) || 10;
     state.orderPage = 1;
     loadOrders();
 }
 function resetOrderFilter() {
+    state.orderType = 'ALL';
     state.orderFilter = { beginDate: '', endDate: '', keyword: '', createdBy: '', status: '' };
     state.orderPage = 1;
+    state.orderPageSize = 10;
     loadOrders();
 }
 function gotoOrderPage(p) {
@@ -561,8 +644,130 @@ function gotoOrderPage(p) {
     loadOrders();
 }
 
-async function viewOrderDetail(id) {
-    const tt = state.orderType || 'IN';
+/* ---------- 出入库单复选框 & 导出 ---------- */
+function toggleAllOrderCbs(master) {
+    document.querySelectorAll('.od-cb').forEach(cb => { cb.checked = master.checked; });
+    updateExportBtns();
+}
+
+function updateExportBtns() {
+    const checked = document.querySelectorAll('.od-cb:checked');
+    const btn = document.getElementById('btn-export-selected');
+    const countEl = document.getElementById('od-selected-count');
+    if (btn) btn.disabled = checked.length === 0;
+    if (countEl) countEl.textContent = checked.length > 0 ? t('orders.selected_count', { n: checked.length }) : '';
+}
+
+function getSelectedOrderIds() {
+    return Array.from(document.querySelectorAll('.od-cb:checked')).map(cb => parseInt(cb.dataset.id, 10));
+}
+
+async function exportSelectedOrders() {
+    const ids = getSelectedOrderIds();
+    if (ids.length === 0) return;
+    const tt = state.orderType || 'ALL';
+    // 按类型分组导出
+    const inIds = [], outIds = [];
+    document.querySelectorAll('.od-cb:checked').forEach(cb => {
+        const id = parseInt(cb.dataset.id, 10);
+        if (cb.dataset.type === 'IN') inIds.push(id); else outIds.push(id);
+    });
+    if (inIds.length > 0) await downloadZip('/api/inbound/orders/export.zip', inIds, 'inbound_orders.zip');
+    if (outIds.length > 0) await downloadZip('/api/outbound/orders/export.zip', outIds, 'outbound_orders.zip');
+}
+
+async function exportAllOrders() {
+    const tt = state.orderType || 'ALL';
+    const f = state.orderFilter || {};
+    const qs = new URLSearchParams();
+    if (f.beginDate) qs.set('beginDate', f.beginDate);
+    if (f.endDate)   qs.set('endDate',   f.endDate);
+    if (f.keyword)   qs.set('keyword',   f.keyword);
+    if (f.createdBy)  qs.set('createdBy',  f.createdBy);
+    if (f.status)    qs.set('status',    f.status);
+    qs.set('page', '1');
+    qs.set('pageSize', '9999');
+    try {
+        if (tt === 'ALL' || tt === 'IN') {
+            const inData = await api.get('/api/inbound/orders?' + qs.toString());
+            const inIds = (inData.list || []).map(o => o.id);
+            if (inIds.length > 0) await downloadZip('/api/inbound/orders/export.zip', inIds, 'inbound_orders.zip');
+        }
+        if (tt === 'ALL' || tt === 'OUT') {
+            const outData = await api.get('/api/outbound/orders?' + qs.toString());
+            const outIds = (outData.list || []).map(o => o.id);
+            if (outIds.length > 0) await downloadZip('/api/outbound/orders/export.zip', outIds, 'outbound_orders.zip');
+        }
+        toast(t('orders.export_done'));
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function downloadZip(url, ids, filename) {
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: api._hdr(),   // 必须带 Authorization,否则后端 401
+        body: JSON.stringify(ids)
+    });
+    if (resp.status === 401) {
+        Auth.clearToken();
+        if (!location.pathname.endsWith('/login.html')) location.href = '/login.html';
+        throw new Error('未登录');
+    }
+    if (!resp.ok) throw new Error(await resp.text());
+    const blob = await resp.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+async function editInboundOrder(id) {
+    try {
+        const full = await api.get('/api/inbound/orders/' + id);
+        if (!full || !full.id) { toast(t('err.empty'), 'error'); return; }
+        openEditOrderModal('IN', full);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function editOutboundOrder(id) {
+    try {
+        const full = await api.get('/api/outbound/orders/' + id);
+        if (!full || !full.id) { toast(t('err.empty'), 'error'); return; }
+        openEditOrderModal('OUT', full);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+function openEditOrderModal(type, order) {
+    document.getElementById('modal-title').textContent = t(type === 'IN' ? 'inbound.modal.title.edit' : 'outbound.modal.title.edit');
+    document.getElementById('modal-body').innerHTML = Views.editOrderModal(type, order);
+    document.getElementById('modal-mask').hidden = false;
+    freshModalOk(t('common.save')).addEventListener('click', () => submitEditOrder(type, order.id));
+    const modal = document.querySelector('.modal');
+    if (modal) modal.classList.remove('modal-wide');
+}
+
+async function submitEditOrder(type, orderId) {
+    const externalNo = document.getElementById('edit-external-no')?.value || '';
+    const remark = document.getElementById('edit-remark')?.value || '';
+    const base = type === 'IN' ? '/api/inbound' : '/api/outbound';
+    try {
+        await api.put(`${base}/orders/${orderId}`, { externalNo, remark });
+        toast(t('common.success.save'));
+        closeModal();
+        // 刷新当前视图:orders 页面或入库/出库登记页
+        if (document.getElementById('od-type')) {
+            loadOrders();
+        } else if (type === 'IN') {
+            renderInboundRecent();
+        } else {
+            renderOutboundRecent();
+        }
+    } catch (e) { toast(e.message, 'error'); }
+}
+
+async function viewOrderDetail(id, typeHint) {
+    const tt = typeHint || state.orderType || 'IN';
     const base = tt === 'IN' ? '/api/inbound' : '/api/outbound';
     if (state._viewingOrder === id) return;
     state._viewingOrder = id;
@@ -664,6 +869,7 @@ async function cancelOutboundOrder(id) {
 /* ---------- 搜索 ---------- */
 function searchProducts() {
     state.productsKw = document.getElementById('kw-product').value.trim();
+    state.productsSupplier = document.getElementById('product-supplier-filter')?.value || '';
     loadProducts();
 }
 
@@ -683,12 +889,19 @@ async function newProduct() {
     });
 }
 
+async function viewProduct(id) {
+    try {
+        const p = await api.get('/api/products/' + id);
+        showModal(t('product.form.title.view'), Views.productDetail(p), null, true);
+    } catch (e) { toast(e.message, 'error'); }
+}
+
 async function editProduct(id) {
     try {
         const p = await api.get('/api/products/' + id);
         await ensureSuppliers();
         await ensureLocations();
-        showModal(t('product.form.title.edit') + ' #' + id, Views.productForm(p, state.suppliers, state.locations), async () => {
+        showModal(t('product.form.title.edit'), Views.productForm(p, state.suppliers, state.locations), async () => {
             const body = readProductForm();
             if (!body) return false;
             try {
@@ -770,6 +983,7 @@ function readProductForm() {
 /* ---------- 供应商管理 ---------- */
 function searchSuppliers() {
     state.supplierKw = document.getElementById('sup-kw').value.trim();
+    state.supplierStatus = document.getElementById('sup-status-filter')?.value || '';
     loadSuppliers();
 }
 async function newSupplier() {
@@ -783,10 +997,16 @@ async function newSupplier() {
         } catch (e) { toast(e.message, 'error'); return false; }
     });
 }
+async function viewSupplier(id) {
+    try {
+        const s = await api.get('/api/suppliers/' + id);
+        showModal(t('supplier.form.view'), Views.supplierDetail(s), null, true);
+    } catch (e) { toast(e.message, 'error'); }
+}
 async function editSupplier(id) {
     try {
         const s = await api.get('/api/suppliers/' + id);
-        showModal(t('supplier.form.edit') + ' #' + id, Views.supplierForm(s), async () => {
+        showModal(t('supplier.form.edit'), Views.supplierForm(s), async () => {
             const body = readSupplierForm();
             if (!body) return false;
             try {
@@ -825,6 +1045,7 @@ function readSupplierForm() {
 /* ---------- 库位管理 ---------- */
 function searchLocations() {
     state.locationKw = document.getElementById('loc-kw').value.trim();
+    state.locationStatus = document.getElementById('loc-status-filter')?.value || '';
     loadLocations();
 }
 async function newLocation() {
@@ -839,10 +1060,16 @@ async function newLocation() {
         } catch (e) { toast(e.message, 'error'); return false; }
     });
 }
+async function viewLocation(id) {
+    try {
+        const l = await api.get('/api/locations/' + id);
+        showModal(t('location.form.view'), Views.locationDetail(l), null, true);
+    } catch (e) { toast(e.message, 'error'); }
+}
 async function editLocation(id) {
     try {
         const l = await api.get('/api/locations/' + id);
-        showModal(t('location.form.edit') + ' #' + id, Views.locationForm(l), async () => {
+        showModal(t('location.form.edit'), Views.locationForm(l), async () => {
             const body = readLocationForm();
             if (!body) return false;
             try {
@@ -1115,7 +1342,7 @@ async function submitNewOrder() {
     // 但这里再把按钮置 disabled 直到请求完成,避免用户连续点击 2 次产生重复单)。
     const okBtn = document.getElementById('modal-ok');
     if (okBtn && okBtn._inFlight) return true;
-    if (okBtn) { okBtn._inFlight = true; okBtn.disabled = true; okBtn.textContent = t('common.submitting') || t('common.submit') + '…'; }
+    if (okBtn) { okBtn._inFlight = true; okBtn.disabled = true; okBtn.textContent = t('common.submitting'); }
 
     const url = type === 'IN' ? '/api/inbound/batch' : '/api/outbound/batch';
     try {

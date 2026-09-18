@@ -178,9 +178,9 @@ const Views = {
     },
 
     /* ================== 2. 商品管理 ================== */
-    products(products, keyword) {
+    products(products, suppliers, keyword, supplierFilter) {
         const rows = products.length === 0
-            ? `<tr><td colspan="10" class="empty">${t('product.empty')}</td></tr>`
+            ? `<tr><td colspan="11" class="empty">${t('product.empty')}</td></tr>`
             : products.map(p => {
                 const lowBadge = p.quantity <= p.lowStock
                     ? `<span class="badge low">${t('product.low_badge')}</span>` : '';
@@ -199,11 +199,15 @@ const Views = {
                     <td class="num">¥${formatMoney(p.unitPrice)}</td>
                     <td class="num">¥${formatMoney((p.unitPrice||0)*p.quantity)}</td>
                     <td class="actions">
+                        <button class="btn-link" onclick="viewProduct(${p.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editProduct(${p.id})">${t('common.edit')}</button>
                         <button class="btn-link danger" onclick="delProduct(${p.id})">${t('common.delete')}</button>
                     </td>
                 </tr>`;
             }).join('');
+        const supplierOpts = (suppliers || []).map(s =>
+            `<option value="${escapeHtml(s.name)}" ${supplierFilter === s.name ? 'selected' : ''}>${escapeHtml(s.name)}</option>`
+        ).join('');
         return `
         <div class="page-head">
             <div>
@@ -216,9 +220,13 @@ const Views = {
         </div>
         <div class="card">
             <div class="toolbar">
-                <input class="input input-sm" id="kw-product" placeholder="${t('product.kw_placeholder')}" value="${escapeHtml(keyword||'')}" style="width:280px;">
+                <input class="input input-sm" id="kw-product" placeholder="${t('product.kw_placeholder')}" value="${escapeHtml(keyword||'')}" style="width:240px;">
+                <select id="product-supplier-filter" class="select" style="width:150px;" onchange="searchProducts()">
+                    <option value="">${t('common.all')} ${t('product.col.default_supplier')}</option>
+                    ${supplierOpts}
+                </select>
                 <button class="btn btn-sm" onclick="searchProducts()">${t('common.search')}</button>
-                <button class="btn btn-sm" onclick="document.getElementById('kw-product').value='';searchProducts()">${t('common.clear')}</button>
+                <button class="btn btn-sm" onclick="document.getElementById('kw-product').value='';document.getElementById('product-supplier-filter').value='';searchProducts()">${t('common.clear')}</button>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -232,7 +240,7 @@ const Views = {
                         <th class="num">${t('product.col.qty')}</th>
                         <th class="num">${t('product.col.price')}</th>
                         <th class="num">${t('product.col.value')}</th>
-                        <th style="width:140px;">${t('common.actions')}</th>
+                        <th style="width:160px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -264,24 +272,27 @@ const Views = {
                         <th style="width:90px;">${t('inbound.col.status')}</th>
                         <th>${t('inbound.col.external_no')}</th>
                         <th class="num">${t('inbound.col.items')}</th>
-                        <th>${t('inbound.col.op_time')}</th>
+                        <th>${t('orders.col.createdBy')}</th>
+                        <th style="width:160px;">${t('orders.col.created_at')}</th>
                         <th style="width:200px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody id="inbound-recent-tbody">${Views.inboundRecentRows(recentOrders)}</tbody>
                 </table>
             </div>
+            <div id="inbound-recent-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 
     inboundRecentRows(recentOrders) {
         recentOrders = recentOrders || [];
         if (recentOrders.length === 0) {
-            return `<tr><td colspan="6" class="empty">${t('inbound.empty')}</td></tr>`;
+            return `<tr><td colspan="7" class="empty">${t('inbound.empty')}</td></tr>`;
         }
         return recentOrders.map(o => {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
-                ? `<button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
+                ? `<button class="btn-link" onclick="editInboundOrder(${o.id})">${t('common.edit')}</button>
+                   <button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
                    <button class="btn-link danger" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.cancel')}</button>`
                 : '';
             return `
@@ -290,13 +301,31 @@ const Views = {
                 <td><span class="pill ${docStatusClass(st)}">${t('doc.' + st)}</span></td>
                 <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
-                <td>${escapeHtml(o.createdBy || '')} · ${formatDate(o.createdAt)}</td>
+                <td>${escapeHtml(o.createdBy || '')}</td>
+                <td>${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
                 </td>
             </tr>`;
         }).join('');
+    },
+
+    recentPager(prefix, page, pages, total, pageSize) {
+        return `
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+                <label style="font-size:13px;color:var(--c-text-3);">${t('common.page_size')}</label>
+                <select class="select" style="width:70px;" onchange="change${prefix.charAt(0).toUpperCase() + prefix.slice(1)}RecentPageSize(this)">
+                    <option value="10" ${pageSize===10?'selected':''}>10</option>
+                    <option value="20" ${pageSize===20?'selected':''}>20</option>
+                    <option value="30" ${pageSize===30?'selected':''}>30</option>
+                </select>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+                <span style="color:var(--c-text-3);font-size:13px;">${t('common.total')} ${total} ${t('common.items')} · ${t('common.page')} ${page} / ${pages}</span>
+                <button class="btn btn-sm" ${page<=1?'disabled':''} onclick="goto${prefix.charAt(0).toUpperCase() + prefix.slice(1)}RecentPage(${page-1})">${t('common.prev')}</button>
+                <button class="btn btn-sm" ${page>=pages?'disabled':''} onclick="goto${prefix.charAt(0).toUpperCase() + prefix.slice(1)}RecentPage(${page+1})">${t('common.next')}</button>
+            </span>`;
     },
 
     /* ================== 4. 出库登记 ================== */
@@ -324,24 +353,27 @@ const Views = {
                         <th>${t('outbound.col.external_no')}</th>
                         <th>${t('outbound.col.customer')}</th>
                         <th class="num">${t('outbound.col.items')}</th>
-                        <th>${t('outbound.col.op_time')}</th>
+                        <th>${t('orders.col.createdBy')}</th>
+                        <th style="width:160px;">${t('orders.col.created_at')}</th>
                         <th style="width:200px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody id="outbound-recent-tbody">${Views.outboundRecentRows(recentOrders)}</tbody>
                 </table>
             </div>
+            <div id="outbound-recent-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 
     outboundRecentRows(recentOrders) {
         recentOrders = recentOrders || [];
         if (recentOrders.length === 0) {
-            return `<tr><td colspan="7" class="empty">${t('outbound.empty')}</td></tr>`;
+            return `<tr><td colspan="8" class="empty">${t('outbound.empty')}</td></tr>`;
         }
         return recentOrders.map(o => {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
-                ? `<button class="btn-link" onclick="commitOutboundOrder(${o.id})">${t('common.commit')}</button>
+                ? `<button class="btn-link" onclick="editOutboundOrder(${o.id})">${t('common.edit')}</button>
+                   <button class="btn-link" onclick="commitOutboundOrder(${o.id})">${t('common.commit')}</button>
                    <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id})">${t('common.cancel')}</button>`
                 : '';
             return `
@@ -351,7 +383,8 @@ const Views = {
                 <td>${escapeHtml(o.externalNo || '-')}</td>
                 <td>${escapeHtml(o.customer || '-')}</td>
                 <td class="num">${o.itemCount || 0} / ${o.totalQuantity || 0}</td>
-                <td>${escapeHtml(o.createdBy || '')} · ${formatDate(o.createdAt)}</td>
+                <td>${escapeHtml(o.createdBy || '')}</td>
+                <td>${formatDate(o.createdAt)}</td>
                 <td class="actions">
                     <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
                     ${actionBtns}
@@ -484,6 +517,27 @@ const Views = {
         <input type="hidden" id="nw-type" value="${type}">`;
     },
 
+    /* ================== 编辑入库/出库单 弹窗 ================== */
+    editOrderModal(type, order) {
+        const isIn = type === 'IN';
+        return `
+        <div class="form-row">
+            <div class="form-field" style="flex:1;">
+                <label>${t('new_order.label.external_no')}</label>
+                <input id="edit-external-no" class="input" value="${escapeHtml(order.externalNo || '')}">
+            </div>
+            <div class="form-field" style="flex:1;">
+                <label>${t('new_order.label.remark')}</label>
+                <input id="edit-remark" class="input" value="${escapeHtml(order.remark || '')}">
+            </div>
+        </div>
+        <div style="margin-top:12px;font-size:13px;color:var(--c-text-3);">
+            ${t('orders.col.order_no')}: <strong>${escapeHtml(order.orderNo)}</strong>
+            · ${t('common.status')}: <span class="pill ${docStatusClass(order.status)}">${t('doc.' + (order.status || 'DRAFT'))}</span>
+            · ${t('orders.col.created_at')}: ${formatDate(order.createdAt)}
+        </div>`;
+    },
+
     /* ================== 出库单详情 Modal ================== */
     outboundOrderModal(o) {
         const barcodeMap = o.barcodesBySku || {};
@@ -571,7 +625,7 @@ const Views = {
         const orders = (data && data.list) || [];
         const total  = (data && data.total) || 0;
         const page   = (data && data.page)  || 1;
-        const size   = (data && data.pageSize) || 20;
+        const size   = (data && data.pageSize) || 10;
         const pages  = Math.max(1, Math.ceil(total / size));
 
         const beginVal  = (filter && filter.beginDate) || '';
@@ -581,16 +635,20 @@ const Views = {
         const statusVal = (filter && filter.status)    ?? '';
 
         const rows = orders.length === 0
-            ? `<tr><td colspan="10" class="empty">${t('orders.empty')}</td></tr>`
+            ? `<tr><td colspan="11" class="empty">${t('orders.empty')}</td></tr>`
             : orders.map(o => {
-                const tBadge = o.orderNo && o.orderNo.startsWith('IN-')
+                const isIn = type === 'ALL'
+                    ? (o.type === 'IN' || (o.orderNo && o.orderNo.startsWith('IN-')))
+                    : (type === 'IN');
+                const tBadge = isIn
                     ? `<span class="badge in">${t('orders.badge.in')}</span>`
                     : `<span class="badge out">${t('orders.badge.out')}</span>`;
-                const partner = (type === 'IN')
-                    ? (o.externalNo ? `[${t('orders.col.external_no')}] ${escapeHtml(o.externalNo)}` : '—')
-                    : escapeHtml(o.customer || '-');
+                const partner = isIn
+                    ? (o.externalNo ? escapeHtml(o.externalNo) : '—')
+                    : escapeHtml(o.externalNo || o.customer || '-');
                 return `
                 <tr>
+                    <td><input type="checkbox" class="od-cb" data-id="${o.id}" data-type="${isIn ? 'IN' : 'OUT'}" onchange="updateExportBtns()"></td>
                     <td>${o.id}</td>
                     <td>${tBadge}</td>
                     <td><strong>${escapeHtml(o.orderNo)}</strong></td>
@@ -601,7 +659,7 @@ const Views = {
                     <td>${escapeHtml(o.createdBy || '')}</td>
                     <td>${formatDate(o.createdAt)}</td>
                     <td class="actions">
-                        <button class="btn-link" onclick="viewOrderDetail(${o.id})">${t('common.view')}</button>
+                        <button class="btn-link" onclick="viewOrderDetail(${o.id}, '${isIn ? 'IN' : 'OUT'}')">${t('common.view')}</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -616,6 +674,7 @@ const Views = {
         <div class="card">
             <div class="toolbar">
                 <select id="od-type" class="select" style="width:120px;" onchange="searchOrders()">
+                    <option value="ALL" ${type==='ALL'?'selected':''}>${t('common.all')}</option>
                     <option value="IN"  ${type==='IN' ?'selected':''}>${t('orders.type.in')}</option>
                     <option value="OUT" ${type==='OUT'?'selected':''}>${t('orders.type.out')}</option>
                 </select>
@@ -636,6 +695,7 @@ const Views = {
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" id="od-cb-all" onchange="toggleAllOrderCbs(this)"></th>
                         <th style="width:60px;">${t('orders.col.id')}</th>
                         <th style="width:80px;">${t('orders.col.type')}</th>
                         <th>${t('orders.col.order_no')}</th>
@@ -650,10 +710,25 @@ const Views = {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
-            <div class="toolbar" style="margin-top:14px;justify-content:flex-end;">
-                <span style="color:var(--c-text-3);font-size:13px;">${t('common.total')} ${total} ${t('common.items')} · ${t('common.page')} ${page} / ${pages}</span>
-                <button class="btn btn-sm" ${page<=1?'disabled':''} onclick="gotoOrderPage(${page-1})">${t('common.prev')}</button>
-                <button class="btn btn-sm" ${page>=pages?'disabled':''} onclick="gotoOrderPage(${page+1})">${t('common.next')}</button>
+            <div class="toolbar" style="margin-top:14px;justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:8px;">
+                    <button class="btn btn-sm btn-success" id="btn-export-selected" disabled onclick="exportSelectedOrders()">${t('orders.export_selected')}</button>
+                    <button class="btn btn-sm" onclick="exportAllOrders()">${t('orders.export_all')}</button>
+                    <span id="od-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
+                </span>
+                <span style="display:inline-flex;align-items:center;gap:8px;">
+                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                        <label style="font-size:13px;color:var(--c-text-3);">${t('common.page_size')}</label>
+                        <select id="od-page-size" class="select" style="width:70px;" onchange="searchOrders()">
+                            <option value="10" ${size===10?'selected':''}>10</option>
+                            <option value="20" ${size===20?'selected':''}>20</option>
+                            <option value="30" ${size===30?'selected':''}>30</option>
+                        </select>
+                    </span>
+                    <span style="color:var(--c-text-3);font-size:13px;">${t('common.total')} ${total} ${t('common.items')} · ${t('common.page')} ${page} / ${pages}</span>
+                    <button class="btn btn-sm" ${page<=1?'disabled':''} onclick="gotoOrderPage(${page-1})">${t('common.prev')}</button>
+                    <button class="btn btn-sm" ${page>=pages?'disabled':''} onclick="gotoOrderPage(${page+1})">${t('common.next')}</button>
+                </span>
             </div>
         </div>`;
     },
@@ -666,6 +741,8 @@ const Views = {
             const codesText = codes.length === 0
                 ? `<span style="color:#9ca3af;font-size:12px;">${t('inbound_order.no_barcode')}</span>`
                 : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c.code)}</span>`).join('') + '</div>';
+            const batchText = (it.productionDate || '-')
+                + (it.shelfLifeDays != null ? ` / ${it.shelfLifeDays}${t('inbound.shelf_life_unit')}` : '');
             return `
             <tr>
                 <td class="num">${i + 1}</td>
@@ -673,12 +750,13 @@ const Views = {
                 <td><strong>${escapeHtml(it.sku)}</strong></td>
                 <td>${escapeHtml(it.productName)}</td>
                 <td>${escapeHtml(it.location || '-')}</td>
+                <td>${escapeHtml(batchText)}</td>
                 <td class="num">${it.quantity}</td>
                 <td class="num">¥${formatMoney(it.unitPrice)}</td>
                 <td>${escapeHtml(it.rowRemark || '')}</td>
             </tr>
             <tr class="barcode-row">
-                <td colspan="8" style="background:var(--c-bg-soft);padding:6px 12px;">
+                <td colspan="9" style="background:var(--c-bg-soft);padding:6px 12px;">
                     <div style="font-size:12px;color:var(--c-text-3);margin-bottom:4px;">
                         ${t('inbound_order.barcode.count', { n: codes.length })}
                     </div>
@@ -705,14 +783,15 @@ const Views = {
                     <th>${t('inbound_order.col.sku')}</th>
                     <th>${t('inbound_order.col.product')}</th>
                     <th>${t('inbound_order.col.loc')}</th>
+                    <th>${t('inbound_order.col.batch')}</th>
                     <th class="num">${t('inbound_order.col.qty')}</th>
                     <th class="num">${t('inbound_order.col.price')}</th>
                     <th>${t('inbound_order.col.row_remark')}</th>
                 </tr></thead>
-                <tbody>${rows || `<tr><td colspan="8" class="empty">${t('inbound_order.empty')}</td></tr>`}</tbody>
+                <tbody>${rows || `<tr><td colspan="9" class="empty">${t('inbound_order.empty')}</td></tr>`}</tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="5" style="text-align:right;font-weight:600;">${t('inbound_order.total')}</td>
+                        <td colspan="6" style="text-align:right;font-weight:600;">${t('inbound_order.total')}</td>
                         <td class="num" style="font-weight:600;">${o.totalQuantity || 0}</td>
                         <td colspan="2"></td>
                     </tr>
@@ -732,6 +811,30 @@ const Views = {
                 <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('inbound_order.btn.commit')}</button>
                 <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('inbound_order.btn.cancel')}</button>
             ` : ''}
+        </div>`;
+    },
+
+    /* ================== 商品详情 Modal 内容 ================== */
+    productDetail(p) {
+        p = p || {};
+        const supp = p.defaultSupplier
+            ? escapeHtml(p.defaultSupplier)
+            : `<span style="color:#9ca3af;">${t('product.empty_supplier')}</span>`;
+        return `
+        <div style="display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;font-size:14px;">
+            <div style="color:var(--c-text-3);">ID</div><div>${p.id}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.sku')}</div><div><strong>${escapeHtml(p.sku)}</strong></div>
+            <div style="color:var(--c-text-3);">${t('product.col.name')}</div><div>${escapeHtml(p.name)}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.category')}</div><div>${escapeHtml(p.category || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.unit')}</div><div>${escapeHtml(p.unit || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.default_supplier')}</div><div>${supp}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.qty')}</div><div>${p.quantity}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.price')}</div><div>¥${formatMoney(p.unitPrice)}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.value')}</div><div>¥${formatMoney((p.unitPrice||0)*p.quantity)}</div>
+            <div style="color:var(--c-text-3);">${t('product.form.low')}</div><div>${p.lowStock ?? '-'}</div>
+            <div style="color:var(--c-text-3);">${t('product.form.loc')}</div><div>${escapeHtml(p.location || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('product.form.shelf_life')}</div><div>${p.defaultShelfLifeDays ?? '-'}</div>
+            <div style="color:var(--c-text-3);">${t('product.form.warn_days')}</div><div>${p.expiryWarnDays ?? '-'}</div>
         </div>`;
     },
 
@@ -837,9 +940,9 @@ const Views = {
     },
 
     /* ================== 供应商管理列表 ================== */
-    suppliers(suppliers) {
+    suppliers(suppliers, statusFilter) {
         const rows = suppliers.length === 0
-            ? `<tr><td colspan="7" class="empty">${t('supplier.empty')}</td></tr>`
+            ? `<tr><td colspan="8" class="empty">${t('supplier.empty')}</td></tr>`
             : suppliers.map(s => `
                 <tr>
                     <td>${s.id}</td>
@@ -849,6 +952,7 @@ const Views = {
                     <td>${escapeHtml(s.email || '')}</td>
                     <td>${s.enabled === false ? `<span class="badge low">${t('supplier.status.disabled')}</span>` : `<span class="badge ok">${t('supplier.status.enabled')}</span>`}</td>
                     <td class="actions">
+                        <button class="btn-link" onclick="viewSupplier(${s.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editSupplier(${s.id})">${t('common.edit')}</button>
                         <button class="btn-link danger" onclick="delSupplier(${s.id})">${t('common.delete')}</button>
                     </td>
@@ -865,9 +969,14 @@ const Views = {
         </div>
         <div class="card">
             <div class="toolbar">
-                <input id="sup-kw" class="input input-sm" placeholder="${t('supplier.kw_placeholder')}" style="width:280px;">
+                <input id="sup-kw" class="input input-sm" placeholder="${t('supplier.kw_placeholder')}" style="width:240px;">
+                <select id="sup-status-filter" class="select" style="width:110px;" onchange="searchSuppliers()">
+                    <option value="" ${statusFilter===''?'selected':''}>${t('common.all')}</option>
+                    <option value="enabled" ${statusFilter==='enabled'?'selected':''}>${t('supplier.status.enabled')}</option>
+                    <option value="disabled" ${statusFilter==='disabled'?'selected':''}>${t('supplier.status.disabled')}</option>
+                </select>
                 <button class="btn btn-sm" onclick="searchSuppliers()">${t('common.search')}</button>
-                <button class="btn btn-sm" onclick="document.getElementById('sup-kw').value='';searchSuppliers()">${t('common.clear')}</button>
+                <button class="btn btn-sm" onclick="document.getElementById('sup-kw').value='';document.getElementById('sup-status-filter').value='';searchSuppliers()">${t('common.clear')}</button>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -878,11 +987,24 @@ const Views = {
                         <th>${t('supplier.col.phone')}</th>
                         <th>${t('supplier.col.email')}</th>
                         <th style="width:90px;">${t('common.status')}</th>
-                        <th style="width:140px;">${t('common.actions')}</th>
+                        <th style="width:160px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+        </div>`;
+    },
+
+    supplierDetail(s) {
+        s = s || {};
+        return `
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:14px;">
+            <div style="color:var(--c-text-3);">ID</div><div>${s.id}</div>
+            <div style="color:var(--c-text-3);">${t('supplier.col.name')}</div><div><strong>${escapeHtml(s.name)}</strong></div>
+            <div style="color:var(--c-text-3);">${t('supplier.col.contact')}</div><div>${escapeHtml(s.contact || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('supplier.col.phone')}</div><div>${escapeHtml(s.phone || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('supplier.col.email')}</div><div>${escapeHtml(s.email || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('common.status')}</div><div>${s.enabled === false ? `<span class="badge low">${t('supplier.status.disabled')}</span>` : `<span class="badge ok">${t('supplier.status.enabled')}</span>`}</div>
         </div>`;
     },
 
@@ -932,9 +1054,9 @@ const Views = {
     },
 
     /* ================== 库位管理列表 ================== */
-    locations(locations) {
+    locations(locations, statusFilter) {
         const rows = locations.length === 0
-            ? `<tr><td colspan="5" class="empty">${t('location.empty')}</td></tr>`
+            ? `<tr><td colspan="6" class="empty">${t('location.empty')}</td></tr>`
             : locations.map(l => `
                 <tr>
                     <td><strong>${escapeHtml(l.code)}</strong></td>
@@ -942,6 +1064,7 @@ const Views = {
                     <td>${escapeHtml(l.remark || '')}</td>
                     <td>${l.enabled === false ? `<span class="badge low">${t('location.status.disabled')}</span>` : `<span class="badge ok">${t('location.status.enabled')}</span>`}</td>
                     <td class="actions">
+                        <button class="btn-link" onclick="viewLocation(${l.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editLocation(${l.id})">${t('common.edit')}</button>
                         <button class="btn-link danger" onclick="delLocation(${l.id})">${t('common.delete')}</button>
                     </td>
@@ -958,9 +1081,14 @@ const Views = {
         </div>
         <div class="card">
             <div class="toolbar">
-                <input id="loc-kw" class="input input-sm" placeholder="${t('location.kw_placeholder')}" style="width:280px;">
+                <input id="loc-kw" class="input input-sm" placeholder="${t('location.kw_placeholder')}" style="width:240px;">
+                <select id="loc-status-filter" class="select" style="width:110px;" onchange="searchLocations()">
+                    <option value="" ${statusFilter===''?'selected':''}>${t('common.all')}</option>
+                    <option value="enabled" ${statusFilter==='enabled'?'selected':''}>${t('location.status.enabled')}</option>
+                    <option value="disabled" ${statusFilter==='disabled'?'selected':''}>${t('location.status.disabled')}</option>
+                </select>
                 <button class="btn btn-sm" onclick="searchLocations()">${t('common.search')}</button>
-                <button class="btn btn-sm" onclick="document.getElementById('loc-kw').value='';searchLocations()">${t('common.clear')}</button>
+                <button class="btn btn-sm" onclick="document.getElementById('loc-kw').value='';document.getElementById('loc-status-filter').value='';searchLocations()">${t('common.clear')}</button>
             </div>
             <div class="table-wrap">
                 <table class="table">
@@ -969,11 +1097,23 @@ const Views = {
                         <th>${t('location.col.name')}</th>
                         <th>${t('location.col.remark')}</th>
                         <th style="width:90px;">${t('common.status')}</th>
-                        <th style="width:140px;">${t('common.actions')}</th>
+                        <th style="width:160px;">${t('common.actions')}</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+        </div>`;
+    },
+
+    locationDetail(l) {
+        l = l || {};
+        return `
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:14px;">
+            <div style="color:var(--c-text-3);">ID</div><div>${l.id}</div>
+            <div style="color:var(--c-text-3);">${t('location.col.code')}</div><div><strong>${escapeHtml(l.code)}</strong></div>
+            <div style="color:var(--c-text-3);">${t('location.col.name')}</div><div>${escapeHtml(l.name || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('location.col.remark')}</div><div>${escapeHtml(l.remark || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('common.status')}</div><div>${l.enabled === false ? `<span class="badge low">${t('location.status.disabled')}</span>` : `<span class="badge ok">${t('location.status.enabled')}</span>`}</div>
         </div>`;
     },
 
@@ -1156,13 +1296,8 @@ const Views = {
                 <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
             </div>`;
 
-        const headBtns = isDraft
-            ? `<button id="sc-cancel-btn" class="btn btn-sm" style="background:#e5e7eb;color:var(--c-text-2);">${t('stock_check.btn.cancel')}</button>`
-            : `<button id="sc-export-btn" class="btn btn-sm">⬇ ${t('common.export')} CSV</button>`;
-
         return `
         <div>${summary}</div>
-        ${headBtns ? `<div style="margin-bottom:8px;">${headBtns}</div>` : ''}
         <div style="font-size:12px;color:var(--c-text-3);margin-bottom:8px;">
             ${isDraft ? t('stock_check.detail.tip_draft') : t('stock_check.detail.tip_committed')}
         </div>
@@ -1182,6 +1317,20 @@ const Views = {
                 </tr></thead>
                 <tbody>${itemsHtml || `<tr><td colspan="10" class="empty">${t('stock_check.detail.empty')}</td></tr>`}</tbody>
             </table>
+        </div>
+        <div class="form-row" style="position:sticky;bottom:0;margin:16px -20px 0;padding:10px 20px;justify-content:flex-end;background:#fff;box-shadow:0 -4px 10px -8px rgba(0,0,0,0.25);">
+            <div class="export-menu-wrap">
+                <button class="btn btn-sm" id="sc-export-btn">⬇ ${t('common.export')} CSV ▴</button>
+                <div class="export-menu" id="sc-export-menu" hidden>
+                    <button type="button" data-filter="all">${t('stock_check.export.all')}</button>
+                    <button type="button" data-filter="over">${t('stock_check.export.over')}</button>
+                    <button type="button" data-filter="short">${t('stock_check.export.short')}</button>
+                </div>
+            </div>
+            ${isDraft ? `
+                <button class="btn btn-sm btn-primary" id="sc-commit-btn" style="margin-left:8px;">${t('stock_check.btn.commit')}</button>
+                <button class="btn btn-sm btn-danger" id="sc-cancel-btn" style="margin-left:8px;">${t('stock_check.btn.cancel')}</button>
+            ` : ''}
         </div>`;
     },
 

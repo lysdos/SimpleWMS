@@ -23,6 +23,10 @@ public class LocationService {
         return locationDao.findAll(keyword);
     }
 
+    public List<Location> list(String keyword, String status) {
+        return locationDao.findAll(keyword, status);
+    }
+
     public Location get(int id) {
         return locationDao.findById(id);
     }

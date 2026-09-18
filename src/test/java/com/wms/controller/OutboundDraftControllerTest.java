@@ -1,5 +1,6 @@
 package com.wms.controller;
 
+import com.wms.dao.UserDao;
 import com.wms.model.OutboundOrder;
 import com.wms.model.OutboundOrderItem;
 import com.wms.service.JwtService;
@@ -38,6 +39,9 @@ class OutboundDraftControllerTest {
 
     @Autowired private MockMvc mvc;
 
+    // WebConfig 实现 WebMvcConfigurer,会被 @WebMvcTest 一并加载,而它 autowire 了
+    // UserDao(用于 UserStatusFilter)。缺这个 mock 整个 ApplicationContext 起不来。
+    @MockBean private UserDao userDao;
     @MockBean private OutboundService outboundService;
     @MockBean private JwtService jwtService;
 

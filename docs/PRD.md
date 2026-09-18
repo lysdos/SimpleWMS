@@ -222,7 +222,7 @@ PDA 端 (StockCheckActivity)               Backend
 - `GET /api/inventory/items/by-code/{code}` — 查单元
 - `GET /api/inventory/items/by-code/{code}/product` — 码反查商品
 
-**响应壳**:`ApiResponse<T> { code, msg, data }`,`code=0` 成功,`code=404/409/422` 区分业务错误。
+**响应壳**:`ApiResponse<T> { code, message, data }`,`code=0` 成功,`code=400/404/405/409/415/422` 区分业务错误;HTTP 状态码与 body 里的 `code` 一致(404 就是真 404)。详见 [api-reference.md](./api-reference.md) §1.2。
 
 ## 6. PDA 客户端概览
 

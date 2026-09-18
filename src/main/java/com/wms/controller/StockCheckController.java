@@ -52,7 +52,7 @@ public class StockCheckController {
     @GetMapping("/{id}")
     public ApiResponse<StockCheck> get(@PathVariable int id) {
         StockCheck c = service.get(id);
-        if (c == null) return ApiResponse.fail(404, "盘点单不存在");
+        if (c == null) throw new NotFoundException("盘点单不存在");
         return ApiResponse.ok(c);
     }
 
@@ -89,6 +89,14 @@ public class StockCheckController {
         return ApiResponse.ok();
     }
 
+    /** 删除某条明细行(仅 DRAFT);用于清理盘盈自动追加的多余行 */
+    @DeleteMapping("/{id}/items/{itemId}")
+    @RequireRole("ADMIN")
+    public ApiResponse<Void> deleteItem(@PathVariable int id, @PathVariable int itemId) {
+        service.deleteItem(id, itemId);
+        return ApiResponse.ok();
+    }
+
     /** 提交盘点 */
     @PostMapping("/{id}/commit")
     @RequireRole("ADMIN")
@@ -105,16 +113,15 @@ public class StockCheckController {
     }
 
     /**
-     * PDA 扫一个码 → 校验 + 累加该盘点单对应明细的 counted_qty。
+     * PDA 扫一个码 → 定位本盘点单对应明细并记为已盘(幂等)。
      * body: { code: "<24 位编码>" }
      * 返回:完整 StockCheck(含 items)
+     * 单外码 / 非在库(OUT/SCRAPPED 等)的码:自动追加一行记为盘盈(应盘 0 / 实盘 1)。
      *
      * 错误码:
-     *   - 盘点单不存在 → 404
-     *   - 盘点单已 COMMITTED/CANCELLED → 409
-     *   - 码不存在 → 404
-     *   - 码状态非 IN_STOCK → 409
-     *   - 码不在本盘点单明细中 → 422
+     *   - 盘点单不存在 → 404;盘点单已 COMMITTED/CANCELLED → 409
+     *   - 码不存在(inventory_item 无此码) → 404
+     *   - 该码已盘过(含并发重复) → 422
      */
     @PostMapping("/{id}/scan")
     public ApiResponse<StockCheck> scanCode(@PathVariable int id, @RequestBody Map<String, Object> body) {
@@ -123,11 +130,25 @@ public class StockCheckController {
         return ApiResponse.ok(service.scanCodeToCheck(id, code));
     }
 
-    /** 导出差异报告 CSV(全部明细) */
+    /**
+     * 导出差异报告 CSV。
+     * filter: all=全部(盘盈行单独分区) / over=仅盘盈 / short=仅盘亏(未盘行计入盘亏)
+     */
     @GetMapping(value = "/{id}/export.csv", produces = "text/csv;charset=UTF-8")
-    public ResponseEntity<byte[]> exportCsv(@PathVariable int id) {
+    public ResponseEntity<byte[]> exportCsv(@PathVariable int id,
+                                            @RequestParam(defaultValue = "all") String filter) {
         StockCheck c = service.get(id);
         if (c == null) throw new IllegalArgumentException("盘点单不存在");
+
+        List<StockCheckItem> items = c.getItems() == null ? List.of() : c.getItems();
+        List<StockCheckItem> over = new java.util.ArrayList<>();    // 盘盈
+        List<StockCheckItem> normal = new java.util.ArrayList<>();  // 未盘/一致/盘亏
+        for (StockCheckItem it : items) {
+            if (STATE_OVER.equals(rowState(it))) over.add(it); else normal.add(it);
+        }
+
+        boolean onlyOver  = "over".equalsIgnoreCase(filter);
+        boolean onlyShort = "short".equalsIgnoreCase(filter);
 
         StringBuilder sb = new StringBuilder();
         sb.append('﻿');
@@ -141,27 +162,69 @@ public class StockCheckController {
         sb.append("提交时间,").append(csv(c.getCommittedAt() == null ? "" : c.getCommittedAt().toString())).append('\n');
         sb.append("明细总数,").append(c.getTotalCount()).append('\n');
         sb.append("已盘数,").append(c.getCountedCount()).append('\n');
-        sb.append("差异数,").append(c.getDiffCount()).append("\n\n");
-        sb.append("24位编码,SKU,商品,库位,系统数,实盘数,差异,行备注\n");
-        for (StockCheckItem it : c.getItems()) {
-            sb.append(csv(it.getCode())).append(',')
-              .append(csv(it.getSku())).append(',')
-              .append(csv(it.getProductName())).append(',')
-              .append(csv(it.getLocationCode())).append(',')
-              .append(it.getSystemQty() == null ? 0 : it.getSystemQty()).append(',')
-              .append(it.getCountedQty() == null ? "" : it.getCountedQty().toString()).append(',')
-              .append(it.getDiff() == null ? "" : it.getDiff().toString()).append(',')
-              .append(csv(it.getRowRemark())).append('\n');
+        sb.append("差异数,").append(c.getDiffCount()).append('\n');
+        sb.append("导出范围,").append(csv(onlyOver ? "仅盘盈" : onlyShort ? "仅盘亏" : "全部")).append("\n\n");
+
+        if (onlyOver) {
+            sb.append(CSV_HEADER).append('\n');
+            for (StockCheckItem it : over) appendRow(sb, it);
+        } else if (onlyShort) {
+            sb.append(CSV_HEADER).append('\n');
+            for (StockCheckItem it : normal) {
+                String st = rowState(it);
+                // 未盘行按口径计入盘亏
+                if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) appendRow(sb, it);
+            }
+        } else {
+            sb.append("盘点明细\n").append(CSV_HEADER).append('\n');
+            for (StockCheckItem it : normal) appendRow(sb, it);
+            if (!over.isEmpty()) {
+                sb.append("\n盘盈明细\n").append(CSV_HEADER).append('\n');
+                for (StockCheckItem it : over) appendRow(sb, it);
+            }
         }
 
+        String suffix = onlyOver ? "-盘盈" : onlyShort ? "-盘亏" : "";
         byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
         String fname = URLEncoder.encode(
-                (c.getCheckNo() == null ? "check_" + id : c.getCheckNo()) + ".csv",
+                (c.getCheckNo() == null ? "check_" + id : c.getCheckNo()) + suffix + ".csv",
                 StandardCharsets.UTF_8).replace("+", "%20");
         HttpHeaders h = new HttpHeaders();
         h.setContentType(MediaType.parseMediaType("text/csv;charset=UTF-8"));
         h.setContentDispositionFormData("attachment", fname);
         return new ResponseEntity<>(body, h, 200);
+    }
+
+    /** 明细区表头:应盘数=系统账面,实盘数与差异未盘时留空 */
+    private static final String CSV_HEADER = "24位编码,SKU,商品,库位,应盘数,实盘数,差异,盘点状态,行备注";
+
+    private static final String STATE_OVER      = "盘盈";
+    private static final String STATE_SHORT     = "盘亏";
+    private static final String STATE_UNCOUNTED = "未盘";
+    private static final String STATE_OK        = "一致";
+
+    /** 行盘点状态:未盘 / 盘盈 / 盘亏 / 一致 */
+    private static String rowState(StockCheckItem it) {
+        Integer counted = it.getCountedQty();
+        if (counted == null) return STATE_UNCOUNTED;
+        int sys = it.getSystemQty() == null ? 0 : it.getSystemQty();
+        if (counted > sys) return STATE_OVER;
+        if (counted < sys) return STATE_SHORT;
+        return STATE_OK;
+    }
+
+    private static void appendRow(StringBuilder sb, StockCheckItem it) {
+        int sys = it.getSystemQty() == null ? 0 : it.getSystemQty();
+        Integer counted = it.getCountedQty();
+        sb.append(csv(it.getCode())).append(',')
+          .append(csv(it.getSku())).append(',')
+          .append(csv(it.getProductName())).append(',')
+          .append(csv(it.getLocationCode())).append(',')
+          .append(sys).append(',')
+          .append(counted == null ? "" : counted.toString()).append(',')
+          .append(counted == null ? "" : String.valueOf(counted - sys)).append(',')
+          .append(rowState(it)).append(',')
+          .append(csv(it.getRowRemark())).append('\n');
     }
 
     private static String scopeLabel(String s) {

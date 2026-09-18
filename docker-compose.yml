@@ -51,7 +51,8 @@ services:
     volumes:
       # 数据持久化(删容器数据不丢)
       - mysql-data:/var/lib/mysql
-      # 首次启动自动建库 + 建表
+      # 首次启动自动建库 + 建表(仅在 data dir 为空时执行一次;
+      # 应用侧已不再执行任何建表脚本 —— 若复用的旧卷里缺表,只能 down -v 重建)
       - ./sql/mysql-schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     command:
       - --character-set-server=utf8mb4
@@ -91,8 +92,6 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-wms}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-wmspass}
-      SPRING_SQL_INIT_MODE: always
-      SPRING_SQL_INIT_CONTINUE_ON_ERROR: true
       # JVM 调优
       JAVA_OPTS: "-Xms256m -Xmx512m"
       # 用户与角色 bootstrap(生产前改成 .env 注入,别用默认值)

@@ -392,10 +392,13 @@ public class InboundService {
             b.rowRemark = blankToNull(b.rowRemark);
         }
 
-        // 本批合并
+        // 本批合并。key 必须含批次字段(生产日期/保质期):同 SKU 同供应商但
+        // 生产日期不同的两行是两个批次,合并会把另一批的日期抹掉
         Map<String, BatchItem> merged = new LinkedHashMap<>();
         for (BatchItem raw : items) {
-            String key = raw.productId + "|" + (raw.supplier == null ? "" : raw.supplier);
+            String key = raw.productId + "|" + (raw.supplier == null ? "" : raw.supplier)
+                    + "|" + (raw.productionDate == null ? "" : raw.productionDate)
+                    + "|" + (raw.shelfLifeDays == null ? "" : raw.shelfLifeDays);
             BatchItem acc = merged.get(key);
             if (acc == null) {
                 merged.put(key, raw);

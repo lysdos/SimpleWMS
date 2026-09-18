@@ -231,7 +231,7 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
        ┌─────────────────┐
        │  simplewms-     │  nginx 1.27-alpine
        │  frontend       │  ├─ 静态文件 (index.html / js / css)
-       │  9080 → 80      │  └─ /api/* /h2-console/* 反代到 backend
+       │  9080 → 80      │  └─ /api/* 反代到 backend
        └────────┬────────┘
                 │ http://backend:8080 (docker 网络)
                 ▼
@@ -239,7 +239,7 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
        │  simplewms-     │  Spring Boot 3.3 + JRE 21
        │  backend        │  ├─ REST API (/api/*)
        │  127.0.0.1:9090 │  ├─ 静态文件 (内置,绕过 nginx 也能用)
-       │   → 8080        │  └─ /h2-console/ (H2 数据库控制台)
+       │   → 8080        │  └─ (数据库为外部 MySQL,无内置控制台)
        └────────┬────────┘
                 │ jdbc:mysql://mysql:3306/simple_wms
                 ▼

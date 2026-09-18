@@ -348,6 +348,25 @@ select[multiple].input option, select[multiple].select option { padding: 4px 8px
 .btn-warn { background: var(--c-warn); color: #fff; border-color: var(--c-warn); }
 .btn-warn:hover { background: #d97706; border-color: #d97706; color: #fff; }
 .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+
+/* 导出等"多选项菜单":相对按钮向上弹出(按钮常在弹窗底部,向下会出界) */
+.export-menu-wrap { position: relative; display: inline-flex; }
+.export-menu {
+    position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 20;
+    min-width: 170px; background: #fff;
+    border: 1px solid var(--c-border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+    overflow: hidden; padding: 4px;
+}
+.export-menu button {
+    display: block; width: 100%; text-align: left;
+    background: none; border: 0; cursor: pointer;
+    padding: 8px 10px; font-size: 13px; color: var(--c-text);
+    border-radius: 6px; font-family: inherit;
+}
+.export-menu button:hover { background: var(--c-bg); }
+/* 上方空间不足(弹窗明细很少、body 很矮)时改为向下弹出,避免被 body 裁剪 */
+.export-menu.down { bottom: auto; top: calc(100% + 6px); }
 .btn-link {
     background: none; border: none; color: var(--c-brand);
     padding: 2px 6px; cursor: pointer; font-family: inherit; font-size: 13px;
@@ -368,6 +387,9 @@ select[multiple].input option, select[multiple].select option { padding: 4px 8px
    表格
    ============================================================ */
 .table-wrap { overflow-x: auto; margin: 0 -22px; padding: 0 22px; }
+/* 弹窗内不再负边距外扩:modal-body 内边距是 20px,-22px 会溢出 2px,
+   让 modal-body 自己多出一条横向滚动条,与 table-wrap 的滚动条叠成"两条" */
+.modal-body .table-wrap { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; }
 .table {
     width: 100%; border-collapse: separate; border-spacing: 0;
     background: #fff;

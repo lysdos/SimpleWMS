@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class OutboundOrderDao {
@@ -24,7 +23,7 @@ public class OutboundOrderDao {
         try{java.sql.Timestamp c=rs.getTimestamp("uhf_claimed_at");o.setUhfClaimedAt(c==null?null:c.toLocalDateTime());}catch(java.sql.SQLException e){o.setUhfClaimedAt(null);}
         return o;};
     private static final RowMapper<OutboundOrderItem> ITEM_ROW=(rs,n)->{OutboundOrderItem i=new OutboundOrderItem();i.setId(rs.getInt("id"));i.setOrderId(rs.getInt("order_id"));i.setProductId(rs.getInt("product_id"));i.setSku(rs.getString("sku"));i.setProductName(rs.getString("product_name"));i.setQuantity(rs.getInt("quantity"));i.setUnitPrice(rs.getBigDecimal("unit_price"));i.setBeforeQty(rs.getInt("before_qty"));i.setAfterQty(rs.getInt("after_qty"));i.setLocation(rs.getString("location"));i.setRowRemark(rs.getString("row_remark"));java.sql.Timestamp t=rs.getTimestamp("created_at");i.setCreatedAt(t==null?null:t.toLocalDateTime());return i;};
-    public int insertOrder(OutboundOrder o){String q="INSERT INTO outbound_order (order_no, customer, external_no, remark, created_by, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?,?)";KeyHolder h=new GeneratedKeyHolder();jdbc.update(c->{PreparedStatement p=c.prepareStatement(q,new String[]{"id"});p.setString(1,o.getOrderNo());p.setString(2,o.getCustomer());p.setString(3,o.getExternalNo());p.setString(4,o.getRemark());p.setString(5,o.getCreatedBy());p.setInt(6,o.getTotalQuantity()==null?0:o.getTotalQuantity());p.setInt(7,o.getItemCount()==null?0:o.getItemCount());p.setString(8,o.getStatus()==null?OutboundOrder.STATUS_DRAFT:o.getStatus());return p;},h);Number k=h.getKey();if(k==null){Map<String,Object>m=h.getKeys();if(m!=null&&m.get("id")!=null)k=(Number)m.get("id");}return k==null?0:k.intValue();}
+    public int insertOrder(OutboundOrder o){String q="INSERT INTO outbound_order (order_no, customer, external_no, remark, created_by, total_quantity, item_count, status) VALUES (?,?,?,?,?,?,?,?)";KeyHolder h=new GeneratedKeyHolder();jdbc.update(c->{PreparedStatement p=c.prepareStatement(q,new String[]{"id"});p.setString(1,o.getOrderNo());p.setString(2,o.getCustomer());p.setString(3,o.getExternalNo());p.setString(4,o.getRemark());p.setString(5,o.getCreatedBy());p.setInt(6,o.getTotalQuantity()==null?0:o.getTotalQuantity());p.setInt(7,o.getItemCount()==null?0:o.getItemCount());p.setString(8,o.getStatus()==null?OutboundOrder.STATUS_DRAFT:o.getStatus());return p;},h);return GeneratedKeys.id(h);}
     public void insertItem(OutboundOrderItem i){jdbc.update("INSERT INTO outbound_order_item (order_id, product_id, sku, product_name, quantity, unit_price, before_qty, after_qty, location, row_remark) VALUES (?,?,?,?,?,?,?,?,?,?)",i.getOrderId(),i.getProductId(),i.getSku(),i.getProductName(),i.getQuantity(),i.getUnitPrice(),i.getBeforeQty(),i.getAfterQty(),i.getLocation(),i.getRowRemark());}
     public int updateItemQuantity(int itemId,int quantity){return jdbc.update("UPDATE outbound_order_item SET quantity=? WHERE id=?",quantity,itemId);}
     /** 仅当订单仍为 DRAFT 时才推进状态(影响行数 0 = 已被并发/手工修改过,commit/cancel 应放弃) */

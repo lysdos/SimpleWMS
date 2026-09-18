@@ -40,11 +40,11 @@ public class StocktakeOrder {
         this.lines = lines;
     }
 
-    /** ALL 全盘 / SKU 抽样盘 / LOCATION 动碰盘(按 sku/location 过滤) */
+    /** ALL 全部在库单元 / SKU 按SKU / LOCATION 按库位(与 web 端口径一致) */
     public enum Mode {
-        ALL("全盘"),
-        SKU("抽样盘"),
-        LOCATION("动碰盘");
+        ALL("全部在库单元"),
+        SKU("按SKU"),
+        LOCATION("按库位");
         public final String label;
         Mode(String label) { this.label = label; }
     }

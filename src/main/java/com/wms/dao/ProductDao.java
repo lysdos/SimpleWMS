@@ -15,7 +15,6 @@ import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -69,17 +68,23 @@ public class ProductDao {
     }
 
     public List<Product> findAll(String keyword) {
-        String sql = "SELECT * FROM product WHERE 1=1";
-        Object[] args;
+        return findAll(keyword, null);
+    }
+
+    public List<Product> findAll(String keyword, String supplier) {
+        StringBuilder sb = new StringBuilder("SELECT * FROM product WHERE 1=1");
+        java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
-            sql += " AND (sku LIKE ? OR name LIKE ? OR category LIKE ?)";
+            sb.append(" AND (sku LIKE ? OR name LIKE ? OR category LIKE ?)");
             String like = "%" + keyword.trim() + "%";
-            args = new Object[]{like, like, like};
-        } else {
-            args = new Object[]{};
+            args.add(like); args.add(like); args.add(like);
         }
-        sql += " ORDER BY id DESC";
-        List<Product> list = jdbc.query(sql, ROW, args);
+        if (supplier != null && !supplier.isBlank()) {
+            sb.append(" AND default_supplier = ?");
+            args.add(supplier);
+        }
+        sb.append(" ORDER BY id DESC");
+        List<Product> list = jdbc.query(sb.toString(), ROW, args.toArray());
         for (Product p : list) attachSuppliers(p);
         return list;
     }
@@ -126,12 +131,7 @@ public class ProductDao {
             ps.setString(11, p.getRemark());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k == null) {
-            Map<String, Object> keys = kh.getKeys();
-            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
-        }
-        return k == null ? 0 : k.intValue();
+        return GeneratedKeys.id(kh);
     }
 
     public int update(Product p) {

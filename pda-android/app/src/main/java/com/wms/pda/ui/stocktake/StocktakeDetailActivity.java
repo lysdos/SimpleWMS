@@ -1,5 +1,6 @@
 package com.wms.pda.ui.stocktake;
 
+import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -9,6 +10,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
@@ -23,18 +25,28 @@ import com.wms.pda.scan.ScanResult;
 import com.wms.pda.scan.ScanType;
 import com.wms.pda.scan.ScannerCallback;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * 盘点单详情:对接后端 /api/stock-checks/{id}。扫码定位行 / 提交。
+ * 盘点单详情:对接后端 /api/stock-checks/{id}。
+ * RFID/条码双通道扫码(带停止,互斥);扫到单外码自动记盘盈;逐行删除。
  */
 public class StocktakeDetailActivity extends AppCompatActivity {
 
     private Integer dbId;
     private LinearLayout llLines;
     private TextView tvProgress;
-    private MaterialButton btnScan;
     private MaterialButton btnSubmit;
+
+    private MaterialButton btnRfidScan, btnRfidStop, btnBarcodeScan, btnBarcodeStop;
+    private ScanType activeScanType;      // null = 空闲
+    private boolean docDone;              // 已提交/已取消时禁用扫码
+    private int lastTotal, lastCounted;   // 最近一次渲染的统计(提交确认文案用)
+    /** 本会话内已尝试/已成功的码:防止持续扫描时同一码反复上报 */
+    private final Set<String> triedCodes = new HashSet<>();
+    private final Set<String> scannedCodes = new HashSet<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,52 +59,16 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         dbId = getIntent().getIntExtra("orderDbId", -1);
         llLines = findViewById(R.id.ll_lines);
         tvProgress = findViewById(R.id.tv_progress);
-        btnScan = findViewById(R.id.btn_scan);
         btnSubmit = findViewById(R.id.btn_submit);
 
-        btnScan.setOnClickListener(v -> ScanManager.get(this).startScan(ScanType.RFID_EPC, new ScannerCallback() {
-            @Override
-            public void onScanResult(ScanResult result) {
-                String code = result.getCode();
-                if (code == null || code.isEmpty()) {
-                    return;
-                }
-                RepositoryProvider.get().submitStocktakeScan(String.valueOf(dbId), code,
-                        new WmsCallback<StocktakeOrder>() {
-                            @Override public void onSuccess(StocktakeOrder o) {
-                                Toast.makeText(StocktakeDetailActivity.this,
-                                        getString(R.string.stocktake_located_fmt, code), Toast.LENGTH_SHORT).show();
-                                render();
-                            }
-                            @Override public void onError(int code, String msg) {
-                                // 智能处理:码不在盘点单中时友好提示
-                                if (msg != null && msg.contains("不在本盘点单中")) {
-                                    Toast.makeText(StocktakeDetailActivity.this,
-                                            "该码不在本盘点单中,已跳过", Toast.LENGTH_SHORT).show();
-                                } else if (msg != null && msg.contains("码不存在")) {
-                                    Toast.makeText(StocktakeDetailActivity.this,
-                                            "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
-                                } else if (msg != null && msg.contains("状态不可盘点")) {
-                                    Toast.makeText(StocktakeDetailActivity.this,
-                                            "该码状态异常,已跳过", Toast.LENGTH_SHORT).show();
-                                } else {
-                                    Toast.makeText(StocktakeDetailActivity.this,
-                                            "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
-                                }
-                            }
-                        });
-            }
-
-            @Override
-            public void onError(int code, String msg) {
-                Toast.makeText(StocktakeDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
-            }
-
-            @Override
-            public void onTimeout() {
-                Toast.makeText(StocktakeDetailActivity.this, "扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
-            }
-        }));
+        btnRfidScan = findViewById(R.id.btn_rfid_scan);
+        btnRfidStop = findViewById(R.id.btn_rfid_stop);
+        btnBarcodeScan = findViewById(R.id.btn_barcode_scan);
+        btnBarcodeStop = findViewById(R.id.btn_barcode_stop);
+        btnRfidScan.setOnClickListener(v -> startRfidScan());
+        btnRfidStop.setOnClickListener(v -> stopScan());
+        btnBarcodeScan.setOnClickListener(v -> startBarcodeScan());
+        btnBarcodeStop.setOnClickListener(v -> stopScan());
 
         btnSubmit.setOnClickListener(v -> confirmAndSubmit());
     }
@@ -100,10 +76,210 @@ public class StocktakeDetailActivity extends AppCompatActivity {
     @Override
     protected void onResume() { super.onResume(); render(); }
 
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopScan(); // 离开页面时停止扫码
+    }
+
+    // ============================================================
+    // RFID 扫码
+    // ============================================================
+
+    private void startRfidScan() {
+        if (activeScanType == ScanType.BARCODE) stopScan();
+        activeScanType = ScanType.RFID_EPC;
+        updateButtonStates();
+
+        ScanManager.get(this).startScan(ScanType.RFID_EPC, new ScannerCallback() {
+            @Override
+            public void onScanResult(ScanResult result) {
+                handleScanResult(result == null ? null : result.getCode());
+            }
+
+            @Override
+            public void onError(int code, String msg) {
+                stopScan();
+                Toast.makeText(StocktakeDetailActivity.this,
+                        code == -100 ? msg : "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onTimeout() {
+                stopScan();
+                Toast.makeText(StocktakeDetailActivity.this,
+                        "RFID 扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // ============================================================
+    // 条码扫码
+    // ============================================================
+
+    private void startBarcodeScan() {
+        if (activeScanType == ScanType.RFID_EPC) stopScan();
+        activeScanType = ScanType.BARCODE;
+        updateButtonStates();
+
+        ScanManager.get(this).startScan(ScanType.BARCODE, new ScannerCallback() {
+            @Override
+            public void onScanResult(ScanResult result) {
+                handleScanResult(result == null ? null : result.getCode());
+            }
+
+            @Override
+            public void onError(int code, String msg) {
+                stopScan();
+                Toast.makeText(StocktakeDetailActivity.this,
+                        code == -100 ? msg : "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onTimeout() {
+                stopScan();
+                Toast.makeText(StocktakeDetailActivity.this,
+                        "条码扫码超时,未读到码", Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+
+    // ============================================================
+    // 停止扫码 / 按钮状态
+    // ============================================================
+
+    private void stopScan() {
+        ScanManager.get(this).stopScan();
+        activeScanType = null;
+        updateButtonStates();
+    }
+
+    private void updateButtonStates() {
+        if (docDone) {
+            setScanButton(btnRfidScan, btnRfidStop, false);
+            setScanButton(btnBarcodeScan, btnBarcodeStop, false);
+            return;
+        }
+        if (activeScanType == null) {
+            setScanButton(btnRfidScan, btnRfidStop, true);
+            setScanButton(btnBarcodeScan, btnBarcodeStop, true);
+        } else if (activeScanType == ScanType.RFID_EPC) {
+            setScanButton(btnRfidScan, btnRfidStop, true);
+            btnRfidScan.setVisibility(View.GONE);
+            btnRfidStop.setVisibility(View.VISIBLE);
+            setScanButton(btnBarcodeScan, btnBarcodeStop, false);
+        } else {
+            setScanButton(btnBarcodeScan, btnBarcodeStop, true);
+            btnBarcodeScan.setVisibility(View.GONE);
+            btnBarcodeStop.setVisibility(View.VISIBLE);
+            setScanButton(btnRfidScan, btnRfidStop, false);
+        }
+    }
+
+    /** enabled=true:开始按钮可见可点、停止隐藏;false:禁用灰显 */
+    private void setScanButton(MaterialButton scan, MaterialButton stop, boolean enabled) {
+        int colorPrimary = ContextCompat.getColor(this, R.color.primary);
+        int colorOnPrimary = ContextCompat.getColor(this, R.color.on_primary);
+        int colorDisabled = ContextCompat.getColor(this, R.color.text_hint);
+        ColorStateList disabledBg = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.divider));
+        ColorStateList enabledBg = ColorStateList.valueOf(colorPrimary);
+
+        scan.setVisibility(View.VISIBLE);
+        stop.setVisibility(View.GONE);
+        scan.setEnabled(enabled);
+        scan.setClickable(enabled);
+        scan.setTextColor(enabled ? colorOnPrimary : colorDisabled);
+        scan.setBackgroundTintList(enabled ? enabledBg : disabledBg);
+    }
+
+    // ============================================================
+    // 扫码结果提交
+    // ============================================================
+
+    private void handleScanResult(String code) {
+        if (code == null || code.isEmpty()) return;
+        String canon = code.trim();
+        // 会话内去重:持续扫描时同一码 2 秒后会重复上报,静默跳过
+        if (triedCodes.contains(canon) || scannedCodes.contains(canon)) return;
+        triedCodes.add(canon);
+        RepositoryProvider.get().submitStocktakeScan(String.valueOf(dbId), canon,
+                new WmsCallback<StocktakeOrder>() {
+                    @Override public void onSuccess(StocktakeOrder o) {
+                        scannedCodes.add(canon);
+                        boolean overage = false;
+                        if (o != null && o.lines != null) {
+                            for (StocktakeOrder.Line l : o.lines) {
+                                if (canon.equals(l.code == null ? null : l.code.trim())
+                                        && l.systemQty != null && l.systemQty == 0) {
+                                    overage = true;
+                                    break;
+                                }
+                            }
+                        }
+                        Toast.makeText(StocktakeDetailActivity.this,
+                                overage ? "已记为盘盈: " + canon
+                                        : getString(R.string.stocktake_located_fmt, canon),
+                                Toast.LENGTH_SHORT).show();
+                        render();
+                    }
+                    @Override public void onError(int code, String msg) {
+                        if (msg != null && msg.contains("已盘过")) {
+                            Toast.makeText(StocktakeDetailActivity.this,
+                                    "该码已盘过", Toast.LENGTH_SHORT).show();
+                        } else if (msg != null && msg.contains("码不存在")) {
+                            Toast.makeText(StocktakeDetailActivity.this,
+                                    "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
+                        } else {
+                            // 网络/服务端瞬时失败:放开去重,允许用户重扫该码
+                            triedCodes.remove(canon);
+                            Toast.makeText(StocktakeDetailActivity.this,
+                                    "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                });
+    }
+
+    // ============================================================
+    // 行删除
+    // ============================================================
+
+    private void confirmDeleteLine(StocktakeOrder.Line l) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.stocktake_row_delete)
+                .setMessage(getString(R.string.stocktake_row_delete_confirm,
+                        l.sku == null ? "" : l.sku))
+                .setPositiveButton(R.string.action_confirm, (d, w) ->
+                        RepositoryProvider.get().deleteStocktakeItem(String.valueOf(dbId),
+                                String.valueOf(l.id),
+                                new WmsCallback<Void>() {
+                                    @Override public void onSuccess(Void v) {
+                                        // 允许删掉后重新扫码记盘盈:把该码从会话去重集合里移除
+                                        if (l.code != null) {
+                                            String c = l.code.trim();
+                                            triedCodes.remove(c);
+                                            scannedCodes.remove(c);
+                                        }
+                                        Toast.makeText(StocktakeDetailActivity.this,
+                                                "已删除", Toast.LENGTH_SHORT).show();
+                                        render();
+                                    }
+                                    @Override public void onError(int code, String msg) {
+                                        Toast.makeText(StocktakeDetailActivity.this,
+                                                "删除失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    }
+                                }))
+                .setNegativeButton(R.string.action_cancel, null)
+                .show();
+    }
+
     private void confirmAndSubmit() {
+        int remain = Math.max(0, lastTotal - lastCounted);
+        String msg = remain > 0
+                ? getString(R.string.stocktake_submit_confirm_unfinished, remain)
+                : getString(R.string.stocktake_submit_confirm_all);
         new AlertDialog.Builder(this)
                 .setTitle(R.string.btn_complete_stocktake)
-                .setMessage(R.string.stocktake_submit_confirm_all)
+                .setMessage(msg)
                 .setPositiveButton(R.string.action_confirm, (d, w) ->
                         RepositoryProvider.get().commitStocktake(String.valueOf(dbId),
                                 new WmsCallback<StocktakeOrder>() {
@@ -145,9 +321,9 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         StatusPill.apply(tvStatus, o.status);
         String kw = (o.scopeKeyword == null || o.scopeKeyword.isEmpty()) ? "—" : o.scopeKeyword;
         tvScope.setText("盘点范围: " + kw);
-        String scopeLabel = "ALL".equals(o.scope) ? "全盘"
-                : "SKU".equals(o.scope) ? "抽样盘"
-                : "LOCATION".equals(o.scope) ? "动碰盘"
+        String scopeLabel = "ALL".equals(o.scope) ? "全部在库单元"
+                : "SKU".equals(o.scope) ? "按SKU"
+                : "LOCATION".equals(o.scope) ? "按库位"
                 : (o.scope == null ? "—" : o.scope);
         tvMode.setText("盘点方式: " + scopeLabel);
         tvOperator.setText("创建人: " + (o.createdBy == null ? "—" : o.createdBy));
@@ -171,6 +347,14 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 TextView etActual = row.findViewById(R.id.et_actual);
                 TextView tvDiff = row.findViewById(R.id.tv_diff);
                 TextView tvPill = row.findViewById(R.id.tv_pill);
+
+                TextView btnDel = row.findViewById(R.id.btn_row_del);
+                if (btnDel != null) {
+                    boolean locked = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED
+                            || l.id == null;
+                    btnDel.setVisibility(locked ? View.GONE : View.VISIBLE);
+                    if (!locked) btnDel.setOnClickListener(v -> confirmDeleteLine(l));
+                }
 
                 tvSku.setText(l.sku == null ? "?" : l.sku);
                 tvSub.setText((l.productName == null ? "" : l.productName)
@@ -209,12 +393,14 @@ public class StocktakeDetailActivity extends AppCompatActivity {
             }
         }
 
-        boolean done = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
-        btnScan.setEnabled(!done);
-        btnSubmit.setEnabled(!done);
+        docDone = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
+        btnSubmit.setEnabled(!docDone);
+        updateButtonStates();
 
         int total = o.totalCount == null ? 0 : o.totalCount;
         int counted = o.countedCount == null ? 0 : o.countedCount;
+        lastTotal = total;
+        lastCounted = counted;
         tvProgress.setText(getString(R.string.stocktake_progress_fmt, counted, total));
     }
 }

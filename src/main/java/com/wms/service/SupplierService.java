@@ -23,6 +23,10 @@ public class SupplierService {
         return supplierDao.findAll(keyword);
     }
 
+    public List<Supplier> list(String keyword, String status) {
+        return supplierDao.findAll(keyword, status);
+    }
+
     public Supplier get(int id) {
         return supplierDao.findById(id);
     }

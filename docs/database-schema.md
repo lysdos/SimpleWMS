@@ -1,6 +1,6 @@
 # 数据库结构 — SimpleWMS
 
-> 范围:`src/main/resources/schema.sql`(H2 2.x + MySQL 8.0.29+ 兼容)
+> 范围:`sql/mysql-schema.sql`(全项目唯一库结构定义,MySQL 8+)
 > 基线:`main` 分支当前 HEAD(commit 1fc4bc9 / a73ef18 / 7ffcfbd 后)
 
 ## 1. 总览 ER
@@ -268,7 +268,7 @@ UNIQUE(check_id, inventory_item_id)
 ## 5. 迁移与初始化
 
 - **首次**:只建表 + 创建首个 admin 账号(`UserService.bootstrapIfEmpty()`,账号/口令取自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`),**不写入任何演示数据**;商品 / 供应商 / 库位由使用方自行建立
-- **空库自动建**:`schema.sql` 全部 `CREATE TABLE IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`
+- **空库自动建**:`sql/mysql-schema.sql` 全部 `CREATE TABLE IF NOT EXISTS`,由 MySQL 容器首次启动(data dir 为空)时经 `docker-entrypoint-initdb.d` 执行;复用的旧数据卷不会重跑,缺表时需 `docker compose down -v` 重建
 - **老库升级**:`DataSeeder.migrate()` 在启动时跑(`tryAddColumn` / `tryAddIndex` 查询 information_schema 后增量 DDL),不会破坏已有数据
 - **状态列追加**:B1/B2 后需手工 `ALTER TABLE inbound_order ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'DRAFT'` —— 当前 9090 容器已加,见后端 report
 - **MySQL 老版 (<8.0.29)**:`ADD COLUMN IF NOT EXISTS` 不支持,需手工跑 migration
@@ -308,6 +308,6 @@ UNIQUE(check_id, inventory_item_id)
 
 ## 9. 备份建议
 
-- MySQL:每日全备 + binlog 增量(WAL),保留 ≥ 30 天
+- MySQL:每日全备 + binlog 增量,保留 ≥ 30 天
 - 关键表额外 dump:`inventory_item` 因为含 24 位唯一码,不能丢
-- H2 嵌入式(默认):`./data/wmsdb.mv.db` 单文件,生产建议切 MySQL
+- 本地开发库即 docker 卷 `simplewms-mysql-data`;`docker compose down -v` 会连数据一起删除,慎用

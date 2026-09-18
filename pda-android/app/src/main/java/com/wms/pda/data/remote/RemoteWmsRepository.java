@@ -407,6 +407,20 @@ public class RemoteWmsRepository implements WmsRepository {
         });
     }
 
+    @Override
+    public void addOutboundItem(String orderId, int productId, int quantity, String rowRemark,
+                                WmsCallback<OutboundOrder> cb) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("productId", productId);
+        body.put("quantity", quantity);
+        if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        api.post("/api/outbound/orders/" + orderId + "/items", body,
+                Dto.OutboundOrder.class, new ApiClient.Callback<Dto.OutboundOrder>() {
+            @Override public void onSuccess(Dto.OutboundOrder o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
     // ---- 库存 ----
     @Override
     public void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb) {
@@ -508,22 +522,14 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void createStocktake(String warehouse, StocktakeOrder.Mode mode, WmsCallback<StocktakeOrder> cb) {
-        // 后端接口 body: {scope, keyword, remark};ALL 模式不传 keyword,LOCATION 模式 keyword=仓库
+    public void createStocktake(String scope, String keyword, String remark, WmsCallback<StocktakeOrder> cb) {
+        // 后端接口 body: {scope, keyword, remark};scope = ALL / SKU / LOCATION
         Map<String, Object> body = new HashMap<>();
-        StocktakeOrder.Mode m = mode == null ? StocktakeOrder.Mode.ALL : mode;
-        body.put("scope", m.name());
-        if (m == StocktakeOrder.Mode.LOCATION && warehouse != null && !warehouse.isEmpty()) {
-            body.put("keyword", warehouse);
-        } else {
-            body.put("keyword", "");
-        }
+        body.put("scope", scope == null || scope.isEmpty() ? "ALL" : scope);
+        body.put("keyword", keyword == null ? "" : keyword);
+        body.put("remark", remark == null ? "" : remark);
         api.post("/api/stock-checks", body, Dto.StockCheck.class, new ApiClient.Callback<Dto.StockCheck>() {
-            @Override public void onSuccess(Dto.StockCheck o) {
-                StocktakeOrder m = Mappers.toModel(o);
-                m.scopeKeyword = warehouse;  // 后端不返回 warehouse
-                cb.onSuccess(m);
-            }
+            @Override public void onSuccess(Dto.StockCheck o) { cb.onSuccess(Mappers.toModel(o)); }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
     }
@@ -542,6 +548,15 @@ public class RemoteWmsRepository implements WmsRepository {
         api.post("/api/stock-checks/" + orderId + "/scan", body,
                 Dto.StockCheck.class, new ApiClient.Callback<Dto.StockCheck>() {
             @Override public void onSuccess(Dto.StockCheck o) { cb.onSuccess(Mappers.toModel(o)); }
+            @Override public void onError(int code, String msg) { cb.onError(code, msg); }
+        });
+    }
+
+    @Override
+    public void deleteStocktakeItem(String orderDbId, String itemId, WmsCallback<Void> cb) {
+        api.delete("/api/stock-checks/" + orderDbId + "/items/" + itemId,
+                Void.class, new ApiClient.Callback<Void>() {
+            @Override public void onSuccess(Void o) { cb.onSuccess(null); }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
     }

@@ -121,6 +121,11 @@ public class OutboundDetailActivity extends AppCompatActivity {
             if (currentOrder != null) confirmCancelOrder();
         });
 
+        findViewById(R.id.btn_add_item).setOnClickListener(v -> {
+            if (currentOrder == null || scanLocked) return;
+            AddOutboundItemDialog.show(this, dbId, this::render);
+        });
+
         btnComplete.setOnClickListener(v ->
                 RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
                         new WmsCallback<OutboundOrder>() {
@@ -568,6 +573,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
         findViewById(R.id.btn_clear_scans).setEnabled(!done);
         findViewById(R.id.btn_clear_scans).setAlpha(done ? 0.4f : 1f);
         findViewById(R.id.ll_header_actions).setVisibility(o.status == Enums.DocStatus.DRAFT ? View.VISIBLE : View.GONE);
+        findViewById(R.id.btn_add_item).setVisibility(o.status == Enums.DocStatus.DRAFT ? View.VISIBLE : View.GONE);
         if (done) stopScan();
         updateButtonStates();
     }

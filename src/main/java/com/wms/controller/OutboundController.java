@@ -18,6 +18,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -194,6 +196,21 @@ public class OutboundController {
                 asString(body.get("remark"))));
     }
 
+    /**
+     * 往 DRAFT 出库单追加一条明细(同时按方案 A 锁定库存单元)。
+     * body: { "productId": 3, "quantity": 2, "rowRemark": "可选" }
+     */
+    @PostMapping("/orders/{id}/items")
+    public ApiResponse<OutboundOrder> addItem(@PathVariable int id,
+                                              @RequestBody Map<String, Object> body) {
+        if (body == null) throw new IllegalArgumentException("请求体不能为空");
+        OutboundService.BatchItem it = new OutboundService.BatchItem();
+        it.productId = asInt(body.get("productId"));
+        it.quantity = asInt(body.get("quantity"));
+        it.rowRemark = asString(body.get("rowRemark"));
+        return ApiResponse.ok(outboundService.addItemToDraft(id, it));
+    }
+
     /** 取消草稿单(DRAFT → CANCELLED) */
     @PostMapping("/orders/{id}/cancel")
     public ApiResponse<Void> cancel(@PathVariable int id) {
@@ -280,6 +297,62 @@ public class OutboundController {
         headers.setContentType(MediaType.parseMediaType("text/csv;charset=UTF-8"));
         headers.setContentDispositionFormData("attachment", fname);
         return new ResponseEntity<>(body, headers, 200);
+    }
+
+    /** 批量导出出库单为 ZIP(每个订单一个 CSV) */
+    @PostMapping("/orders/export.zip")
+    public ResponseEntity<byte[]> exportZip(@RequestBody List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) throw new IllegalArgumentException("请选择要导出的订单");
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            try (ZipOutputStream zos = new ZipOutputStream(baos)) {
+                for (int id : ids) {
+                    OutboundOrder o = outboundService.getOrder(id);
+                    if (o == null) continue;
+                    String csvContent = buildCsv(o);
+                    String entryName = (o.getOrderNo() == null ? ("outbound_" + id) : o.getOrderNo()) + ".csv";
+                    zos.putNextEntry(new ZipEntry(entryName));
+                    zos.write(csvContent.getBytes(StandardCharsets.UTF_8));
+                    zos.closeEntry();
+                }
+            }
+            byte[] zipBytes = baos.toByteArray();
+            String fname = URLEncoder.encode("outbound_orders.zip", StandardCharsets.UTF_8).replace("+", "%20");
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("application/zip"));
+            headers.setContentDispositionFormData("attachment", fname);
+            return new ResponseEntity<>(zipBytes, headers, 200);
+        } catch (Exception e) {
+            throw new RuntimeException("导出失败: " + e.getMessage(), e);
+        }
+    }
+
+    private String buildCsv(OutboundOrder o) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('﻿');
+        sb.append("出库单号,").append(csv(o.getOrderNo())).append('\n');
+        sb.append("领用方,").append(csv(o.getCustomer())).append('\n');
+        sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
+        sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
+        sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
+        sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
+        sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
+        sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
+        sb.append('\n');
+        sb.append("序号,SKU,商品名称,库位,数量,单价,行备注\n");
+        int idx = 1;
+        if (o.getItems() != null) {
+            for (OutboundOrderItem it : o.getItems()) {
+                sb.append(idx++).append(',')
+                  .append(csv(it.getSku())).append(',')
+                  .append(csv(it.getProductName())).append(',')
+                  .append(csv(it.getLocation())).append(',')
+                  .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
+                  .append(it.getUnitPrice() == null ? "0.00" : it.getUnitPrice().toPlainString()).append(',')
+                  .append(csv(it.getRowRemark())).append('\n');
+            }
+        }
+        return sb.toString();
     }
 
     private static String csv(Object v) {

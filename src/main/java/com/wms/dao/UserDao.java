@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -27,6 +26,8 @@ public class UserDao {
         u.setRole(rs.getString("role"));
         u.setEnabled(rs.getBoolean("enabled"));
         u.setMustChangePw(rs.getBoolean("must_change_pw"));
+        u.setCreatedBy(rs.getString("created_by"));
+        u.setCreatedAt(rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null);
         return u;
     };
 
@@ -38,7 +39,7 @@ public class UserDao {
     public Optional<AppUser> findByUsername(String username) {
         try {
             return Optional.ofNullable(jdbc.queryForObject(
-                    "SELECT id, username, password_hash, role, enabled, must_change_pw " +
+                    "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
                     "FROM app_user WHERE username = ?", ROW, username));
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
@@ -48,7 +49,7 @@ public class UserDao {
     public Optional<AppUser> findById(int id) {
         try {
             return Optional.ofNullable(jdbc.queryForObject(
-                    "SELECT id, username, password_hash, role, enabled, must_change_pw " +
+                    "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
                     "FROM app_user WHERE id = ?", ROW, id));
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
@@ -74,8 +75,38 @@ public class UserDao {
 
     public List<AppUser> listAll() {
         return jdbc.query(
-            "SELECT id, username, password_hash, role, enabled, must_change_pw " +
+            "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
             "FROM app_user ORDER BY id", ROW);
+    }
+
+    public List<AppUser> findUsers(String keyword, String role, String status, String beginDate, String endDate) {
+        StringBuilder sb = new StringBuilder(
+            "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
+            "FROM app_user WHERE 1=1");
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        if (keyword != null && !keyword.isBlank()) {
+            sb.append(" AND username LIKE ?");
+            args.add("%" + keyword.trim() + "%");
+        }
+        if (role != null && !role.isBlank()) {
+            sb.append(" AND role = ?");
+            args.add(role);
+        }
+        if ("enabled".equals(status)) {
+            sb.append(" AND enabled = TRUE");
+        } else if ("disabled".equals(status)) {
+            sb.append(" AND enabled = FALSE");
+        }
+        if (beginDate != null && !beginDate.isBlank()) {
+            sb.append(" AND created_at >= ?");
+            args.add(beginDate + " 00:00:00");
+        }
+        if (endDate != null && !endDate.isBlank()) {
+            sb.append(" AND created_at <= ?");
+            args.add(endDate + " 23:59:59");
+        }
+        sb.append(" ORDER BY id");
+        return jdbc.query(sb.toString(), ROW, args.toArray());
     }
 
     public long count() {
@@ -96,19 +127,21 @@ public class UserDao {
             ps.setBoolean(5, u.getMustChangePw() != null ? u.getMustChangePw() : Boolean.FALSE);
             return ps;
         }, kh);
-        // 先尝试从 keys 取
-        Map<String, Object> keys = kh.getKeys();
-        if (keys != null && keys.get("id") != null) {
-            return ((Number) keys.get("id")).intValue();
-        }
+        int id = GeneratedKeys.id(kh);
         // 回退:按 username 取(防止某些驱动拿不到 generated keys)
-        return findByUsername(u.getUsername()).map(AppUser::getId).orElse(0);
+        return id != 0 ? id : findByUsername(u.getUsername()).map(AppUser::getId).orElse(0);
     }
 
     public int updatePassword(int id, String hash, boolean mustChangePw) {
         return jdbc.update(
             "UPDATE app_user SET password_hash = ?, must_change_pw = ? WHERE id = ?",
             hash, mustChangePw, id);
+    }
+
+    public int updateRole(int id, String role) {
+        return jdbc.update(
+            "UPDATE app_user SET role = ? WHERE id = ?",
+            role, id);
     }
 
     public int setEnabled(int id, boolean enabled) {

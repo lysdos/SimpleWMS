@@ -21,13 +21,12 @@ run.bat         :: 启动应用 → 浏览器访问 http://localhost:8080/
 
 启动后:
 - 主界面:<http://localhost:8080/>
-- H2 控制台(调试用):<http://localhost:8080/h2-console>
-  - JDBC URL: `jdbc:h2:file:./data/wmsdb`
-  - 用户名 `sa` / 密码空
 
-> 默认使用 **H2 嵌入式数据库**,数据文件位于 `./data/wmsdb.mv.db`。
-> 删除整个 `data/` 文件夹即恢复出厂状态 —— 下次启动只会重建表结构并创建首个 admin 账号,
-> 不含任何演示数据;商品 / 供应商 / 库位需自行建立(或手动跑 `tools/seed.sql`)。
+> 使用 **MySQL** 数据库:本地裸跑连 `localhost:23306`(即 docker compose 暴露的
+> MySQL 端口),所以启动前需先 `docker compose --env-file .env up -d mysql`。
+> Docker 部署时后端容器直接连服务名 `mysql:3306`,并由容器首次启动执行
+> `sql/mysql-schema.sql` 建库建表。全新库只创建首个 admin 账号,不含演示数据;
+> 商品 / 供应商 / 库位需自行建立(或手动跑 `tools/seed.sql`)。
 
 ### 端口被占用?
 
@@ -60,7 +59,7 @@ java -jar target\simple-wms.jar
 
 - Java 17+(本仓库用 JDK 21 构建)
 - **Spring Boot 3.3.x** + Spring MVC + Spring JDBC (JdbcTemplate)
-- **H2 2.x** (MODE=MySQL) 默认 / **MySQL 8** 可切换
+- **MySQL 8**(唯一数据库;本地裸跑连 docker 暴露的 23306)
 - 前端:原生 HTML + 自写 CSS + Vanilla JS,**无任何外部 CDN 依赖**
 
 ## 📁 目录结构
@@ -74,7 +73,6 @@ SimpleWMS/
 ├── sql/
 │   └── mysql-schema.sql        # MySQL 建库脚本
 ├── .m2-repo/            # 离线 Maven 镜像(首次构建后生成)
-├── data/                # H2 数据文件(运行时生成)
 ├── target/
 │   └── simple-wms.jar   # Spring Boot fat-jar
 └── src/main/
@@ -86,9 +84,8 @@ SimpleWMS/
     │   ├── controller/ Dashboard / Product / Inbound / Outbound / Ledger + 异常处理
     │   └── db/         DataSeeder
     └── resources/
-        ├── application.yml        # 默认 (H2)
-        ├── application-mysql.yml  # MySQL profile
-        ├── schema.sql             # H2/MySQL 兼容 DDL
+        ├── application.yml        # 默认配置(直连 MySQL,支持 env 覆盖)
+        ├── application-mysql.yml  # mysql profile(容器内 SET NAMES utf8mb4)
         └── static/                # 前端 SPA
             ├── index.html
             ├── css/app.css

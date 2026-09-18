@@ -12,6 +12,7 @@ public class AppUser {
     private String role;          // "ADMIN" | "OPERATOR"
     private Boolean enabled;
     private Boolean mustChangePw;
+    private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -29,6 +30,8 @@ public class AppUser {
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
     public Boolean getMustChangePw() { return mustChangePw; }
     public void setMustChangePw(Boolean mustChangePw) { this.mustChangePw = mustChangePw; }
+    public String getCreatedBy() { return createdBy; }
+    public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

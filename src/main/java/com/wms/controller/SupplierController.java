@@ -21,14 +21,16 @@ public class SupplierController {
     }
 
     @GetMapping
-    public ApiResponse<List<Supplier>> list(@RequestParam(value = "keyword", required = false) String keyword) {
-        return ApiResponse.ok(supplierService.list(keyword));
+    public ApiResponse<List<Supplier>> list(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "status", required = false) String status) {
+        return ApiResponse.ok(supplierService.list(keyword, status));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<Supplier> get(@PathVariable int id) {
         Supplier s = supplierService.get(id);
-        if (s == null) return ApiResponse.fail(404, "供应商不存在");
+        if (s == null) throw new NotFoundException("供应商不存在");
         return ApiResponse.ok(s);
     }
 

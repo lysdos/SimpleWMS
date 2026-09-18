@@ -9,10 +9,15 @@
 --
 --  所有表与字段均带 COMMENT,便于用 Navicat / DBeaver /
 --  information_schema 直接查看语义(数据库设计规范要求)。
---  改结构后请同步维护:
---    - src/main/resources/schema.sql        (H2,本地默认 profile)
---    - sql/mysql-migrate-YYYY-MM-DD*.sql    (已上线库的增量迁移)
+--  本文件是全项目唯一的库结构定义(H2 已移除,应用不再执行建表脚本)。
+--  开发阶段改结构直接改本文件:全新库(docker compose down -v 后重启)即按新结构建表;
+--  现有开发库手工执行一次对应的 ALTER 即可,不保留迁移脚本(避免无用文件堆积)。
+--  待正式上线后,再改为"本文件 + sql/mysql-migrate-YYYY-MM-DD*.sql 增量迁移"模式。
 -- ============================================================
+
+-- 关键:docker entrypoint 首次建表用的 mysql 客户端默认 latin1(容器 locale 为
+-- POSIX),中文 COMMENT 会被双重编码存坏。SET NAMES 强制本连接用 utf8mb4。
+SET NAMES utf8mb4;
 
 CREATE DATABASE IF NOT EXISTS simple_wms
     DEFAULT CHARACTER SET utf8mb4
@@ -279,7 +284,7 @@ CREATE TABLE IF NOT EXISTS stock_check (
     id              INT NOT NULL AUTO_INCREMENT COMMENT '主键',
     check_no        VARCHAR(64) NOT NULL COMMENT '盘点单号(唯一,格式 CK-yyyyMMddHHmmss-序号)',
     scope           VARCHAR(16) NOT NULL DEFAULT 'ALL' COMMENT '盘点范围:FULL=全库 / KEYWORD=按关键字 / LOCATION=按库位',
-    scope_keyword   VARCHAR(128) DEFAULT NULL COMMENT '范围关键字(scope=KEYWORD 时使用)',
+    scope_keyword   VARCHAR(512) DEFAULT NULL COMMENT '范围关键字(scope=SKU 时支持多 SKU,逗号分隔,输入上限 500 字符;LOCATION 时为库位编码)',
     remark          VARCHAR(255) DEFAULT NULL COMMENT '备注',
     created_by      VARCHAR(64) NOT NULL COMMENT '创建人',
     status          VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT '状态:DRAFT=盘点中 / COMMITTED=已提交 / CANCELLED=已取消',

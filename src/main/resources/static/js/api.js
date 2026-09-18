@@ -22,6 +22,11 @@ const api = {
         try { data = await res.json(); }
         catch (e) { data = { code: res.status, message: '响应解析失败' }; }
         if (!res.ok) throw new Error(data.message || ('HTTP ' + res.status));
+        // 后端有两套"资源不存在"约定:抛异常(上面已被 !res.ok 拦下,真 4xx),
+        // 或 controller 直接 return ApiResponse.fail(404, ...) —— 后者是 HTTP 200
+        // 只把 code 放在 body 里。不看 body 的 code 就会当成成功返回 null,
+        // 调用方拿到 null 继续渲染,用户什么都看不到。
+        if (data.code) throw new Error(data.message || ('业务错误 code=' + data.code));
         return data.data;
     },
     get(url)        { return fetch(url, { headers: this._hdr() }).then(r => this._handle(r)); },
@@ -82,7 +87,14 @@ function freshModalOk(text) {
 
 function showModal(title, bodyHtml, onOk) {
     document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = bodyHtml;
+    const modalBody = document.getElementById('modal-body');
+    // 重置内联样式:盘点详情弹窗为 sticky 贴底按钮行会把 paddingBottom 置 0,
+    // 不重置的话下一个弹窗会继承,底部凭空少 20px 内边距
+    modalBody.style.paddingBottom = '';
+    // 同理清掉上一个弹窗挂的事件(如盘点导出菜单的"点空白收起"),
+    // 否则残留监听会作用到后续所有弹窗上
+    modalBody.onclick = null;
+    modalBody.innerHTML = bodyHtml;
     document.getElementById('modal-mask').hidden = false;
     // 文案也必须每次重置:上一个弹窗可能把按钮改成"关闭"(如条码/详情),
     // 不重置的话下一个提交型弹窗会继承"关闭"文案。需要自定义文案的调用方
@@ -111,6 +123,10 @@ function showModal(title, bodyHtml, onOk) {
 }
 function closeModal() {
     document.getElementById('modal-mask').hidden = true;
+    // 盘点详情弹窗会给 modal-body 留下 paddingBottom=0 的内联样式;
+    // 部分弹窗(出入库单编辑/详情等)不走 showModal 直接 innerHTML,
+    // 在这里统一清掉,避免它们继承 0 底边距
+    document.getElementById('modal-body').style.paddingBottom = '';
 }
 
 function confirmModal(message, onOk) {

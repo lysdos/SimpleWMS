@@ -73,7 +73,7 @@ public class InventoryItemController {
     @GetMapping("/{id}")
     public ApiResponse<InventoryItem> get(@PathVariable int id) {
         InventoryItem it = itemService.get(id);
-        if (it == null) return ApiResponse.fail(404, "库存单元不存在");
+        if (it == null) throw new NotFoundException("库存单元不存在");
         return ApiResponse.ok(it);
     }
 
@@ -95,7 +95,7 @@ public class InventoryItemController {
     @GetMapping("/by-code/{code}")
     public ApiResponse<InventoryItem> byCode(@PathVariable String code) {
         InventoryItem it = itemService.findByCode(code);
-        if (it == null) return ApiResponse.fail(404, "编码不存在: " + code);
+        if (it == null) throw new NotFoundException("编码不存在: " + code);
         return ApiResponse.ok(it);
     }
 
@@ -103,7 +103,7 @@ public class InventoryItemController {
     @GetMapping("/by-epc/{epc}")
     public ApiResponse<InventoryItem> byEpc(@PathVariable String epc) {
         InventoryItem it = itemService.findByCode(epc);
-        if (it == null) return ApiResponse.fail(404, "EPC 不存在: " + epc);
+        if (it == null) throw new NotFoundException("EPC 不存在: " + epc);
         return ApiResponse.ok(it);
     }
 
@@ -114,10 +114,10 @@ public class InventoryItemController {
     @GetMapping("/by-code/{code}/product")
     public ApiResponse<Product> productByCode(@PathVariable String code) {
         InventoryItem it = itemService.findByCode(code);
-        if (it == null) return ApiResponse.fail(404, "编码不存在: " + code);
-        return productService.get(it.getProductId())
-                .map(ApiResponse::ok)
-                .orElseGet(() -> ApiResponse.fail(404, "商品不存在: id=" + it.getProductId()));
+        if (it == null) throw new NotFoundException("编码不存在: " + code);
+        Product p = productService.get(it.getProductId())
+                .orElseThrow(() -> new NotFoundException("商品不存在: id=" + it.getProductId()));
+        return ApiResponse.ok(p);
     }
 
     // ====================== 条码 PNG ======================

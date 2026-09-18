@@ -1,27 +1,11 @@
-# 切到 MySQL 模式启动:
-#   java -jar simple-wms.jar --spring.profiles.active=mysql
-# 或设置环境变量 SPRING_PROFILES_ACTIVE=mysql
-#
-# 连接信息(url / username / password)统一从环境变量 / 启动参数传入,
-# 这里不写死,避免和 docker-compose env 冲突。约定:
-#   SPRING_DATASOURCE_URL       jdbc:mysql://<host>:3306/<db>?...
-#   SPRING_DATASOURCE_USERNAME  <user>
-#   SPRING_DATASOURCE_PASSWORD  <pass>
+# mysql profile:Docker 容器内使用(SPRING_PROFILES_ACTIVE=mysql)。
+# 现在默认 profile 也已直连 MySQL,本 profile 只保留容器内的差异项:
+#   - hikari 连接初始化 SET NAMES utf8mb4
+#   - 连接信息仍统一从环境变量传入(docker-compose 注入服务名 mysql:3306)
 
 spring:
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
     # 关键:连接建立后立刻 SET NAMES utf8mb4,强制 client/connection/results 都是 utf8mb4
     # (MySQL 8 在 docker 镜像里默认 character_set_client=latin1,会导致中文 mojibake)
     hikari:
       connection-init-sql: "SET NAMES utf8mb4"
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
-      continue-on-error: true
-  # 关闭 H2 控制台:MySQL profile 不应暴露内置 H2 servlet
-  # (曾被 nginx 反代到 /h2-console,造成远端可用的通用 JDBC 控制台)
-  h2:
-    console:
-      enabled: false

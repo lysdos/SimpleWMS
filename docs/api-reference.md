@@ -10,27 +10,40 @@
 
 所有响应统一为 `ApiResponse<T>`:
 ```json
-{ "code": 0, "msg": "ok", "data": <T> }
+{ "code": 0, "message": "ok", "data": <T> }
 ```
 
 - `code = 0` 成功
 - `code != 0` 失败,语义见各端点
-- `msg` 人类可读消息(可能含中文)
+- `message` 人类可读消息(可能含中文)。**注意字段名是 `message`,不是 `msg`** —— 客户端 DTO 必须按 `message` 绑定,否则错误消息会解析成 null。
 
 ### 1.2 HTTP 状态码 vs 业务码
 
 | HTTP | 触发 | 业务 code 范围 |
 |---|---|---|
 | 200 | 成功 | 0 |
-| 400 | 参数错误(`IllegalArgumentException` 普通错) | 400 |
+| 400 | 参数错误:`IllegalArgumentException` 普通错 / 路径参数类型不匹配 / 缺必填查询参数 | 400 |
 | 401 | JWT 缺失 / 无效 / 过期(`JwtAuthFilter` 拦截) | 401 |
 | 403 | 缺角色(`@RequireRole`) | 403 |
-| 404 | 资源不存在(后端 `IllegalArgumentException` 文本以"不存在"开头) | 404 |
+| 404 | 资源不存在:抛 `NotFoundException`(controller 查不到资源),或 `IllegalArgumentException` 文本以 `码不存在` / `出库单不存在, id=` / `入库单不存在, id=` / `用户不存在` 开头(service 层) | 404 |
+| 405 | 路径匹配但 HTTP 方法不支持 | 405 |
+| 406 | 客户端 `Accept` 无法满足(Spring 自身处理,**响应体为空**) | — |
 | 409 | 业务冲突(库存不足 / 状态不对) | 409 |
+| 415 | 请求 `Content-Type` 不支持(应为 `application/json`) | 415 |
 | 422 | 不可处理实体(扫码校验失败) | 422 |
 | 500 | 服务器异常 | 500 |
 
-`GlobalExceptionHandler.badArg` 根据抛出位置文本前缀在 400 / 404 之间分流(参见 `database-schema.md` 与 `prd-input-backend.md` B6)。
+`GlobalExceptionHandler.badArg` 根据抛出位置文本前缀在 400 / 404 之间分流(参见 `database-schema.md` 与 `prd-input-backend.md` B6)。前缀是**精确匹配的固定清单**(见上表 404 行),不是"包含'不存在'即为 404" —— 例如 `SKU 不存在` 会落到 400。
+
+#### 1.2.1 404 一定是真 404(2026-09-18 起)
+
+**HTTP 状态码即 404,body 里 `code` 也是 404**,两处一致。
+
+早先有 8 个 GET 端点(products / locations / suppliers / stock-checks / inventory items 的 `{id}` 与 `by-code`、`by-epc` 等)用 `return ApiResponse.fail(404, ...)` 表达"不存在"。Spring 对普通 `@RestController` 返回值一律用 HTTP **200**,于是这些响应的状态码是 200、只有 body 里 `code=404` —— 只看状态码的客户端(web `res.ok` / PDA `isSuccessful`)会当成成功、拿到 `null` 静默吞掉,用户看不到任何提示。
+
+现已统一为抛 `NotFoundException` → `GlobalExceptionHandler` → 真 404。**新增接口请照此办理,不要再直接 `return ApiResponse.fail(404, ...)`。**
+
+客户端仍保留两层防御(不依赖状态码单点判断):web 端 `api.js._handle` 在 `res.ok` 之后还有 `if (data.code) throw ...`;PDA 端 `ApiClient` 走 `ar.code != 0` 分支,且非 2xx 时也会尝试从 body 取 `message`。
 
 ### 1.3 鉴权
 
@@ -67,9 +80,9 @@
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误码 |
 |---|---|---|---|---|---|
 | POST | `/login` | 公开 | `{username, password}` | `{token, username, role, mustChangePw}` | 401 用户名密码错 |
-| POST | `/logout` | 已登录 | — | `{code:0,msg:ok}` | — |
+| POST | `/logout` | 已登录 | — | `{code:0,message:ok}` | — |
 | GET | `/me` | 已登录 | — | `{userId, username, role}` | 401 |
-| POST | `/me/change-password` | 已登录 | `{oldPassword, newPassword}` | `{code:0,msg:ok}` | 400 旧密码错 |
+| POST | `/me/change-password` | 已登录 | `{oldPassword, newPassword}` | `{code:0,message:ok}` | 400 旧密码错 |
 
 ### 2.2 仪表盘 — `/api/dashboard`
 
@@ -87,7 +100,7 @@
 | GET | `/{id}` | 已登录 | — | `{...同上 + suppliers:[]}` | 404 |
 | POST | `/` | **ADMIN** | `{sku, name, category?, unit?, location?, quantity?, unitPrice?, lowStock?, remark?, suppliers?:[]}` | 创建后 | 400 |
 | PUT | `/{id}` | **ADMIN** | 同上 | 更新后 | 404 |
-| DELETE | `/{id}` | **ADMIN** | — | `{code:0,msg:ok}` | 404 |
+| DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404 |
 
 `suppliers[]` 元素:`{supplierId, isDefault, unitPrice?, remark?}`。
 
@@ -109,9 +122,11 @@
 
 | 方法 | URL | 请求 | 备注 |
 |---|---|---|---|
-| GET | `/` | — | 用户列表 |
+| GET | `/?keyword&role&status&beginDate&endDate` | — | 用户列表(参数均可省略) |
+| GET | `/{id}` | — | 单个用户;不存在 → `用户不存在` |
 | POST | `/` | `{username, password, role}` | 创建 |
-| POST | `/{id}/password` | `{password}` | 管理员重置 |
+| PUT | `/{id}` | `{role}` | 改角色 |
+| POST | `/{id}/password` | `{password}` | 管理员重置(用户不存在 → 404) |
 | POST | `/{id}/enabled` | `{enabled: bool}` | 启停 |
 | DELETE | `/{id}` | — | 不能删自己 / 最后一名 ADMIN |
 

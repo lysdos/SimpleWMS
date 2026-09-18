@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class StockCheckDao {
@@ -80,18 +79,13 @@ public class StockCheckDao {
             ps.setInt(9, c.getDiffCount() == null ? 0 : c.getDiffCount());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k == null) {
-            Map<String, Object> keys = kh.getKeys();
-            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
-        }
-        return k == null ? 0 : k.intValue();
+        return GeneratedKeys.id(kh);
     }
 
     public void insertItem(StockCheckItem it) {
         String sql = "INSERT INTO stock_check_item " +
-                "(check_id, inventory_item_id, code, sku, product_name, location_code, system_qty, row_remark) " +
-                "VALUES (?,?,?,?,?,?,?,?)";
+                "(check_id, inventory_item_id, code, sku, product_name, location_code, system_qty, counted_qty, diff, row_remark) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
@@ -102,11 +96,28 @@ public class StockCheckDao {
             ps.setString(5, it.getProductName());
             ps.setString(6, it.getLocationCode());
             ps.setInt(7, it.getSystemQty());
-            ps.setString(8, it.getRowRemark());
+            // 快照行为未盘(写 NULL);扫到单外码追加的盘盈行直接带实盘数 1,
+            // diff 必须一并写入,否则 Web 差异列显示空白却已计入差异数
+            Integer counted = it.getCountedQty();
+            if (counted == null) {
+                ps.setNull(8, java.sql.Types.INTEGER);
+                ps.setNull(9, java.sql.Types.INTEGER);
+            } else {
+                ps.setInt(8, counted);
+                ps.setInt(9, counted - it.getSystemQty());
+            }
+            ps.setString(10, it.getRowRemark());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k != null) it.setId(k.intValue());
+        int k = GeneratedKeys.id(kh);
+        if (k != 0) it.setId(k);
+    }
+
+    /** 删除明细行(仅调用方已校验 DRAFT);返回影响行数 */
+    public int deleteItem(int checkId, int itemId) {
+        return jdbc.update(
+                "DELETE FROM stock_check_item WHERE id = ? AND check_id = ?",
+                itemId, checkId);
     }
 
     public StockCheck findCheckById(int id) {
@@ -164,12 +175,13 @@ public class StockCheckDao {
                 countedQty, remark, itemId);
     }
 
-    /** 仅累加 counted_qty(扫码场景),不覆盖 row_remark */
+    /** 设置 counted_qty 并同步 diff(= counted - system_qty,由 SQL 端计算);
+     *  扫码/提交补 0 场景都走这里,保证 Web 差异列不再依赖手工 setItemDiff */
     public int updateCountedQty(int itemId, int countedQty) {
         return jdbc.update(
-                "UPDATE stock_check_item SET counted_qty = ?, " +
+                "UPDATE stock_check_item SET counted_qty = ?, diff = ? - system_qty, " +
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                countedQty, itemId);
+                countedQty, countedQty, itemId);
     }
 
     public int setItemDiff(int itemId, int diff) {
@@ -178,11 +190,11 @@ public class StockCheckDao {
                 diff, itemId);
     }
 
-    public int updateStats(int checkId, int countedCount, int diffCount) {
+    public int updateStats(int checkId, int totalCount, int countedCount, int diffCount) {
         return jdbc.update(
-                "UPDATE stock_check SET counted_count = ?, diff_count = ?, " +
+                "UPDATE stock_check SET total_count = ?, counted_count = ?, diff_count = ?, " +
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                countedCount, diffCount, checkId);
+                totalCount, countedCount, diffCount, checkId);
     }
 
     public int commit(int checkId) {

@@ -94,6 +94,7 @@
     <string name="outbound_detail_title">出库单详情</string>
     <string name="outbound_customer">客户/领用部门</string>
     <string name="outbound_edit_header_title">编辑出库单</string>
+    <string name="outbound_pick_qty">出库数量</string>
     <string name="outbound_header_customer_hint">客户/领用部门(可选)</string>
     <string name="confirm_cancel_outbound">确认取消该出库单?草稿明细将被清理,已锁定库存将释放,操作不可恢复。</string>
 
@@ -118,11 +119,16 @@
     <string name="stocktake_title">库存盘点</string>
     <string name="stocktake_new_title">创建盘点单</string>
     <string name="stocktake_detail_title">盘点单详情</string>
-    <string name="stocktake_warehouse">盘点仓库</string>
-    <string name="stocktake_mode">盘点方式</string>
-    <string name="stocktake_mode_all">全盘</string>
-    <string name="stocktake_mode_movement">动碰盘</string>
-    <string name="stocktake_mode_sample">抽样盘</string>
+    <string name="stocktake_scope">盘点方式</string>
+    <string name="stocktake_scope_all">全部在库单元</string>
+    <string name="stocktake_scope_sku">按 SKU</string>
+    <string name="stocktake_scope_location">按库位</string>
+    <string name="stocktake_sku_label">SKU</string>
+    <string name="stocktake_sku_hint">输入 SKU,多个用逗号分隔(最多 50 个)</string>
+    <string name="stocktake_remark">备注</string>
+    <string name="stocktake_remark_hint">例如:月末大盘点</string>
+    <string name="stocktake_err_sku_empty">请输入 SKU 关键字</string>
+    <string name="stocktake_err_loc_empty">请选择库位</string>
     <string name="stocktake_actual_qty">实盘数量</string>
     <string name="stocktake_book_qty">账面数量</string>
     <string name="stocktake_diff">差异</string>
@@ -131,12 +137,17 @@
     <string name="stocktake_status_consistent">一致</string>
     <string name="stocktake_status_over">盘盈</string>
     <string name="stocktake_status_short">盘亏</string>
-    <string name="stocktake_scan_hint">扫码定位盘点行,或在下方表格中直接手填实盘数量。</string>
-    <string name="stocktake_create_fmt">创建后系统会按仓库 + 方式生成盘点行,等待逐项扫码 / 手填实盘数量。</string>
+    <string name="stocktake_scan_hint">RFID/条码扫码定位盘点行;扫到本单之外(在库或非在库)的码会自动追加一行记为盘盈,误扫可点行上的「删除」清理。</string>
+    <string name="stocktake_create_fmt">创建后系统会立即快照当前在库单元,等待逐项扫码 / 手填实盘数量。</string>
     <string name="stocktake_tab_todo">待执行</string>
     <string name="stocktake_tab_done">已完成</string>
-    <string name="stocktake_submit_confirm_unfinished">还有 %1$d 行未盘,仍要提交吗?未盘的将按账面无差异处理。</string>
-    <string name="stocktake_submit_confirm_all">确认提交盘点结果?提交后将按差异校正库存。</string>
+    <string name="stocktake_submit_confirm_unfinished">还有 %1$d 行未盘,未盘行将按 0 计入盘亏。仍要提交吗?</string>
+    <string name="stocktake_scan_rfid">RFID 扫码</string>
+    <string name="stocktake_scan_barcode">条码扫码</string>
+    <string name="action_stop">停止</string>
+    <string name="stocktake_row_delete">删除</string>
+    <string name="stocktake_row_delete_confirm">删除该盘点行(%1$s)?删除后可重新扫码记盘盈。</string>
+    <string name="stocktake_submit_confirm_all">确认提交盘点结果?提交后将生成差异报告(不调整库存),未盘行按 0 计入盘亏。</string>
     <string name="stocktake_line_fmt">%1$s · %2$s · %3$s</string>
 
     <!-- 详情页通用 -->

@@ -39,6 +39,16 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             style="@style/Status.Pill" />
+
+        <TextView
+            android:id="@+id/btn_row_del"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/space_sm"
+            android:padding="6dp"
+            android:text="@string/stocktake_row_delete"
+            android:textColor="@color/danger"
+            android:textSize="@dimen/text_caption" />
     </LinearLayout>
 
     <LinearLayout

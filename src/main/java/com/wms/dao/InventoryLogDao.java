@@ -9,7 +9,6 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class InventoryLogDao {
@@ -58,11 +57,7 @@ public class InventoryLogDao {
             else ps.setInt(10, log.getOrderId());
             return ps;
         }, kh);
-        Map<String, Object> keys = kh.getKeys();
-        if (keys != null && keys.get("id") != null) {
-            return ((Number) keys.get("id")).intValue();
-        }
-        return 0;
+        return GeneratedKeys.id(kh);
     }
 
     /**

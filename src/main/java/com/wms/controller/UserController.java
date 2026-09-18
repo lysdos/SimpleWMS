@@ -24,8 +24,18 @@ public class UserController {
     }
 
     @GetMapping
-    public ApiResponse<List<AppUser>> list() {
-        return ApiResponse.ok(userService.list());
+    public ApiResponse<List<AppUser>> list(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String beginDate,
+            @RequestParam(required = false) String endDate) {
+        return ApiResponse.ok(userService.findUsers(keyword, role, status, beginDate, endDate));
+    }
+
+    @GetMapping("/{id}")
+    public ApiResponse<AppUser> get(@PathVariable int id) {
+        return ApiResponse.ok(userService.get(id));
     }
 
     @PostMapping
@@ -49,6 +59,14 @@ public class UserController {
     public ApiResponse<Void> setEnabled(@PathVariable int id, @RequestBody Map<String, Boolean> body) {
         userService.setEnabled(id, Boolean.TRUE.equals(body.get("enabled")));
         return ApiResponse.ok();
+    }
+
+    @PutMapping("/{id}")
+    public ApiResponse<AppUser> update(@PathVariable int id, @RequestBody Map<String, String> body) {
+        String role = body.get("role");
+        AppUser u = userService.updateRole(id, role);
+        u.setPasswordHash(null);
+        return ApiResponse.ok(u);
     }
 
     /**

@@ -25,15 +25,17 @@ public class ProductController {
     }
 
     @GetMapping
-    public ApiResponse<List<Product>> list(@RequestParam(value = "keyword", required = false) String keyword) {
-        return ApiResponse.ok(productService.list(keyword));
+    public ApiResponse<List<Product>> list(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "supplier", required = false) String supplier) {
+        return ApiResponse.ok(productService.list(keyword, supplier));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<Product> get(@PathVariable int id) {
-        return productService.get(id)
-                .map(ApiResponse::ok)
-                .orElseGet(() -> ApiResponse.fail(404, "商品不存在"));
+        Product p = productService.get(id)
+                .orElseThrow(() -> new NotFoundException("商品不存在"));
+        return ApiResponse.ok(p);
     }
 
     @PostMapping

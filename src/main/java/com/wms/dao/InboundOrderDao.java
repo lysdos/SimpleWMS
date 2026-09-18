@@ -12,7 +12,6 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class InboundOrderDao {
@@ -84,12 +83,7 @@ public class InboundOrderDao {
             ps.setString(7, o.getStatus() == null ? InboundOrder.STATUS_DRAFT : o.getStatus());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k == null) {
-            Map<String, Object> keys = kh.getKeys();
-            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
-        }
-        return k == null ? 0 : k.intValue();
+        return GeneratedKeys.id(kh);
     }
 
     public int insertItem(InboundOrderItem it) {
@@ -115,8 +109,8 @@ public class InboundOrderDao {
             if (it.getShelfLifeDays() == null) ps.setNull(13, java.sql.Types.INTEGER); else ps.setInt(13, it.getShelfLifeDays());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k != null) it.setId(k.intValue());
+        int k = GeneratedKeys.id(kh);
+        if (k != 0) it.setId(k);
         return rows;
     }
 

@@ -123,7 +123,19 @@ public class ApiClient {
                 }
                 if (rb != null) rb.close();
                 if (!resp.isSuccessful()) {
-                    final String msg = "HTTP " + resp.code() + ": " + bodyStr;
+                    // 非 2xx 也优先取 ApiResponse.message。后端"资源不存在"现在是真 404,
+                    // 若把整段 body 抛给用户会显示成 HTTP 404: {"code":404,...},既难读
+                    // 又把接口实现细节泄到界面上。body 不是 JSON(如网关错误页)时退回原样。
+                    String business = null;
+                    try {
+                        ApiResponse<?> er = gson.fromJson(bodyStr, ApiResponse.class);
+                        if (er != null && er.message != null && !er.message.isEmpty()) {
+                            business = er.message;
+                        }
+                    } catch (RuntimeException ignore) {
+                        // 解析失败:用下面的兜底消息
+                    }
+                    final String msg = business != null ? business : "HTTP " + resp.code() + ": " + bodyStr;
                     ui.post(() -> cb.onError(-2, msg));
                     return;
                 }
@@ -137,7 +149,7 @@ public class ApiClient {
                 if (ar == null) { ui.post(() -> cb.onError(-3, "空响应")); return; }
                 if (ar.code != 0) {
                     final int c = ar.code;
-                    final String m = ar.msg == null ? "" : ar.msg;
+                    final String m = ar.message == null ? "" : ar.message;
                     ui.post(() -> cb.onError(c, m));
                     return;
                 }

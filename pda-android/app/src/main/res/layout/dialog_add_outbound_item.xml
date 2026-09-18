@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fillViewport="true"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/inbound_pick_product"
+            style="@style/Text.Caption" />
+
+        <Spinner
+            android:id="@+id/sp_product"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/outbound_pick_qty"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_qty"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="number" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_row_remark"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_row_remark"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="text"
+            android:hint="@string/inbound_row_remark" />
+    </LinearLayout>
+</ScrollView>

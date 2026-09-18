@@ -8,29 +8,92 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/stocktake_warehouse"
+        android:text="@string/stocktake_scope"
         style="@style/Text.Caption" />
 
-    <Spinner
-        android:id="@+id/sp_warehouse"
+    <RadioGroup
+        android:id="@+id/rg_scope"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_xs"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/rb_scope_all"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/touch_min"
+            android:checked="true"
+            android:text="@string/stocktake_scope_all"
+            android:textColor="@color/text_primary" />
+
+        <RadioButton
+            android:id="@+id/rb_scope_sku"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/touch_min"
+            android:text="@string/stocktake_scope_sku"
+            android:textColor="@color/text_primary" />
+
+        <RadioButton
+            android:id="@+id/rb_scope_location"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="@dimen/touch_min"
+            android:text="@string/stocktake_scope_location"
+            android:textColor="@color/text_primary" />
+    </RadioGroup>
+
+    <TextView
+        android:id="@+id/tv_keyword_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/space_md"
+        android:text="@string/stocktake_sku_label"
+        android:visibility="gone"
+        style="@style/Text.Caption" />
+
+    <EditText
+        android:id="@+id/et_keyword"
         android:layout_width="match_parent"
         android:layout_height="@dimen/touch_min"
         android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input" />
+        android:background="@drawable/bg_input"
+        android:paddingStart="@dimen/space_md"
+        android:paddingEnd="@dimen/space_md"
+        android:hint="@string/stocktake_sku_hint"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_hint"
+        android:inputType="text"
+        android:visibility="gone" />
+
+    <Spinner
+        android:id="@+id/sp_location"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/touch_min"
+        android:layout_marginTop="@dimen/space_xs"
+        android:background="@drawable/bg_input"
+        android:visibility="gone" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_mode"
+        android:text="@string/stocktake_remark"
         style="@style/Text.Caption" />
 
-    <Spinner
-        android:id="@+id/sp_mode"
+    <EditText
+        android:id="@+id/et_remark"
         android:layout_width="match_parent"
         android:layout_height="@dimen/touch_min"
         android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input" />
+        android:background="@drawable/bg_input"
+        android:paddingStart="@dimen/space_md"
+        android:paddingEnd="@dimen/space_md"
+        android:hint="@string/stocktake_remark_hint"
+        android:textColor="@color/text_primary"
+        android:textColorHint="@color/text_hint"
+        android:inputType="text" />
 
     <TextView
         android:layout_width="wrap_content"

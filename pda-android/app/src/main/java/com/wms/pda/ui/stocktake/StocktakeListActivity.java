@@ -5,7 +5,11 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.EditText;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
@@ -27,7 +31,7 @@ import java.util.List;
 
 /**
  * 盘点单列表:待执行 / 已完成 两个 Tab。
- * "+" 按钮弹创建盘点单对话框(仓库 + 方式),创建后跳详情。
+ * "+" 按钮弹创建盘点单对话框(盘点方式 + 备注),创建后跳详情。
  */
 public class StocktakeListActivity extends AppCompatActivity {
 
@@ -90,21 +94,39 @@ public class StocktakeListActivity extends AppCompatActivity {
 
     private void showCreateDialog() {
         View root = LayoutInflater.from(this).inflate(R.layout.dialog_stocktake_new, null, false);
-        Spinner spWh = root.findViewById(R.id.sp_warehouse);
-        Spinner spMode = root.findViewById(R.id.sp_mode);
+        RadioGroup rgScope = root.findViewById(R.id.rg_scope);
+        RadioButton rbAll = root.findViewById(R.id.rb_scope_all);
+        RadioButton rbSku = root.findViewById(R.id.rb_scope_sku);
+        RadioButton rbLoc = root.findViewById(R.id.rb_scope_location);
+        TextView tvKeywordLabel = root.findViewById(R.id.tv_keyword_label);
+        EditText etKeyword = root.findViewById(R.id.et_keyword);
+        Spinner spLocation = root.findViewById(R.id.sp_location);
+        EditText etRemark = root.findViewById(R.id.et_remark);
 
-        ArrayAdapter<String> whAd = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, new String[]{"主仓", "分仓"});
-        whAd.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spWh.setAdapter(whAd);
+        // 库位下拉(按库位盘点时选择,与 web 端一致)
+        List<String> locations = new ArrayList<>();
+        ArrayAdapter<String> locAd = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, locations);
+        locAd.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spLocation.setAdapter(locAd);
+        RepositoryProvider.get().listLocations(new WmsCallback<List<String>>() {
+            @Override public void onSuccess(List<String> data) {
+                locations.clear();
+                locations.addAll(data);
+                locAd.notifyDataSetChanged();
+            }
+            @Override public void onError(int code, String msg) { /* 库位加载失败时留空,提交时校验提示 */ }
+        });
 
-        ArrayAdapter<String> mdAd = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item,
-                new String[]{getString(R.string.stocktake_mode_all),
-                        getString(R.string.stocktake_mode_movement),
-                        getString(R.string.stocktake_mode_sample)});
-        mdAd.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spMode.setAdapter(mdAd);
+        // 盘点方式联动:ALL 隐藏输入,SKU 显示关键字输入框,LOCATION 显示库位下拉
+        Runnable syncVisibility = () -> {
+            boolean sku = rbSku.isChecked();
+            boolean loc = rbLoc.isChecked();
+            tvKeywordLabel.setVisibility(sku ? View.VISIBLE : View.GONE);
+            etKeyword.setVisibility(sku ? View.VISIBLE : View.GONE);
+            spLocation.setVisibility(loc ? View.VISIBLE : View.GONE);
+        };
+        rgScope.setOnCheckedChangeListener((g, id) -> syncVisibility.run());
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.stocktake_new_title)
@@ -114,13 +136,28 @@ public class StocktakeListActivity extends AppCompatActivity {
                 .create();
         dialog.setOnShowListener(d -> {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                String wh = (String) spWh.getSelectedItem();
-                String modeLabel = (String) spMode.getSelectedItem();
-                StocktakeOrder.Mode mode;
-                if (modeLabel.equals(getString(R.string.stocktake_mode_all)))       mode = StocktakeOrder.Mode.ALL;
-                else if (modeLabel.equals(getString(R.string.stocktake_mode_movement))) mode = StocktakeOrder.Mode.LOCATION;
-                else                                                                  mode = StocktakeOrder.Mode.SKU;
-                RepositoryProvider.get().createStocktake(wh, mode, new WmsCallback<StocktakeOrder>() {
+                String scope;
+                String keyword = "";
+                if (rbSku.isChecked()) {
+                    scope = "SKU";
+                    keyword = etKeyword.getText().toString().trim();
+                    if (keyword.isEmpty()) {
+                        Toast.makeText(this, R.string.stocktake_err_sku_empty, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                } else if (rbLoc.isChecked()) {
+                    scope = "LOCATION";
+                    Object sel = spLocation.getSelectedItem();
+                    keyword = sel == null ? "" : sel.toString();
+                    if (keyword.isEmpty()) {
+                        Toast.makeText(this, R.string.stocktake_err_loc_empty, Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                } else {
+                    scope = "ALL";
+                }
+                String remark = etRemark.getText().toString().trim();
+                RepositoryProvider.get().createStocktake(scope, keyword, remark, new WmsCallback<StocktakeOrder>() {
                     @Override public void onSuccess(StocktakeOrder o) {
                         Toast.makeText(StocktakeListActivity.this, "已创建盘点单 " + o.id, Toast.LENGTH_SHORT).show();
                         dialog.dismiss();

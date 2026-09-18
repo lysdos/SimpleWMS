@@ -185,7 +185,7 @@ public class ApiClient {
 请求流程:
 1. 解析外层 `ApiResponse`(Gson)
 2. `ar.code == 401` → `session.clear()` + 抛 `ApiException(ERR_AUTH)`
-3. `ar.code != 0` → 抛 `ApiException(ar.code, ar.msg)`
+3. `ar.code != 0` → 抛 `ApiException(ar.code, ar.message)`
 4. 二次 `gson.fromJson(JsonObject, dataType)` 解析 `data`
 
 ### 5.2 `ApiException`
@@ -206,7 +206,7 @@ public class ApiException extends Exception {
 
 | 类 | 关键字段 | 说明 |
 |---|---|---|
-| `ApiResponse<T>` | `code, msg, data` | 镜像后端壳 |
+| `ApiResponse<T>` | `code, message, data` | 镜像后端壳 |
 | `LoginRequest/Response` | username, password, token, role, mustChangePw | |
 | `ProductDto` | id, sku, name, category, unit, location, quantity, unitPrice, lowStock, remark | 数量类型 = Integer 包装类,Gson 安全 |
 | `LocationDto` | id, code, name, remark | |

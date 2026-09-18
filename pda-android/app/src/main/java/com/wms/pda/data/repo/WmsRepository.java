@@ -59,6 +59,9 @@ public interface WmsRepository {
     /** 修改 DRAFT 出库单头(客户/外部单号/备注) */
     void updateOutboundHeader(String orderId, String customer, String externalNo,
                               String remark, WmsCallback<OutboundOrder> cb);
+    /** 给 DRAFT 出库单追加一条明细(后端同时锁定库存单元)。返回最新单(含 lines) */
+    void addOutboundItem(String orderId, int productId, int quantity, String rowRemark,
+                         WmsCallback<OutboundOrder> cb);
 
     // ---- 库存 ----
     void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb);
@@ -72,11 +75,13 @@ public interface WmsRepository {
     // ---- 盘点 ----
     void listStocktake(boolean onlyPending, WmsCallback<List<StocktakeOrder>> cb);
     void getStocktake(String orderDbId, WmsCallback<StocktakeOrder> cb);
-    void createStocktake(String warehouse, StocktakeOrder.Mode mode, WmsCallback<StocktakeOrder> cb);
+    void createStocktake(String scope, String keyword, String remark, WmsCallback<StocktakeOrder> cb);
     /** 手填实盘数量;countedQty = -1 表示清空 */
     void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb);
-    /** 扫码定位行,countedQty += 1 */
+    /** 扫码定位行;单外码/非在库码由后端自动追加盘盈行 */
     void submitStocktakeScan(String orderId, String barcode, WmsCallback<StocktakeOrder> cb);
+    /** 删除盘点明细行(仅 DRAFT);用于清理盘盈自动追加的多余行 */
+    void deleteStocktakeItem(String orderDbId, String itemId, WmsCallback<Void> cb);
     void commitStocktake(String orderId, WmsCallback<StocktakeOrder> cb);
 
     // ---- 商品下拉:复用 searchInventory("") 拿到所有 InventoryItem,字段已够用(sku/name/barcode/uom) ----

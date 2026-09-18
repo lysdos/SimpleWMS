@@ -9,20 +9,17 @@ spring:
   application:
     name: simple-wms
 
+  # 默认连 MySQL:本地裸跑连 docker 暴露的 23306(需先 docker compose up -d mysql);
+  # Docker 容器内由 env SPRING_DATASOURCE_URL 覆盖为服务名 mysql:3306
   datasource:
-    url: jdbc:h2:file:./data/wmsdb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema.sql
-      continue-on-error: false
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:23306/simple_wms?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:${MYSQL_USER:wms}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${MYSQL_PASSWORD:wmspass}}
+  # 库结构统一由 sql/mysql-schema.sql 管理:
+  #   - Docker 部署:容器首次启动时经 docker-entrypoint-initdb.d 自动建表
+  #   - 本地裸跑:直接连 docker 已初始化好的库,应用侧不再执行建表脚本
+  # (删除了原 H2 的 schema.sql 及应用侧 sql.init,H2 已整体移除)
 
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss

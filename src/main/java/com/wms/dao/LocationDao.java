@@ -10,7 +10,6 @@ import org.springframework.stereotype.Repository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class LocationDao {
@@ -33,17 +32,24 @@ public class LocationDao {
     };
 
     public List<Location> findAll(String keyword) {
+        return findAll(keyword, null);
+    }
+
+    public List<Location> findAll(String keyword, String status) {
         StringBuilder sb = new StringBuilder("SELECT * FROM location WHERE 1=1");
-        Object[] args;
+        java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sb.append(" AND (code LIKE ? OR name LIKE ?)");
             String like = "%" + keyword.trim() + "%";
-            args = new Object[]{like, like};
-        } else {
-            args = new Object[]{};
+            args.add(like); args.add(like);
+        }
+        if ("enabled".equals(status)) {
+            sb.append(" AND enabled = TRUE");
+        } else if ("disabled".equals(status)) {
+            sb.append(" AND enabled = FALSE");
         }
         sb.append(" ORDER BY code ASC");
-        return jdbc.query(sb.toString(), ROW, args);
+        return jdbc.query(sb.toString(), ROW, args.toArray());
     }
 
     public Location findById(int id) {
@@ -67,12 +73,7 @@ public class LocationDao {
             ps.setBoolean(4, l.getEnabled() == null ? Boolean.TRUE : l.getEnabled());
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k == null) {
-            Map<String, Object> keys = kh.getKeys();
-            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
-        }
-        return k == null ? 0 : k.intValue();
+        return GeneratedKeys.id(kh);
     }
 
     public int update(Location l) {

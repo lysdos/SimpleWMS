@@ -30,6 +30,10 @@ public class ProductService {
         return productDao.findAll(keyword);
     }
 
+    public List<Product> list(String keyword, String supplier) {
+        return productDao.findAll(keyword, supplier);
+    }
+
     public Optional<Product> get(int id) {
         return productDao.findById(id);
     }

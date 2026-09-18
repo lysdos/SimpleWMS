@@ -11,7 +11,6 @@ import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Repository
 public class InventoryItemDao {
@@ -85,13 +84,9 @@ public class InventoryItemDao {
             if (i.getExpiryDate() == null) ps.setNull(14, java.sql.Types.DATE); else ps.setDate(14, java.sql.Date.valueOf(i.getExpiryDate()));
             return ps;
         }, kh);
-        Number k = kh.getKey();
-        if (k == null) {
-            Map<String, Object> keys = kh.getKeys();
-            if (keys != null && keys.get("id") != null) k = (Number) keys.get("id");
-        }
-        if (k != null) i.setId(k.intValue());
-        return k == null ? 0 : k.intValue();
+        int k = GeneratedKeys.id(kh);
+        if (k != 0) i.setId(k);
+        return k;
     }
 
     public InventoryItem findById(int id) {
@@ -391,20 +386,21 @@ public class InventoryItemDao {
     // ====== DRAFT 出库单 EPC 锁定(方案 A:建单立刻锁) ======
 
     /**
-     * 为 DRAFT 出库单按 FIFO 锁定 N 个 inventory_item(整件一物一码)。
+     * 为 DRAFT 出库单按 FEFO(先到期先出) 锁定 N 个 inventory_item(整件一物一码)。
      * 锁定后状态 = RESERVED,outbound_order_id 写上。
      * 优先 remaining=1 的标准单元,不足时退到 remaining>1 的老数据(整批锁)。
+     * 排序: 有生产日期的按日期升序(最早生产的先出),无日期的按 id 升序(FIFO)。
      * @return 锁定的(行数,总件数)
      */
     public ReserveResult reserveForOutbound(int productId, String locationCode, int needQty, int outboundOrderId) {
         ReserveResult result = new ReserveResult();
         if (needQty <= 0) return result;
 
-        // 1) remaining=1 标准单元
+        // 1) remaining=1 标准单元 (FEFO: 先到期先出)
         List<InventoryItem> units = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining = 1 " +
-                "ORDER BY id ASC",
+                "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
                 ROW, productId, locationCode);
         int left = needQty;
         for (InventoryItem it : units) {
@@ -419,11 +415,11 @@ public class InventoryItemDao {
         }
         if (left <= 0) return result;
 
-        // 2) remaining>1 老数据(整批锁,remaining 不动,等 commit 时再扣)
+        // 2) remaining>1 老数据(整批锁,remaining 不动,等 commit 时再扣) (FEFO: 先到期先出)
         List<InventoryItem> legacy = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining > 1 " +
-                "ORDER BY id ASC",
+                "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
                 ROW, productId, locationCode);
         for (InventoryItem it : legacy) {
             if (left <= 0) break;

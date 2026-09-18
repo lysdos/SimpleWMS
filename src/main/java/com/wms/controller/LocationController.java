@@ -21,14 +21,16 @@ public class LocationController {
     }
 
     @GetMapping
-    public ApiResponse<List<Location>> list(@RequestParam(value = "keyword", required = false) String keyword) {
-        return ApiResponse.ok(locationService.list(keyword));
+    public ApiResponse<List<Location>> list(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "status", required = false) String status) {
+        return ApiResponse.ok(locationService.list(keyword, status));
     }
 
     @GetMapping("/{id}")
     public ApiResponse<Location> get(@PathVariable int id) {
         Location l = locationService.get(id);
-        if (l == null) return ApiResponse.fail(404, "库位不存在");
+        if (l == null) throw new NotFoundException("库位不存在");
         return ApiResponse.ok(l);
     }
 

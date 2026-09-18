@@ -70,11 +70,14 @@ public class StockCheckService {
                         return i;
                     });
         } else if (StockCheck.SCOPE_SKU.equals(scope)) {
-            if (keyword == null || keyword.isBlank()) {
+            // 支持一次盘点多个 SKU:逗号/顿号/分号/空白 分隔
+            List<String> skus = parseSkus(keyword);
+            if (skus.isEmpty()) {
                 throw new IllegalArgumentException("SKU 模式必须提供 SKU 关键字");
             }
+            String placeholders = String.join(",", java.util.Collections.nCopies(skus.size(), "?"));
             items = jdbc.query(
-                    "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND sku = ? ORDER BY id",
+                    "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND sku IN (" + placeholders + ") ORDER BY id",
                     (rs, n) -> {
                         InventoryItem i = new InventoryItem();
                         i.setId(rs.getInt("id"));
@@ -84,7 +87,7 @@ public class StockCheckService {
                         i.setLocationCode(rs.getString("location_code"));
                         i.setRemaining(rs.getInt("remaining"));
                         return i;
-                    }, keyword.trim());
+                    }, skus.toArray());
         } else {
             if (keyword == null || keyword.isBlank()) {
                 throw new IllegalArgumentException("LOCATION 模式必须提供库位编码");
@@ -160,19 +163,13 @@ public class StockCheckService {
         dao.updateItemCount(itemId, countedQty, remark);
         dao.setItemDiff(itemId, countedQty - target.getSystemQty());
         // 重算盘点单统计(自己事务内写的行,后续 SELECT 一定可见)
-        List<StockCheckItem> all = dao.findItemsByCheckId(checkId);
-        int counted = 0, diffCount = 0;
-        for (StockCheckItem it : all) {
-            if (it.getCountedQty() != null) {
-                counted++;
-                if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
-            }
-        }
-        dao.updateStats(checkId, counted, diffCount);
+        recalcStats(checkId);
     }
 
     /**
      * 提交盘点 → 生成差异报告(status=COMMITTED),不再可改。
+     * 允许带未盘行提交:未盘(实盘数为空)按 0 落库,即计入盘亏。
+     * 注意:提交只固化差异记录,**不调整库存**(库存校正另行处理)。
      */
     @Transactional
     public StockCheck commit(int checkId) {
@@ -181,21 +178,39 @@ public class StockCheckService {
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可提交,当前: " + c.getStatus());
         }
-        // 校验所有明细都已填实盘数
-        List<StockCheckItem> items = dao.findItemsByCheckId(checkId);
-        boolean allFilled = items.stream().allMatch(it -> it.getCountedQty() != null);
-        if (!allFilled) {
-            throw new IllegalStateException("还有未填的实盘数,无法提交");
+        for (StockCheckItem it : dao.findItemsByCheckId(checkId)) {
+            if (it.getCountedQty() == null) dao.updateCountedQty(it.getId(), 0);
         }
         int rows = dao.commit(checkId);
         if (rows == 0) throw new IllegalStateException("提交失败,状态已变更");
-        // 提交后重新计算 diff 数(counted 不等于 system)
-        int diffCount = 0;
-        for (StockCheckItem it : items) {
-            if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
-        }
-        dao.updateStats(checkId, items.size(), diffCount);
+        recalcStats(checkId);
         return get(checkId);
+    }
+
+    /** 删除盘点明细行(仅 DRAFT);用于清理盘盈时自动追加的多余行 */
+    @Transactional
+    public void deleteItem(int checkId, int itemId) {
+        StockCheck c = dao.findCheckById(checkId);
+        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
+            throw new IllegalStateException("仅 DRAFT 可删除明细,当前: " + c.getStatus());
+        }
+        int rows = dao.deleteItem(checkId, itemId);
+        if (rows == 0) throw new IllegalArgumentException("明细不存在, id=" + itemId);
+        recalcStats(checkId);
+    }
+
+    /** 统一重算盘点单统计:总数 / 已盘数 / 差异数(未盘行不计入已盘,也不计入差异) */
+    private void recalcStats(int checkId) {
+        List<StockCheckItem> all = dao.findItemsByCheckId(checkId);
+        int counted = 0, diffCount = 0;
+        for (StockCheckItem it : all) {
+            if (it.getCountedQty() != null) {
+                counted++;
+                if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
+            }
+        }
+        dao.updateStats(checkId, all.size(), counted, diffCount);
     }
 
     /**
@@ -212,19 +227,18 @@ public class StockCheckService {
     }
 
     /**
-     * PDA 扫一个码 → 校验 + 累加该盘点单对应明细的 counted_qty。
-     * 流程:
-     *   1) 盘点单存在 + DRAFT
-     *   2) inventory_item 存在 + IN_STOCK
-     *   3) 在本盘点单明细中找到对应行(创建时已快照) → counted_qty += 1
-     *   4) 返回更新后的 StockCheck(含 items)
+     * PDA 扫一个码 → 定位本盘点单对应明细并记为已盘。
+     * 一库一码:每行对应一个实物单元(system_qty 恒为 1),因此**重复扫同一码是幂等的**,
+     * 第二次扫直接提示"已盘过",不再累加(旧实现 +1 会让实盘数无限增长)。
+     *
+     * 盘盈处理(只记账,不调整库存/单元状态):
+     *   - 在库但不在本单快照范围内的码 → 自动追加一行(应盘 0 / 实盘 1)
+     *   - 非在库(OUT/SCRAPPED/TRANSFERRED)的码 → 同样追加一行记盘盈
      *
      * 错误码(由 GlobalExceptionHandler 映射):
-     *   - 盘点单不存在 → 404
-     *   - 盘点单已 COMMITTED/CANCELLED → 409
-     *   - 码不存在 → 404
-     *   - 码已 OUT/SCRAPPED/TRANSFERRED → 409
-     *   - 码不在本盘点单明细中 → 422
+     *   - 盘点单不存在 → 404;盘点单已 COMMITTED/CANCELLED → 409
+     *   - 码不存在(inventory_item 无此码) → 404
+     *   - 该码已盘过 → 422
      */
     @Transactional
     public StockCheck scanCodeToCheck(int checkId, String code) {
@@ -238,32 +252,65 @@ public class StockCheckService {
         // 2) 查 inventory_item by code
         InventoryItem inv = itemDao.findByCode(code);
         if (inv == null) throw new IllegalArgumentException("码不存在");
-        if (!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus())) {
-            throw new IllegalStateException("该码状态不可盘点: " + inv.getStatus());
-        }
 
         // 3) 在本盘点单明细中找对应行
         StockCheckItem line = dao.findItemsByCheckId(checkId).stream()
                 .filter(it -> it.getInventoryItemId().equals(inv.getId()))
                 .findFirst()
-                .orElseThrow(() -> new UnprocessableException("该码不在本盘点单中,需先创建覆盖该范围的盘点单"));
+                .orElse(null);
 
-        // 4) 累加 counted_qty(不覆盖 row_remark)
-        int newQty = (line.getCountedQty() == null ? 0 : line.getCountedQty()) + 1;
-        dao.updateCountedQty(line.getId(), newQty);
-
-        // 5) 重算盘点单统计
-        List<StockCheckItem> all = dao.findItemsByCheckId(checkId);
-        int counted = 0, diffCount = 0;
-        for (StockCheckItem it : all) {
-            if (it.getCountedQty() != null) {
-                counted++;
-                if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
+        if (line != null) {
+            // 4a) 已在快照中:只要已有实盘数(含手工填的 0=盘亏)就视为已盘,
+            //     不再覆盖——避免物理扫描把人工登记的盘亏悄悄改成 1
+            if (line.getCountedQty() != null) {
+                throw new UnprocessableException("该码已盘过,无需重复扫描");
+            }
+            dao.updateCountedQty(line.getId(), 1);
+        } else {
+            // 4b) 不在快照中(单外码 / 非在库码):追加盘盈行(应盘 0 / 实盘 1)
+            StockCheckItem it = new StockCheckItem();
+            it.setCheckId(checkId);
+            it.setInventoryItemId(inv.getId());
+            it.setCode(inv.getCode());
+            it.setSku(inv.getSku());
+            it.setProductName(inv.getProductName());
+            it.setLocationCode(inv.getLocationCode());
+            it.setSystemQty(0);
+            it.setCountedQty(1);
+            try {
+                dao.insertItem(it);
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                // 并发/重复扫码同时插入同一单元:唯一键(check_id, inventory_item_id)冲突
+                throw new UnprocessableException("该码已盘过,无需重复扫描");
             }
         }
-        dao.updateStats(checkId, counted, diffCount);
 
+        // 5) 重算盘点单统计
+        recalcStats(checkId);
         return get(checkId);
+    }
+
+    /** 单次盘点允许的最大 SKU 数(防 IN 列表过长) */
+    private static final int MAX_SKUS = 50;
+    /** 原始输入字符上限,与 stock_check.scope_keyword VARCHAR(512) 对齐,防超列宽 */
+    private static final int MAX_SKU_INPUT_CHARS = 500;
+
+    /** 解析多 SKU 输入:逗号(中英)/顿号/分号/空白 分隔,去重去空,保序 */
+    private static List<String> parseSkus(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        if (raw.length() > MAX_SKU_INPUT_CHARS) {
+            throw new IllegalArgumentException(
+                    "SKU 列表过长(最多 " + MAX_SKU_INPUT_CHARS + " 字符),请分批创建盘点单");
+        }
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        for (String s : raw.split("[,，、;；\\s]+")) {
+            String v = s.trim();
+            if (!v.isEmpty()) set.add(v);
+        }
+        if (set.size() > MAX_SKUS) {
+            throw new IllegalArgumentException("一次最多盘点 " + MAX_SKUS + " 个 SKU,当前 " + set.size() + " 个");
+        }
+        return new ArrayList<>(set);
     }
 
     private static String genCheckNo() {

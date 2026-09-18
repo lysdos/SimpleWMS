@@ -194,6 +194,27 @@ public class OutboundService {
         }
         return getOrder(id);
     }
+    /**
+     * 给 DRAFT 出库单追加一条明细(PDA「添加明细」按钮)。
+     * 与新建单保持一致(方案 A):写明细行的同时立刻按 FIFO 锁定
+     * quantity 个 IN_STOCK 库存单元(RESERVED),库存不足事务回滚。
+     */
+    @Transactional public OutboundOrder addItemToDraft(int orderId, BatchItem b){
+        if(b==null||b.productId==null)throw new IllegalArgumentException("请选择商品");
+        if(b.quantity==null||b.quantity<=0)throw new IllegalArgumentException("出库数量必须大于 0");
+        requireDraft(orderId);
+        Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
+        OutboundOrderItem it=new OutboundOrderItem();
+        it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
+        it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
+        it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
+        it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
+        orderDao.insertItem(it);
+        String loc = blank(p.getLocation()) == null ? "默认库位" : p.getLocation();
+        itemDao.reserveForOutbound(p.getId(), loc, b.quantity, orderId);
+        orderDao.refreshAggregates(orderId);
+        return getOrder(orderId);
+    }
     @Transactional public void cancelDraft(int id){
         OutboundOrder o=requireDraft(id);
         // ====== 方案 A:取消时把所有 RESERVED 单元 → IN_STOCK,清 outbound_order_id ======
