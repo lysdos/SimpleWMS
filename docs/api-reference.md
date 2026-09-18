@@ -73,7 +73,7 @@
 
 ### 1.4 操作员字段
 
-服务端从 JWT 解析 `username` 写入 `request.attribute("username")`,Controller 读 `currentOperator(req)`。缺值时 fallback `"操作员"`(审计可追溯性弱,见 `prd-input-backend.md` M5)。
+服务端从 JWT 解析 `username` 写入 `request.attribute("username")`,Controller 读 `currentOperator(req)`。缺值时 fallback `"操作员"`(审计可追溯性弱)。
 
 ### 1.5 分页
 
@@ -282,9 +282,8 @@ PDA 扫码链路涉及的端点(共 4 个):
 ## 6. 性能与限流
 
 - 当前无显式限流(测试用)
-- 库存 CSV 导出硬编码 5000 行(见 `prd-input-backend.md` M3)
+- 库存 CSV 导出硬编码 5000 行
 - FIFO 出库:`consumeForOutbound` 多次 SELECT inventory_item(按 `id ASC` ORDER BY limit),N=100 时约几毫秒
-- 盘点扫描:N=1000 时 sub-100ms;N=10000 可能秒级(见 `prd-input-backend.md` B3)
 
 ## 7. 接口约定补充
 

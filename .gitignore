@@ -69,3 +69,7 @@ tmp_r.json
 tmp_a.csv
 tmp_b.csv
 tmp_export.csv
+
+# 11) 前端/工具链依赖 —— 需要时 npm install 自行生成,不入库
+# (此前误提交过 153 个文件,且 .bin/*.cmd 是 Windows 绝对路径 shim,换机器即失效)
+node_modules/

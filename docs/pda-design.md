@@ -124,7 +124,7 @@ public interface ScannerCallback {
 - 基于 `CameraX 1.3.4` + `ML Kit barcode-scanning 17.2.0`(unbundled)
 - 构造时 `BarcodeScanning.getClient(CODE_128/CODE_39/CODE_93/EAN_13/EAN_8/QR/UPC_A/UPC_E)`
 - 单线程 `analysisExecutor`,`STRATEGY_KEEP_ONLY_LATEST`
-- 暴露**额外**方法 `attachCamera(LifecycleOwner, PreviewView)` / `detachCamera()`(违反 `ScannerService` 接口契约,见 `prd-input-pda.md` 第 5 节脚注)
+- 暴露**额外**方法 `attachCamera(LifecycleOwner, PreviewView)` / `detachCamera()`(违反 `ScannerService` 接口契约)
 - 抓到一码自动 `scanning.set(false)` 并回调 `onScanResult`;Activity 处理完需 `resumeScanning()`(500ms 延迟)重启
 
 **`UhfScannerImpl`**(P4 fix2 提交,3232b3d):
@@ -338,7 +338,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 minify:release 开启 `minifyEnabled` + `shrinkResources`
 调试版使用 Android 默认 debug keystore
 
-## 13. 当前遗留问题(详细见 `prd-input-pda.md` §9 + review 报告)
+## 13. 当前遗留问题
 
 ### Blocker(影响功能)
 - B1:LoginActivity 实际**未调用 /api/auth/login**,代码注释说"原型阶段"

@@ -340,7 +340,7 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 - 盘点 commit 要求所有明细 counted_qty 非 null(对扫码模式不友好)
 - 盘点端点权限不对称(创建要 ADMIN,扫描不需)
 
-**Spec 过期**:`pda-android-scanner-design.md` 第 31 行说"摄像头扫码 — 本期不做",但 P4-P6 已经实现,**需更新 spec**。
+**Spec 过期**:`superpowers/specs/2026-09-07-pda-android-scanner-design.md` 的"本期不做"清单里列着摄像头扫码,但 P4-P6 已经实现,**需更新 spec**。
 
 ### 9.3 兼容与迁移
 
@@ -354,7 +354,7 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 ### 10.1 P0(立刻)
 
 - 修 review 报告里的 6 个 Blocker(见 §9.2)
-- 更新 `pda-android-scanner-design.md` spec,反映 P4-P6 实际实现
+- 更新 `superpowers/specs/2026-09-07-pda-android-scanner-design.md` spec,反映 P4-P6 实际实现
 - PDA 操作员角色(OPERATOR)权限实施
 
 ### 10.2 P1(下迭代)
