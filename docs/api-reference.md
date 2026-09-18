@@ -204,6 +204,19 @@
 | POST | `/{id}/transfer` | 已登录 | `{toLocation}`,IN_STOCK→TRANSFERRED,改 location_code |
 | GET | `/export.csv?sku&location&status` | 已登录 | 单次硬编码 5000 行,大库需分页 |
 
+**库存单元状态(`inventory_item.status`)** —— DB 列默认 `IN_STOCK`:
+
+| 值 | 含义 | 界面显示 |
+|---|---|---|
+| `IN_STOCK` | 在库,可出库 / 可调拨 / 可报废 | 在库 |
+| `PENDING` | **待入库**:入库**草稿**单生成的占位单元 —— 尚未生效(`remaining=0`,不计入库存、不写流水),入库单提交时才升级为 `IN_STOCK`;草稿单取消则被删除 | 待入库 |
+| `RESERVED` | **已预留**:被某张出库**草稿**单锁定(`outbound_order_id` 指向它)—— 出库单提交后变 `OUT`,取消则回到 `IN_STOCK` | 已预留 |
+| `OUT` | 已出库 | 已出库 |
+| `SCRAPPED` | 已报废 | 已报废 |
+| `TRANSFERRED` | 已调拨(改过库位) | 已调拨 |
+
+⚠️ 与**单据状态**是两套不同维度的枚举,别混:出入库单/盘点单的状态只有 `DRAFT`/`COMMITTED`/`CANCELLED`(界面上显示草稿/已提交/已取消);PDA 内部还有个 `DocStatus.PENDING("待执行")`,那是**单据**状态的兜底值,与上面的 `PENDING("待入库")` 只是同名。
+
 ### 2.10 盘点 — `/api/stock-checks`
 
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误 |
