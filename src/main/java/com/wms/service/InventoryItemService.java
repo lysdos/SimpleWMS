@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.InventoryItemDao;
 import com.wms.dao.InventoryLogDao;
 import com.wms.dao.ProductDao;
@@ -64,7 +65,7 @@ public class InventoryItemService {
     @Transactional
     public void scrap(int id, String remark) {
         InventoryItem it = itemDao.findById(id);
-        if (it == null) throw new IllegalArgumentException("库存单元不存在, id=" + id);
+        if (it == null) throw new NotFoundException("库存单元不存在, id=" + id);
         if (!InventoryItem.STATUS_IN_STOCK.equals(it.getStatus())) {
             throw new IllegalStateException("仅在库(IN_STOCK)单元可报废,当前状态: " + it.getStatus());
         }
@@ -102,7 +103,7 @@ public class InventoryItemService {
             throw new IllegalArgumentException("目标库位不能为空");
         }
         InventoryItem it = itemDao.findById(id);
-        if (it == null) throw new IllegalArgumentException("库存单元不存在, id=" + id);
+        if (it == null) throw new NotFoundException("库存单元不存在, id=" + id);
         if (!InventoryItem.STATUS_IN_STOCK.equals(it.getStatus())) {
             throw new IllegalStateException("仅在库(IN_STOCK)单元可调拨,当前状态: " + it.getStatus());
         }

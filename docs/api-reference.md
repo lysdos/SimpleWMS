@@ -25,7 +25,7 @@
 | 400 | 参数错误:`IllegalArgumentException` 普通错 / 路径参数类型不匹配 / 缺必填查询参数 | 400 |
 | 401 | JWT 缺失 / 无效 / 过期(`JwtAuthFilter` 拦截) | 401 |
 | 403 | 缺角色(`@RequireRole`) | 403 |
-| 404 | 资源不存在:抛 `NotFoundException`(controller 查不到资源),或 `IllegalArgumentException` 文本以 `码不存在` / `出库单不存在, id=` / `入库单不存在, id=` / `用户不存在` 开头(service 层) | 404 |
+| 404 | 资源不存在:**路径上的**资源查不到 → 抛 `NotFoundException`;另有少数 service 走 `IllegalArgumentException` 文本前缀兜底(`码不存在` / `出库单不存在, id=` / `入库单不存在, id=` / `用户不存在`)。划分口径见 §1.2.2 | 404 |
 | 405 | 路径匹配但 HTTP 方法不支持 | 405 |
 | 406 | 客户端 `Accept` 无法满足(Spring 自身处理,**响应体为空**) | — |
 | 409 | 业务冲突(库存不足 / 状态不对) | 409 |
@@ -44,6 +44,23 @@
 现已统一为抛 `NotFoundException` → `GlobalExceptionHandler` → 真 404。**新增接口请照此办理,不要再直接 `return ApiResponse.fail(404, ...)`。**
 
 客户端仍保留两层防御(不依赖状态码单点判断):web 端 `api.js._handle` 在 `res.ok` 之后还有 `if (data.code) throw ...`;PDA 端 `ApiClient` 走 `ar.code != 0` 分支,且非 2xx 时也会尝试从 body 取 `message`。
+
+#### 1.2.2 404 与 400 的划分口径
+
+判定标准是"**这个不存在的东西,是不是客户端用来定位资源的标识符**",而不是"它出现在 URL 还是 body 里":
+
+| 场景 | 状态码 | 说明 |
+|---|---|---|
+| 用标识符定位一个资源,而它不存在 | **404** | URL 里的 id(`/products/{id}`、`/stock-checks/{id}/commit`、`DELETE /locations/{id}`);**扫码得到的 24 位 code**(虽在 body 里,但语义就是"按码找单元") |
+| 请求内容不满足业务约束 | **400** | 批量明细里的 `productId` 查不到、参数缺失/格式错、状态机不允许(`IllegalStateException` 才是 409) |
+
+同一个资源在所有端点上必须给出一致的状态码。
+
+现状(2026-09-18 已统一):**用标识符定位的那一类全部改为抛 `NotFoundException`** —— products / locations / suppliers / stock-checks / inventory-items 的 `{id}` 与 `by-code`/`by-epc`,盘点单的 `commit`/`cancel`/`scan`/`items`/`export.csv`,出入库单的 `items` 明细行等。批量明细里的 `productId` 类仍是 `IllegalArgumentException` → 400。
+
+**已知例外**:`OutboundService.commitDraft` 在 FIFO 扣减时若商品已不存在抛 `商品不存在` → 400。这既不是路径资源也不属于请求体输入,而是**数据不一致**(商品被删但库存单元还在),严格说该按 409/500 处理;目前维持 400 未改。
+
+`GlobalExceptionHandler.badArg` 那个按消息文本前缀分流的兜底仍然存在(供 `用户不存在`、`码不存在`、出入库单不存在等尚未迁移的抛出点使用),但**新代码不要再依赖它** —— 直接用 `NotFoundException`,别再靠消息文案决定状态码。
 
 ### 1.3 鉴权
 

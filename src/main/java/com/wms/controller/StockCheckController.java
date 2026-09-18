@@ -138,7 +138,7 @@ public class StockCheckController {
     public ResponseEntity<byte[]> exportCsv(@PathVariable int id,
                                             @RequestParam(defaultValue = "all") String filter) {
         StockCheck c = service.get(id);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在");
+        if (c == null) throw new NotFoundException("盘点单不存在");
 
         List<StockCheckItem> items = c.getItems() == null ? List.of() : c.getItems();
         List<StockCheckItem> over = new java.util.ArrayList<>();    // 盘盈

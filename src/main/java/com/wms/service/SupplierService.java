@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.SupplierDao;
 import com.wms.model.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,7 @@ public class SupplierService {
     @Transactional
     public void delete(int id) {
         Supplier s = supplierDao.findById(id);
-        if (s == null) throw new IllegalArgumentException("供应商不存在, id=" + id);
+        if (s == null) throw new NotFoundException("供应商不存在, id=" + id);
         supplierDao.delete(id);
     }
 

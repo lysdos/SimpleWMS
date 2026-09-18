@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.ProductDao;
 import com.wms.dao.SupplierDao;
 import com.wms.model.Product;
@@ -85,7 +86,7 @@ public class ProductService {
     @Transactional
     public void delete(int id) {
         if (productDao.findById(id).isEmpty()) {
-            throw new IllegalArgumentException("商品不存在, id=" + id);
+            throw new NotFoundException("商品不存在, id=" + id);
         }
         productDao.delete(id);
     }

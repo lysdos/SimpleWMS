@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.controller.UnprocessableException;
 import com.wms.dao.InventoryItemDao;
 import com.wms.dao.StockCheckDao;
@@ -152,14 +153,14 @@ public class StockCheckService {
     public void fillCount(int checkId, int itemId, int countedQty, String remark) {
         if (countedQty < 0) throw new IllegalArgumentException("实盘数不能小于 0");
         StockCheck c = dao.findCheckById(checkId);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 状态可填实盘数,当前: " + c.getStatus());
         }
         // 找明细并校验属于该盘点单
         StockCheckItem target = dao.findItemsByCheckId(checkId).stream()
                 .filter(it -> it.getId().equals(itemId)).findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("明细不存在, id=" + itemId));
+                .orElseThrow(() -> new NotFoundException("明细不存在, id=" + itemId));
         dao.updateItemCount(itemId, countedQty, remark);
         dao.setItemDiff(itemId, countedQty - target.getSystemQty());
         // 重算盘点单统计(自己事务内写的行,后续 SELECT 一定可见)
@@ -174,7 +175,7 @@ public class StockCheckService {
     @Transactional
     public StockCheck commit(int checkId) {
         StockCheck c = dao.findCheckById(checkId);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可提交,当前: " + c.getStatus());
         }
@@ -191,12 +192,12 @@ public class StockCheckService {
     @Transactional
     public void deleteItem(int checkId, int itemId) {
         StockCheck c = dao.findCheckById(checkId);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可删除明细,当前: " + c.getStatus());
         }
         int rows = dao.deleteItem(checkId, itemId);
-        if (rows == 0) throw new IllegalArgumentException("明细不存在, id=" + itemId);
+        if (rows == 0) throw new NotFoundException("明细不存在, id=" + itemId);
         recalcStats(checkId);
     }
 
@@ -219,7 +220,7 @@ public class StockCheckService {
     @Transactional
     public void cancel(int checkId) {
         StockCheck c = dao.findCheckById(checkId);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可取消");
         }
@@ -244,7 +245,7 @@ public class StockCheckService {
     public StockCheck scanCodeToCheck(int checkId, String code) {
         // 1) 盘点单状态校验
         StockCheck c = dao.findCheckById(checkId);
-        if (c == null) throw new IllegalArgumentException("盘点单不存在, id=" + checkId);
+        if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 状态可扫码,当前: " + c.getStatus());
         }

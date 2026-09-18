@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.InboundOrderDao;
 import com.wms.dao.InventoryItemDao;
 import com.wms.dao.InventoryLogDao;
@@ -199,7 +200,7 @@ public class InboundService {
         }
         InboundOrderItem item = orderDao.findItemById(itemId);
         if (item == null || item.getOrderId() == null || item.getOrderId() != orderId) {
-            throw new IllegalArgumentException("明细行不存在或不属于该单, itemId=" + itemId);
+            throw new NotFoundException("明细行不存在或不属于该单, itemId=" + itemId);
         }
         int oldQty = item.getQuantity() == null ? 0 : item.getQuantity();
         int newQty = patch.quantity;
@@ -274,7 +275,7 @@ public class InboundService {
         requireDraftOrder(orderId);
         InboundOrderItem item = orderDao.findItemById(itemId);
         if (item == null || item.getOrderId() == null || item.getOrderId() != orderId) {
-            throw new IllegalArgumentException("明细行不存在或不属于该单, itemId=" + itemId);
+            throw new NotFoundException("明细行不存在或不属于该单, itemId=" + itemId);
         }
         itemDao.deletePendingByInboundItem(itemId, Integer.MAX_VALUE);
         orderDao.deleteItem(itemId);

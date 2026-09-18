@@ -1,5 +1,6 @@
 package com.wms.service;
 
+import com.wms.controller.NotFoundException;
 import com.wms.dao.LocationDao;
 import com.wms.model.Location;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,7 +55,7 @@ public class LocationService {
     @Transactional
     public void delete(int id) {
         Location l = locationDao.findById(id);
-        if (l == null) throw new IllegalArgumentException("库位不存在, id=" + id);
+        if (l == null) throw new NotFoundException("库位不存在, id=" + id);
         locationDao.delete(id);
     }
 
