@@ -92,6 +92,7 @@ const I18N = (() => {
         'nav.products':        { 'zh-CN': '商品管理',                      'en-US': 'Products' },
         'nav.suppliers':       { 'zh-CN': '供应商管理',                    'en-US': 'Suppliers' },
         'nav.locations':       { 'zh-CN': '库位管理',                      'en-US': 'Locations' },
+        'nav.warehouses':      { 'zh-CN': '仓库管理',                      'en-US': 'Warehouses' },
         'nav.users':           { 'zh-CN': '用户管理',                      'en-US': 'Users' },
         'nav.logout':          { 'zh-CN': '登出',                          'en-US': 'Logout' },
 
@@ -370,6 +371,36 @@ const I18N = (() => {
         'location.disabled_marker':{ 'zh-CN': '(已停用或已删除)',           'en-US': '(disabled or deleted)' },
         'location.empty_marker':{ 'zh-CN': '(不选)',                        'en-US': '(none)' },
         'location.error.code_required':{ 'zh-CN': '库位编码不能为空',       'en-US': 'Code is required' },
+
+        /* ---------- 仓库管理(库位的上层分组) ---------- */
+        'warehouse.title':     { 'zh-CN': '仓库管理',                      'en-US': 'Warehouses' },
+        'warehouse.desc':      { 'zh-CN': '维护仓库字典,库位管理中每个库位归属一个仓库', 'en-US': 'Manage warehouses; each location belongs to one warehouse' },
+        'warehouse.create':    { 'zh-CN': '+ 新增仓库',                    'en-US': '+ New Warehouse' },
+        'warehouse.kw_placeholder':{ 'zh-CN': '搜索 编码 / 名称',           'en-US': 'Search Code / Name' },
+        'warehouse.col.code':  { 'zh-CN': '编码',                          'en-US': 'Code' },
+        'warehouse.col.name':  { 'zh-CN': '名称',                          'en-US': 'Name' },
+        'warehouse.col.remark':{ 'zh-CN': '备注',                          'en-US': 'Remark' },
+        'warehouse.col.locations':{ 'zh-CN': '库位数',                     'en-US': 'Locations' },
+        'warehouse.empty':     { 'zh-CN': '暂无仓库,点击右上角「新增」开始', 'en-US': 'No warehouses yet. Click "+ New" to start' },
+        'warehouse.form.new':  { 'zh-CN': '新增仓库',                      'en-US': 'New Warehouse' },
+        'warehouse.form.edit': { 'zh-CN': '编辑仓库',                      'en-US': 'Edit Warehouse' },
+        'warehouse.form.view': { 'zh-CN': '查看仓库',                      'en-US': 'View Warehouse' },
+        'warehouse.form.code': { 'zh-CN': '编码',                          'en-US': 'Code' },
+        'warehouse.form.code_placeholder':{ 'zh-CN': '例如 WH1',            'en-US': 'e.g. WH1' },
+        'warehouse.form.name': { 'zh-CN': '名称',                          'en-US': 'Name' },
+        'warehouse.form.name_placeholder':{ 'zh-CN': '例如 上海一号仓',      'en-US': 'e.g. Shanghai No.1' },
+        'warehouse.status.enabled':{ 'zh-CN': '启用',                       'en-US': 'Enabled' },
+        'warehouse.status.disabled':{ 'zh-CN': '停用',                      'en-US': 'Disabled' },
+        'warehouse.del_tip':   { 'zh-CN': '注意:仓库下还有库位时不能删除,请先把库位转移到其他仓库。', 'en-US': 'A warehouse with locations cannot be deleted; move them first.' },
+        'warehouse.locations.count':{ 'zh-CN': '{n} 个库位',                'en-US': '{n} locations' },
+        'warehouse.error.code_required':{ 'zh-CN': '仓库编码不能为空',      'en-US': 'Code is required' },
+        'warehouse.error.name_required':{ 'zh-CN': '仓库名称不能为空',      'en-US': 'Name is required' },
+
+        /* 库位 ↔ 仓库的关联文案 */
+        'location.col.warehouse':{ 'zh-CN': '所属仓库',                     'en-US': 'Warehouse' },
+        'location.form.warehouse':{ 'zh-CN': '所属仓库',                    'en-US': 'Warehouse' },
+        'location.warehouse.none':{ 'zh-CN': '(未分配)',                    'en-US': '(unassigned)' },
+        'location.warehouse.all':{ 'zh-CN': '全部仓库',                     'en-US': 'All Warehouses' },
 
         /* ---------- 库存管理 ---------- */
         'inventory.title':     { 'zh-CN': '库存管理',                      'en-US': 'Inventory' },

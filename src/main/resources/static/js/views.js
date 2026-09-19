@@ -858,9 +858,16 @@ const Views = {
         const currentLocCode = p.location || '';
         const extraLoc = (currentLocCode && !enabledCodes.has(currentLocCode))
             ? [{ code: currentLocCode, name: t('location.disabled_marker'), enabled: true }] : [];
-        const locSelectOptions = [{ code: '', name: t('location.empty_marker'), enabled: true }, ...enabledLocs, ...extraLoc]
-            .map(l => `<option value="${escapeHtml(l.code)}" ${l.code===currentLocCode?'selected':''}>${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`)
-            .join('');
+        // 按所属仓库分组(多仓库后平铺列表太长);"不选"置顶、已停用的当前值垫底
+        const locLabel = l => {
+            const sel = l.code === currentLocCode ? ' selected' : '';
+            const nm = (l.name && l.name !== l.code) ? ' / ' + escapeHtml(l.name) : '';
+            return `<option value="${escapeHtml(l.code)}"${sel}>${escapeHtml(l.code)}${nm}</option>`;
+        };
+        const locSelectOptions =
+            `<option value="" ${currentLocCode?'':'selected'}>${t('location.empty_marker')}</option>`
+            + Views.locationOptgroups(enabledLocs, locLabel)
+            + extraLoc.map(locLabel).join('');
 
         return `
         <div class="form-row">
@@ -1054,13 +1061,14 @@ const Views = {
     },
 
     /* ================== 库位管理列表 ================== */
-    locations(locations, statusFilter) {
+    locations(locations, statusFilter, warehouses, warehouseFilter) {
         const rows = locations.length === 0
             ? `<tr><td colspan="6" class="empty">${t('location.empty')}</td></tr>`
             : locations.map(l => `
                 <tr>
                     <td><strong>${escapeHtml(l.code)}</strong></td>
                     <td>${escapeHtml(l.name || '')}</td>
+                    <td>${l.warehouseName ? escapeHtml(l.warehouseName) : `<span style="color:var(--c-text-3);">${t('location.warehouse.none')}</span>`}</td>
                     <td>${escapeHtml(l.remark || '')}</td>
                     <td>${l.enabled === false ? `<span class="badge low">${t('location.status.disabled')}</span>` : `<span class="badge ok">${t('location.status.enabled')}</span>`}</td>
                     <td class="actions">
@@ -1069,6 +1077,9 @@ const Views = {
                         <button class="btn-link danger" onclick="delLocation(${l.id})">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
+        const whOpts = (warehouses || [])
+            .map(w => `<option value="${w.id}" ${String(warehouseFilter||'')===String(w.id)?'selected':''}>${escapeHtml(w.name)}</option>`)
+            .join('');
         return `
         <div class="page-head">
             <div>
@@ -1082,19 +1093,24 @@ const Views = {
         <div class="card">
             <div class="toolbar">
                 <input id="loc-kw" class="input input-sm" placeholder="${t('location.kw_placeholder')}" style="width:240px;">
+                <select id="loc-wh-filter" class="select" style="width:150px;" onchange="searchLocations()">
+                    <option value="" ${!warehouseFilter?'selected':''}>${t('location.warehouse.all')}</option>
+                    ${whOpts}
+                </select>
                 <select id="loc-status-filter" class="select" style="width:110px;" onchange="searchLocations()">
                     <option value="" ${statusFilter===''?'selected':''}>${t('common.all')}</option>
                     <option value="enabled" ${statusFilter==='enabled'?'selected':''}>${t('location.status.enabled')}</option>
                     <option value="disabled" ${statusFilter==='disabled'?'selected':''}>${t('location.status.disabled')}</option>
                 </select>
                 <button class="btn btn-sm" onclick="searchLocations()">${t('common.search')}</button>
-                <button class="btn btn-sm" onclick="document.getElementById('loc-kw').value='';document.getElementById('loc-status-filter').value='';searchLocations()">${t('common.clear')}</button>
+                <button class="btn btn-sm" onclick="document.getElementById('loc-kw').value='';document.getElementById('loc-wh-filter').value='';document.getElementById('loc-status-filter').value='';searchLocations()">${t('common.clear')}</button>
             </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
                         <th style="width:120px;">${t('location.col.code')}</th>
                         <th>${t('location.col.name')}</th>
+                        <th style="width:150px;">${t('location.col.warehouse')}</th>
                         <th>${t('location.col.remark')}</th>
                         <th style="width:90px;">${t('common.status')}</th>
                         <th style="width:160px;">${t('common.actions')}</th>
@@ -1112,13 +1128,17 @@ const Views = {
             <div style="color:var(--c-text-3);">ID</div><div>${l.id}</div>
             <div style="color:var(--c-text-3);">${t('location.col.code')}</div><div><strong>${escapeHtml(l.code)}</strong></div>
             <div style="color:var(--c-text-3);">${t('location.col.name')}</div><div>${escapeHtml(l.name || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('location.col.warehouse')}</div><div>${l.warehouseName ? escapeHtml(l.warehouseName) : `<span style="color:var(--c-text-3);">${t('location.warehouse.none')}</span>`}</div>
             <div style="color:var(--c-text-3);">${t('location.col.remark')}</div><div>${escapeHtml(l.remark || '-')}</div>
             <div style="color:var(--c-text-3);">${t('common.status')}</div><div>${l.enabled === false ? `<span class="badge low">${t('location.status.disabled')}</span>` : `<span class="badge ok">${t('location.status.enabled')}</span>`}</div>
         </div>`;
     },
 
-    locationForm(l) {
+    locationForm(l, warehouses) {
         l = l || {};
+        const whOpts = (warehouses || [])
+            .map(w => `<option value="${w.id}" ${String(l.warehouseId||'')===String(w.id)?'selected':''}>${escapeHtml(w.name)}</option>`)
+            .join('');
         return `
         <div class="form-row">
             <div class="form-field">
@@ -1131,9 +1151,12 @@ const Views = {
             </div>
         </div>
         <div class="form-row">
-            <div class="form-field" style="flex:1;">
-                <label>${t('common.remark')}</label>
-                <input id="lf-remark" class="input" value="${escapeHtml(l.remark||'')}" placeholder="${t('new_order.ph.remark')}">
+            <div class="form-field">
+                <label>${t('location.form.warehouse')}</label>
+                <select id="lf-warehouse" class="select">
+                    <option value="" ${l.warehouseId?'':'selected'}>${t('location.warehouse.none')}</option>
+                    ${whOpts}
+                </select>
             </div>
             <div class="form-field">
                 <label>${t('supplier.form.enabled')}</label>
@@ -1143,7 +1166,131 @@ const Views = {
                 </select>
             </div>
         </div>
+        <div class="form-row">
+            <div class="form-field" style="flex:1;">
+                <label>${t('common.remark')}</label>
+                <input id="lf-remark" class="input" value="${escapeHtml(l.remark||'')}" placeholder="${t('new_order.ph.remark')}">
+            </div>
+        </div>
         <input type="hidden" id="lf-id" value="${l.id || ''}">`;
+    },
+
+    /* ================== 仓库管理列表 ================== */
+    warehouses(warehouses, statusFilter) {
+        const rows = (warehouses || []).length === 0
+            ? `<tr><td colspan="6" class="empty">${t('warehouse.empty')}</td></tr>`
+            : warehouses.map(w => `
+                <tr>
+                    <td><strong>${escapeHtml(w.code)}</strong></td>
+                    <td>${escapeHtml(w.name)}</td>
+                    <td>${t('warehouse.locations.count', { n: w.locationCount || 0 })}</td>
+                    <td>${escapeHtml(w.remark || '')}</td>
+                    <td>${w.enabled === false ? `<span class="badge low">${t('warehouse.status.disabled')}</span>` : `<span class="badge ok">${t('warehouse.status.enabled')}</span>`}</td>
+                    <td class="actions">
+                        <button class="btn-link" onclick="viewWarehouse(${w.id})">${t('common.view')}</button>
+                        <button class="btn-link" onclick="editWarehouse(${w.id})">${t('common.edit')}</button>
+                        <button class="btn-link danger" onclick="delWarehouse(${w.id})">${t('common.delete')}</button>
+                    </td>
+                </tr>`).join('');
+        return `
+        <div class="page-head">
+            <div>
+                <h2>${t('warehouse.title')}</h2>
+                <div class="desc">${t('warehouse.desc')}</div>
+            </div>
+            <div class="right">
+                <button class="btn btn-primary" onclick="newWarehouse()">${t('warehouse.create')}</button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="toolbar">
+                <input id="wh-kw" class="input input-sm" placeholder="${t('warehouse.kw_placeholder')}" style="width:240px;">
+                <select id="wh-status-filter" class="select" style="width:110px;" onchange="searchWarehouses()">
+                    <option value="" ${statusFilter===''?'selected':''}>${t('common.all')}</option>
+                    <option value="enabled" ${statusFilter==='enabled'?'selected':''}>${t('warehouse.status.enabled')}</option>
+                    <option value="disabled" ${statusFilter==='disabled'?'selected':''}>${t('warehouse.status.disabled')}</option>
+                </select>
+                <button class="btn btn-sm" onclick="searchWarehouses()">${t('common.search')}</button>
+                <button class="btn btn-sm" onclick="document.getElementById('wh-kw').value='';document.getElementById('wh-status-filter').value='';searchWarehouses()">${t('common.clear')}</button>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr>
+                        <th style="width:120px;">${t('warehouse.col.code')}</th>
+                        <th>${t('warehouse.col.name')}</th>
+                        <th style="width:110px;">${t('warehouse.col.locations')}</th>
+                        <th>${t('warehouse.col.remark')}</th>
+                        <th style="width:90px;">${t('common.status')}</th>
+                        <th style="width:160px;">${t('common.actions')}</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>`;
+    },
+
+    warehouseDetail(w) {
+        w = w || {};
+        return `
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:14px;">
+            <div style="color:var(--c-text-3);">ID</div><div>${w.id}</div>
+            <div style="color:var(--c-text-3);">${t('warehouse.col.code')}</div><div><strong>${escapeHtml(w.code)}</strong></div>
+            <div style="color:var(--c-text-3);">${t('warehouse.col.name')}</div><div>${escapeHtml(w.name || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('warehouse.col.locations')}</div><div>${t('warehouse.locations.count', { n: w.locationCount || 0 })}</div>
+            <div style="color:var(--c-text-3);">${t('warehouse.col.remark')}</div><div>${escapeHtml(w.remark || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('common.status')}</div><div>${w.enabled === false ? `<span class="badge low">${t('warehouse.status.disabled')}</span>` : `<span class="badge ok">${t('warehouse.status.enabled')}</span>`}</div>
+        </div>`;
+    },
+
+    warehouseForm(w) {
+        w = w || {};
+        return `
+        <div class="form-row">
+            <div class="form-field">
+                <label>${t('warehouse.form.code')}<span class="req">*</span></label>
+                <input id="wf-code" class="input" value="${escapeHtml(w.code||'')}" placeholder="${t('warehouse.form.code_placeholder')}">
+            </div>
+            <div class="form-field">
+                <label>${t('warehouse.form.name')}<span class="req">*</span></label>
+                <input id="wf-name" class="input" value="${escapeHtml(w.name||'')}" placeholder="${t('warehouse.form.name_placeholder')}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field" style="flex:1;">
+                <label>${t('common.remark')}</label>
+                <input id="wf-remark" class="input" value="${escapeHtml(w.remark||'')}" placeholder="${t('new_order.ph.remark')}">
+            </div>
+            <div class="form-field">
+                <label>${t('supplier.form.enabled')}</label>
+                <select id="wf-enabled" class="select">
+                    <option value="true"  ${w.enabled===false?'':'selected'}>${t('warehouse.status.enabled')}</option>
+                    <option value="false" ${w.enabled===false?'selected':''}>${t('warehouse.status.disabled')}</option>
+                </select>
+            </div>
+        </div>
+        <input type="hidden" id="wf-id" value="${w.id || ''}">`;
+    },
+
+    /**
+     * 库位下拉选项:按所属仓库分组(optgroup)。多仓库后库位会变多,
+     * 平铺一个列表里挑容易选错,分组后一眼能定位到仓库。
+     * 未分配仓库的归到最后一组。
+     * @param labelFn 每个库位 → 一行 <option> 的 HTML(各调用方的展示文案不同)
+     */
+    locationOptgroups(locations, labelFn) {
+        const groups = new Map();
+        for (const l of (locations || [])) {
+            const key = l.warehouseName || t('location.warehouse.none');
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(l);
+        }
+        let html = '';
+        for (const [wh, locs] of groups) {
+            html += `<optgroup label="${escapeHtml(wh)}">`;
+            for (const l of locs) html += labelFn(l);
+            html += `</optgroup>`;
+        }
+        return html;
     },
 
     /* ================== 库存盘点 ================== */
@@ -1343,9 +1490,12 @@ const Views = {
         const size  = (data && data.pageSize) || 20;
         const pages = Math.max(1, Math.ceil(total / size));
 
-        const locOpts = locations.map(l =>
-            `<option value="${escapeHtml(l.code)}" ${state.inventoryLoc===l.code?'selected':''}>${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`
-        ).join('');
+        // 库位筛选按仓库分组,多仓库下好找
+        const locOpts = Views.locationOptgroups(locations, l => {
+            const sel = state.inventoryLoc === l.code ? ' selected' : '';
+            const nm = (l.name && l.name !== l.code) ? ' / ' + escapeHtml(l.name) : '';
+            return `<option value="${escapeHtml(l.code)}"${sel}>${escapeHtml(l.code)}${nm}</option>`;
+        });
 
         const statusMap = {
             'IN_STOCK'   : `<span class="badge ok">${t('inventory.status.IN_STOCK')}</span>`,

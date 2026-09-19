@@ -4,7 +4,7 @@
 > **版本**:2026-09-08
 > **基线**:`main` 分支当前 HEAD
 > **配套文档**:
-> - [数据库结构](./database-schema.md) — 13 张表 + ER + 状态机
+> - [数据库结构](./database-schema.md) — 14 张表 + ER + 状态机
 > - [API 接口规范](./api-reference.md) — 50+ 端点
 > - [PDA 客户端设计](./pda-design.md) — Android 扫码 App 模块设计
 
@@ -36,17 +36,22 @@
 
 - **多语言 / 多币种**(中文 + 人民币 only)
 - **推送通知 / 消息中心**
-- **多仓库管理**(单仓库)
+- **多仓库隔离**(库存/单据/权限按仓库分别核算)—— 见下方"已支持的范围"
 - **库存预警自动补货**(只显示低库存数量)
 - **多用户并发协作**(无 WebSocket)
 - **SaaS 多租户**(单租户)
 - **离线模式**(网络不可达时 PDA 不能用)
 
+> **已支持的范围(2026-09-18 起)**:仓库作为**库位的上层分组**已落地 ——
+> 可维护仓库字典、每个库位归属一个仓库、库位管理与库存筛选可按仓库过滤。
+> 但作业仍是**单仓口径**:库存数量、单据、盘点都按全局算,不按仓库隔离;
+> 库位编码**全局唯一**(跨仓库不重复)。真正的多仓库隔离(按仓核算 / 按仓分权)仍不做。
+
 ## 2. 用户角色
 
 | 角色 | 权限 | 典型场景 |
 |---|---|---|
-| **ADMIN** | 全部:商品 / 供应商 / 库位 / 用户 CRUD + 所有单据 | 系统管理员 |
+| **ADMIN** | 全部:商品 / 供应商 / 库位 / 仓库 / 用户 CRUD + 所有单据 | 系统管理员 |
 | **OPERATOR**(预留) | 看板 + 单据查询 + PDA 扫码 | 仓库管理员(预留) |
 | _(PDA 当前用 admin)_ | — | PDA 装机默认 admin |
 
@@ -189,8 +194,8 @@ PDA 端 (StockCheckActivity)               Backend
 
 详见 [database-schema.md](./database-schema.md)。
 
-13 张表分 5 类:
-- **基础数据**(4):`app_user` / `supplier` / `location` / `product`(+ `product_supplier` 多对多)
+14 张表分 5 类:
+- **基础数据**(5):`app_user` / `supplier` / `warehouse` / `location` / `product`(+ `product_supplier` 多对多)
 - **流水**(1):`inventory_log`
 - **实物单元**(1):`inventory_item`(核心,每件实物一行,带 24 位 code)
 - **单据**(6):`inbound_order` / `inbound_order_item` / `outbound_order` / `outbound_order_item` / `stock_check` / `stock_check_item`
@@ -198,23 +203,26 @@ PDA 端 (StockCheckActivity)               Backend
 
 **核心关系**:`inventory_item.code`(24 位 VARCHAR UNIQUE)是 PDA 扫码的"主键"。
 
+**仓库 → 库位**:`warehouse` 1:N `location`(`location.warehouse_id`)。库位编码**全局唯一**,
+所以库存单元/单据明细里存的裸库位码仍能唯一定位,仓库只是分组维度。
+
 ## 5. API 概览
 
 详见 [api-reference.md](./api-reference.md)。
 
-50+ 端点分 10 组:
+50+ 端点分 11 组:
 
 | 模块 | 端点数 | 关键路径 |
 |---|---|---|
 | 鉴权 | 4 | `/api/auth/*` |
 | 仪表盘 | 3 | `/api/dashboard/{stats, inventory-trend, outbound-trend}` |
-| 商品 / 供应商 / 库位 / 用户 | 16 | `/api/{products, suppliers, locations, users}/*` |
+| 商品 / 供应商 / 仓库 / 库位 / 用户 | 21 | `/api/{products, suppliers, warehouses, locations, users}/*` |
 | 入库 | 7 | `/api/inbound/{, /orders, /orders/{id}/{items, commit, cancel}, /orders/{id}, /orders, /orders/{id}/export.csv}` |
 | 出库 | 7 | `/api/outbound/*`(含 `/scan`) |
 | 库存单元 | 11 | `/api/inventory/items/*` |
 | 盘点 | 8 | `/api/stock-checks/*`(含 `/scan`) |
 
-**鉴权矩阵**:ADMIN 才能写基础数据 / 创建盘点单;查询 / 扫码 / 出库 / 库存 / 提交 PDA 操作单 任意已登录用户可做。
+**鉴权矩阵**:ADMIN 才能写基础数据(含仓库)/ 创建盘点单;查询 / 扫码 / 出库 / 库存 / 提交 PDA 操作单 任意已登录用户可做。
 
 **扫码端点**(PDA 主路径):
 - `POST /api/outbound/orders/{id}/scan` — 出库扫码
@@ -319,7 +327,7 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 - **没有图片附件**(商品图 / 实物照片)
 - **没有批次 / 效期管理**
 - **没有序列号管理**(24 位码既是 ID 又是"序列号")
-- **没有多仓库**(单仓)
+- **没有多仓库隔离**(仓库已作为库位分组支持,但库存/单据不按仓核算)
 - **OPERATOR 角色预留但未启用**(所有 PDA 当前用 admin)
 
 ### 9.2 技术债务(详细见 review 报告)
@@ -366,7 +374,7 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 
 ### 10.3 P2(下季度)
 
-- 多仓库管理
+- 多仓库隔离(按仓核算库存 / 单据 / 权限;库位分组已支持)
 - 批次 / 效期
 - 多语言(英文 / 繁体)
 - 报表中心(出入库汇总 / 库存周转率 / 呆滞料)
@@ -380,7 +388,7 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 
 ## 12. 附录
 
-- A. [数据库结构详细](./database-schema.md) — 13 张表 + 字段 + 索引 + 状态机
+- A. [数据库结构详细](./database-schema.md) — 14 张表 + 字段 + 索引 + 状态机
 - B. [API 接口规范详细](./api-reference.md) — 50+ 端点 + 请求/响应示例
 - C. [PDA 客户端设计详细](./pda-design.md) — 6 个 Activity + 扫码抽象 + 网络层
 - D. [项目 design 文档](./superpowers/specs/2026-09-07-pda-android-scanner-design.md) — 原始 spec

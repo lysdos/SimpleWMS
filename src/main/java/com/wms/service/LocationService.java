@@ -2,6 +2,7 @@ package com.wms.service;
 
 import com.wms.controller.NotFoundException;
 import com.wms.dao.LocationDao;
+import com.wms.dao.WarehouseDao;
 import com.wms.model.Location;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -14,10 +15,12 @@ import java.util.List;
 public class LocationService {
 
     private final LocationDao locationDao;
+    private final WarehouseDao warehouseDao;
 
     @Autowired
-    public LocationService(LocationDao locationDao) {
+    public LocationService(LocationDao locationDao, WarehouseDao warehouseDao) {
         this.locationDao = locationDao;
+        this.warehouseDao = warehouseDao;
     }
 
     public List<Location> list(String keyword) {
@@ -26,6 +29,10 @@ public class LocationService {
 
     public List<Location> list(String keyword, String status) {
         return locationDao.findAll(keyword, status);
+    }
+
+    public List<Location> list(String keyword, String status, Integer warehouseId) {
+        return locationDao.findAll(keyword, status, warehouseId);
     }
 
     public Location get(int id) {
@@ -38,7 +45,7 @@ public class LocationService {
         try {
             int id = locationDao.insert(l);
             l.setId(id);
-            return l;
+            return locationDao.findById(id);
         } catch (DuplicateKeyException e) {
             throw new IllegalArgumentException("库位编码已存在: " + l.getCode());
         }
@@ -68,6 +75,10 @@ public class LocationService {
         }
         if (l.getName() != null && l.getName().length() > 64) {
             throw new IllegalArgumentException("库位名称过长(最多 64)");
+        }
+        // 归属仓库可选(空 = 未分配),但给了就必须真实存在,否则库位会挂到一个不存在的仓库上
+        if (l.getWarehouseId() != null && warehouseDao.findById(l.getWarehouseId()) == null) {
+            throw new IllegalArgumentException("所属仓库不存在, warehouseId=" + l.getWarehouseId());
         }
     }
 }

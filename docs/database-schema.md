@@ -6,39 +6,31 @@
 ## 1. 总览 ER
 
 ```
-                ┌──────────┐         ┌──────────────┐
-                │ app_user │         │  supplier    │
-                └─────┬────┘         └──────┬───────┘
-                      │                     │ 1
-                      │                     │ N
-                  ┌───┴─────────────────────┴────────────────┐
-                  │       product_supplier (M:N)            │
-                  └────────────────┬────────────────────────┘
-                                   │ N
-                ┌──────────┐         │         ┌──────────────┐
-                │ location │ 1     N │         │ inventory_log│
-                └─────┬────┘ ────────┘         └──────┬───────┘
-                      │                              │ N
-                      │ N  ┌───────────────────┐    │
-                      └───┤      product       ├────┘
-                          └─────────┬─────────┘
-                                    │ 1
-                                    │ N
-            ┌───────────────────────┼───────────────────────┐
-            │                       │                       │
-            │ 1:N                   │ 1:N                   │ 1:N
-   ┌────────┴──────┐      ┌─────────┴──────┐      ┌────────┴────────┐
-   │ inbound_order │      │ outbound_order │      │   stock_check   │
-   │ (status)     │      │ (status)       │      │ (status)        │
-   └───────┬──────┘      └────────┬──────┘      └─────────┬───────┘
-           │ 1:N                  │ 1:N                  │ 1:N
-   ┌───────┴────────┐     ┌────────┴────────┐     ┌────────┴─────────┐
-   │inbound_order_ │     │outbound_order_ │     │ stock_check_item │
-   │   item        │     │    item         │     │ (counted_qty)    │
-   └───────┬───────┘     └────────┬───────┘     └─────────┬───────┘
-           │                       │ 1:N                    │ 1:1
-           └───────────────────────┴──→ inventory_item (24 位 code, UNIQUE)
-                                       status: IN_STOCK / OUT / SCRAPPED / TRANSFERRED
+  app_user ──(created_by,非外键)──┐
+                                  │
+  warehouse 1─────N location      │
+                       │ 1        │
+                       │ N        │
+  supplier N───M product_supplier │
+                 │                │
+                 │ 1              │
+                 │ N              │
+                 └────── product ─┴───N inventory_log
+                          │ 1
+                          │ N
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+   inbound_order   outbound_order    stock_check
+        │ 1:N             │ 1:N             │ 1:N
+   inbound_order_item  outbound_order_item  stock_check_item
+        └─────────────────┴─────────────────┘
+                          │
+                          ↓ N
+              inventory_item (24 位 code, UNIQUE)
+   status: IN_STOCK / PENDING / RESERVED / OUT / SCRAPPED / TRANSFERRED
+
+注:warehouse → location 是唯一的仓库关联(1:N),库位编码全局唯一,
+   所以各单据/库存里存的裸库位码仍能唯一定位。
 ```
 
 ## 2. 详细表结构
@@ -69,7 +61,7 @@
 | enabled | BOOLEAN | NOT NULL DEFAULT TRUE |
 | created_at / updated_at | TIMESTAMP | |
 
-### 2.3 `location` — 库位字典
+### 2.3 `warehouse` — 仓库(库位的上层分组)
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -78,11 +70,30 @@
 | name | VARCHAR(64) | NOT NULL |
 | remark | VARCHAR(255) | |
 | enabled | BOOLEAN | NOT NULL DEFAULT TRUE |
+| created_by / updated_by | VARCHAR(64) | |
 | created_at / updated_at | TIMESTAMP | |
 
-`product.location` 字段从此表选择。
+**定位:** 仓库只是库位的分组标签,**库位编码仍全局唯一**(不随仓库重复)。
+因此 `inventory_item.location_code`、出入库单明细的 `location` 等"按库位码定位"
+的既有逻辑不受影响;要按仓库维度筛选时,`location` 表 join 本表即可。
 
-### 2.4 `product` — 商品主数据
+仓库下还有库位时不允许删除(409)。
+
+### 2.4 `location` — 库位字典
+
+| 列 | 类型 | 约束 |
+|---|---|---|
+| id | INT | PK |
+| code | VARCHAR(32) | NOT NULL UNIQUE(全局唯一,跨仓库不重复) |
+| name | VARCHAR(64) | NOT NULL |
+| warehouse_id | INT | 归属仓库 → warehouse.id(NULL = 未分配) |
+| remark | VARCHAR(255) | |
+| enabled | BOOLEAN | NOT NULL DEFAULT TRUE |
+| created_at / updated_at | TIMESTAMP | |
+
+`product.location` 字段从此表选择。`warehouse_id` 上建索引 `idx_location_warehouse`。
+
+### 2.5 `product` — 商品主数据
 
 | 列 | 类型 | 约束 | 说明 |
 |---|---|---|---|
@@ -98,7 +109,7 @@
 | remark | VARCHAR(255) | | |
 | created_at / updated_at | TIMESTAMP | | |
 
-### 2.5 `product_supplier` — 商品-供应商多对多
+### 2.6 `product_supplier` — 商品-供应商多对多
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -112,7 +123,7 @@
 
 UNIQUE(product_id, supplier_id)
 
-### 2.6 `inventory_log` — 出入库流水
+### 2.7 `inventory_log` — 出入库流水
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -127,7 +138,7 @@ UNIQUE(product_id, supplier_id)
 | order_id | INT | 关联入库单/出库单 id |
 | created_at | TIMESTAMP | 索引 |
 
-### 2.7 `inventory_item` — 库存单元(每件实物一行,核心表)
+### 2.8 `inventory_item` — 库存单元(每件实物一行,核心表)
 
 | 列 | 类型 | 约束 | 说明 |
 |---|---|---|---|
@@ -137,7 +148,7 @@ UNIQUE(product_id, supplier_id)
 | location_code | VARCHAR(32) | NOT NULL | 入库时按商品 location 冗余记录 |
 | quantity | INT | NOT NULL DEFAULT 1 | 一物一码场景永远 = 1 |
 | remaining | INT | NOT NULL DEFAULT 1 | 出库部分扣减后剩余;remaining=0 → status=OUT |
-| **status** | VARCHAR(16) | NOT NULL DEFAULT 'IN_STOCK' | `IN_STOCK` / `OUT` / `SCRAPPED` / `TRANSFERRED` |
+| **status** | VARCHAR(16) | NOT NULL DEFAULT 'IN_STOCK' | `IN_STOCK` / `PENDING`(待入库)/ `RESERVED`(已预留)/ `OUT` / `SCRAPPED` / `TRANSFERRED` |
 | inbound_order_id | INT | FK→inbound_order | 入库关联 |
 | inbound_item_id | INT | FK→inbound_order_item | 行级关联(commit 时回填) |
 | outbound_order_id | INT | FK→outbound_order | 出库关联 |
@@ -148,7 +159,7 @@ UNIQUE(product_id, supplier_id)
 
 索引:`idx_invitem_sku`、`idx_invitem_location`、`idx_invitem_status`、`idx_invitem_inbound`、`idx_invitem_outbound`
 
-### 2.8 `inbound_order` — 入库单
+### 2.9 `inbound_order` — 入库单
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -164,7 +175,7 @@ UNIQUE(product_id, supplier_id)
 
 索引:`idx_inbound_order_created`、`idx_inbound_order_status`
 
-### 2.9 `inbound_order_item` — 入库单明细
+### 2.10 `inbound_order_item` — 入库单明细
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -179,7 +190,7 @@ UNIQUE(product_id, supplier_id)
 | row_remark | VARCHAR(255) | |
 | created_at | TIMESTAMP | |
 
-### 2.10 `outbound_order` — 出库单
+### 2.11 `outbound_order` — 出库单
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -191,7 +202,7 @@ UNIQUE(product_id, supplier_id)
 | **status** | VARCHAR(16) | **NOT NULL DEFAULT 'DRAFT'** |
 | created_at | TIMESTAMP | |
 
-### 2.11 `outbound_order_item` — 出库单明细
+### 2.12 `outbound_order_item` — 出库单明细
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -203,7 +214,7 @@ UNIQUE(product_id, supplier_id)
 | row_remark | VARCHAR(255) | |
 | created_at | TIMESTAMP | |
 
-### 2.12 `stock_check` — 盘点单
+### 2.13 `stock_check` — 盘点单
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -218,7 +229,7 @@ UNIQUE(product_id, supplier_id)
 | committed_at | TIMESTAMP | |
 | created_at / updated_at | TIMESTAMP | |
 
-### 2.13 `stock_check_item` — 盘点单明细
+### 2.14 `stock_check_item` — 盘点单明细
 
 | 列 | 类型 | 约束 |
 |---|---|---|
@@ -243,15 +254,24 @@ UNIQUE(check_id, inventory_item_id)
 | | `DRAFT → CANCELLED` | 取消 → 回滚 quantity / 删 codes / 删 log |
 | | `COMMITTED` 终态 | 不可改 |
 | `outbound_order` | `DRAFT → COMMITTED` | 提交 → FIFO 扣减 inventory_item(consumeForOutbound) |
-| | `DRAFT → CANCELLED` | 取消 → 删明细 |
+| | `DRAFT → CANCELLED` | 取消 → 释放 RESERVED 单元回 IN_STOCK(`releaseReservations`)+ 删明细行(单元不删) |
 | | `COMMITTED` 终态 | |
 | `stock_check` | `DRAFT → COMMITTED` | 提交 → 重算 diff_count + per-row diff |
 | | `DRAFT → CANCELLED` | 取消 → 删明细 |
 | | `COMMITTED` 终态 | |
-| `inventory_item` | `IN_STOCK → OUT` | 提交出库时扣减 remaining=0 |
+| `inventory_item` | 新增 → `PENDING` | 入库**草稿**加明细时生成占位单元(remaining=0,不计库存、不写流水) |
+| | `PENDING → IN_STOCK` | 入库单 commit → 生成/激活,`adjustQuantity` + 写流水 |
+| | `PENDING` 删除 | 草稿缩减数量 / 删行 / 取消 → 占位单元被**物理删除** |
+| | `IN_STOCK → RESERVED` | 出库**草稿**加明细 → FIFO 锁定(`reserveForOutbound`) |
+| | `RESERVED → IN_STOCK` | 出库草稿取消 → `releaseReservations` |
+| | `IN_STOCK / RESERVED → OUT` | 出库 commit(消费本单 RESERVED 单元) |
 | | `IN_STOCK → SCRAPPED` | scrap 端点 |
 | | `IN_STOCK → TRANSFERRED` | transfer 端点 |
 | | OUT / SCRAPPED / TRANSFERRED 终态 | |
+
+> ⚠️ 与**单据状态**是两套维度:出入库单 / 盘点单的状态只有 `DRAFT` / `COMMITTED` / `CANCELLED`。
+> `inventory_item` 的 `PENDING` 是「待入库」,与 PDA `DocStatus.PENDING("待执行")` 只是同名。
+> 各端界面文案:IN_STOCK=在库 / PENDING=待入库 / RESERVED=已预留 / OUT=已出库 / SCRAPPED=已报废 / TRANSFERRED=已调拨。
 
 ## 4. 关键约束
 
@@ -264,12 +284,16 @@ UNIQUE(check_id, inventory_item_id)
 | 唯一默认供应商 | `product_supplier` | (product_id, is_default=TRUE) 唯一 |
 | 行级 supplier | `inbound_order_item.supplier` | 同一单据可多供应商 |
 | 盘点唯一关联 | `stock_check_item` | (check_id, inventory_item_id) UNIQUE |
+| 库位码全局唯一 | `location` | `code` UNIQUE,跨仓库不重复(仓库是分组,不是命名空间) |
+| 仓库删除保护 | `warehouse` | 名下仍有 `location` 时拒绝删除(409) |
+| 不可删商品 | `product` | 名下有未终结库存单元(IN_STOCK/PENDING/RESERVED)时拒绝删除(409) |
 
 ## 5. 迁移与初始化
 
 - **首次**:只建表 + 创建首个 admin 账号(`UserService.bootstrapIfEmpty()`,账号/口令取自 `ADMIN_USERNAME` / `ADMIN_PASSWORD`),**不写入任何演示数据**;商品 / 供应商 / 库位由使用方自行建立
 - **空库自动建**:`sql/mysql-schema.sql` 全部 `CREATE TABLE IF NOT EXISTS`,由 MySQL 容器首次启动(data dir 为空)时经 `docker-entrypoint-initdb.d` 执行;复用的旧数据卷不会重跑,缺表时需 `docker compose down -v` 重建
 - **老库升级**:`DataSeeder.migrate()` 在启动时跑(`tryAddColumn` / `tryAddIndex` 查询 information_schema 后增量 DDL),不会破坏已有数据
+- **仓库体系自举**(2026-09-18,`DataSeeder.ensureDefaultWarehouse()`):建 `warehouse` 表 → 加 `location.warehouse_id` → 若无任何仓库则创建一个「默认仓库」(code `WH-DEFAULT`),并**仅在该列刚被加出来的那一次**把存量库位(`warehouse_id IS NULL`)归入它(之后启动不再回填,避免把用户刻意留空的"未分配"塞回去);同时确保兜底库位「默认库位」真实存在并挂在默认仓库下(该 code 一直是商品未填库位时的兜底值,此前并不在 `location` 表里)
 - **状态列追加**:B1/B2 后需手工 `ALTER TABLE inbound_order ADD COLUMN status VARCHAR(16) NOT NULL DEFAULT 'DRAFT'` —— 当前 9090 容器已加,见后端 report
 - **MySQL 老版 (<8.0.29)**:`ADD COLUMN IF NOT EXISTS` 不支持,需手工跑 migration
 
@@ -288,10 +312,11 @@ UNIQUE(check_id, inventory_item_id)
 | `idx_log_created` / `idx_log_order` | inventory_log | created_at / order_id | 流水查询 |
 | `idx_log_product` | inventory_log | product_id | 商品维度 |
 | `idx_stock_check_created` / `idx_stock_check_status` | stock_check | created_at / status | 盘点单列表 |
+| `idx_location_warehouse` | location | warehouse_id | 按仓库筛库位 / 仓库列表带出库位数 |
 
 ## 7. 数据量预估
 
-- `product` / `supplier` / `location`:几十~几百(企业级)
+- `warehouse` / `product` / `supplier` / `location`:几十~几百(企业级)
 - `inventory_item`:万~百万级(每个实物一行,大仓可能上百万)
 - `inbound_order` / `outbound_order` / `stock_check`:千~万/月(随时间累积)
 - `inventory_log`:与 inventory_item 同量级,长期保留

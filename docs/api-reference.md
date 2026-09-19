@@ -133,11 +133,34 @@
 | PUT | `/{id}` | **ADMIN** | |
 | DELETE | `/{id}` | **ADMIN** | |
 
-### 2.5 库位 — `/api/locations`
+### 2.5 仓库 — `/api/warehouses`
+
+| 方法 | URL | 鉴权 | 参数 / 请求 | 响应 | 错误 |
+|---|---|---|---|---|---|
+| GET | `/?keyword&status=` | 已登录 | `keyword` 模糊匹配 code/name/remark;`status` = `enabled` / `disabled` | `[{id, code, name, remark, enabled, locationCount, ...}]` | — |
+| GET | `/{id}` | 已登录 | — | `Warehouse` 单个(含 `locationCount`) | 404 |
+| POST | `/` | **ADMIN** | `{code, name, remark?, enabled?}` | 创建后 | 400 code 空/重复、name 空 |
+| PUT | `/{id}` | **ADMIN** | 同上 | 更新后 | 404 / 400 code 重复 |
+| DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404;**409 名下还有库位** |
+
+- `code` 唯一(`VARCHAR(32)`),`name` 必填(`VARCHAR(64)`)。
+- `locationCount` 是列表/详情带出的**展示字段**(名下库位数),不是表列。
+- **删除保护**:名下仍有 `location` 时抛 `IllegalStateException` → 409,提示"该仓库下还有 N 个库位";
+
+### 2.6 库位 — `/api/locations`
 
 同上模式,key=code,用于"商品 location 字段"下拉。
 
-### 2.6 用户管理 — `/api/users`(类级 `@RequireRole("ADMIN")`)
+| 方法 | URL | 鉴权 | 参数 / 请求 | 备注 |
+|---|---|---|---|---|
+| GET | `/?keyword&status&warehouseId=` | 已登录 | `warehouseId` 可选,按所属仓库过滤 | 响应每个库位带 `warehouseId` + `warehouseName` |
+| GET | `/{id}` | 已登录 | — | 同上 |
+| POST | `/` / PUT `/{id}` / DELETE `/{id}` | **ADMIN** | 请求体含 `warehouseId`(可空 = 未分配) | `warehouseId` 给了但仓库不存在 → 400 |
+
+**库位编码全局唯一**,跨仓库不重复(仓库只是分组标签)。这样 `inventory_item.location_code`、
+出入库单明细的 `location` 等"存裸库位码"的地方无需改动即可唯一定位。
+
+### 2.7 用户管理 — `/api/users`(类级 `@RequireRole("ADMIN")`)
 
 | 方法 | URL | 请求 | 备注 |
 |---|---|---|---|
@@ -149,7 +172,7 @@
 | POST | `/{id}/enabled` | `{enabled: bool}` | 启停 |
 | DELETE | `/{id}` | — | 不能删自己 / 最后一名 ADMIN |
 
-### 2.7 入库 — `/api/inbound`(DRAFT/COMMITTED/CANCELLED)
+### 2.8 入库 — `/api/inbound`(DRAFT/COMMITTED/CANCELLED)
 
 **老接口**(兼容保留,直接 COMMITTED):
 | 方法 | URL | 请求 | 响应 |
@@ -172,7 +195,7 @@
 | GET | `/orders/{id}` | 含 items + 每行 codes(commit 后有) |
 | GET | `/orders/{id}/export.csv` | UTF-8 BOM + 双引号转义,Excel/Numbers 兼容 |
 
-### 2.8 出库 — `/api/outbound`
+### 2.9 出库 — `/api/outbound`
 
 **老接口**(兼容):
 | 方法 | URL | 备注 |
@@ -190,7 +213,7 @@
 
 **查询**:同入库,不传 `status`(或传 `ALL`) = 不过滤。
 
-### 2.9 库存单元 — `/api/inventory/items`
+### 2.10 库存单元 — `/api/inventory/items`
 
 | 方法 | URL | 鉴权 | 备注 |
 |---|---|---|---|
@@ -219,7 +242,7 @@
 
 ⚠️ 与**单据状态**是两套不同维度的枚举,别混:出入库单/盘点单的状态只有 `DRAFT`/`COMMITTED`/`CANCELLED`(界面上显示草稿/已提交/已取消);PDA 内部还有个 `DocStatus.PENDING("待执行")`,那是**单据**状态的兜底值,与上面的 `PENDING("待入库")` 只是同名。
 
-### 2.10 盘点 — `/api/stock-checks`
+### 2.11 盘点 — `/api/stock-checks`
 
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误 |
 |---|---|---|---|---|---|
@@ -273,7 +296,7 @@ PDA 扫码链路涉及的端点(共 4 个):
 | 查询类(stats / products / orders) | | ✓ | |
 | 写入单据(批量) | | ✓ | |
 | DRAFT 单据的 scan / commit | | ✓ | |
-| 创建/删除商品/供应商/库位 | | | ✓ |
+| 创建/删除商品/供应商/库位/仓库 | | | ✓ |
 | 创建/提交/取消盘点单 | | | ✓ |
 | 用户管理 | | | ✓ |
 | scrap / transfer(实物) | | ✓ | |

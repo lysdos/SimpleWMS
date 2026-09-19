@@ -44,20 +44,43 @@ CREATE TABLE IF NOT EXISTS app_user (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统用户(登录账号)';
 
 -- ============================================================
---  库位
+--  仓库
 -- ============================================================
-CREATE TABLE IF NOT EXISTS location (
+--  仓库是库位的上层分组:每个库位归属一个仓库(location.warehouse_id)。
+--  库位编码仍**全局唯一**(不随仓库重复),所以 inventory_item.location_code /
+--  inbound_order_item.location / outbound_order_item.location 等既有的
+--  "按库位码定位"逻辑无需改动;要按仓库维度筛选时 join 本表即可。
+CREATE TABLE IF NOT EXISTS warehouse (
     id           INT NOT NULL AUTO_INCREMENT COMMENT '主键',
-    code         VARCHAR(32) NOT NULL COMMENT '库位编码(唯一)',
-    name         VARCHAR(64) NOT NULL COMMENT '库位名称',
+    code         VARCHAR(32) NOT NULL COMMENT '仓库编码(唯一)',
+    name         VARCHAR(64) NOT NULL COMMENT '仓库名称',
     remark       VARCHAR(255) DEFAULT NULL COMMENT '备注',
     enabled      TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用:1=启用 0=停用',
     created_by   VARCHAR(64) DEFAULT NULL COMMENT '创建人',
     created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_by   VARCHAR(64) DEFAULT NULL COMMENT '更新人',
     updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位(货架/货位)';
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_warehouse_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='仓库(库位的上层分组)';
+
+-- ============================================================
+--  库位
+-- ============================================================
+CREATE TABLE IF NOT EXISTS location (
+    id           INT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    code         VARCHAR(32) NOT NULL COMMENT '库位编码(全局唯一,跨仓库不重复)',
+    name         VARCHAR(64) NOT NULL COMMENT '库位名称',
+    warehouse_id INT DEFAULT NULL COMMENT '所属仓库 → warehouse.id(空=未分配)',
+    remark       VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    enabled      TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用:1=启用 0=停用',
+    created_by   VARCHAR(64) DEFAULT NULL COMMENT '创建人',
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_by   VARCHAR(64) DEFAULT NULL COMMENT '更新人',
+    updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_location_warehouse` (`warehouse_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位(货架/货位;归属仓库)';
 
 -- ============================================================
 --  供应商

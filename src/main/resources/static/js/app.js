@@ -13,6 +13,10 @@ const state = {
     locations: [],
     locationKw: '',
     locationStatus: '',
+    locationWarehouseId: '',
+    warehouses: [],
+    warehouseKw: '',
+    warehouseStatus: '',
     userKw: '',
     userRole: '',
     userStatus: '',
@@ -51,6 +55,7 @@ const routes = {
     users    : loadUsers,
     suppliers: loadSuppliers,
     locations: loadLocations,
+    warehouses: loadWarehouses,
     inventory: loadInventory,
     'stock-checks': loadStockChecks
 };
@@ -229,11 +234,14 @@ async function loadSuppliers() {
 
 async function loadLocations() {
     setActive('locations');
+    await ensureWarehouses();
     const qs = new URLSearchParams();
     if (state.locationKw) qs.set('keyword', state.locationKw);
     if (state.locationStatus) qs.set('status', state.locationStatus);
+    if (state.locationWarehouseId) qs.set('warehouseId', state.locationWarehouseId);
     state.locations = await api.get('/api/locations' + (qs.toString() ? '?' + qs.toString() : ''));
-    document.getElementById('view').innerHTML = Views.locations(state.locations, state.locationStatus);
+    document.getElementById('view').innerHTML =
+        Views.locations(state.locations, state.locationStatus, state.warehouses, state.locationWarehouseId);
 }
 
 async function loadInventory() {
@@ -344,10 +352,10 @@ function openNewStockCheckModal() {
             `;
         } else if (cur === 'LOCATION') {
             wrap.style.display = '';
-            // 库位下拉
+            // 库位下拉(按所属仓库分组)
             api.get('/api/locations').then(locs => {
-                const opts = (locs || []).map(l =>
-                    `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)} · ${escapeHtml(l.name)}</option>`).join('');
+                const opts = Views.locationOptgroups(locs, l =>
+                    `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)} · ${escapeHtml(l.name)}</option>`);
                 wrap.innerHTML = `
                     <label id="nsc-keyword-label">${t('stock_check.scope.location')}</label>
                     <select id="nsc-location-select" class="select" style="width:100%;">
@@ -1049,10 +1057,12 @@ function readSupplierForm() {
 function searchLocations() {
     state.locationKw = document.getElementById('loc-kw').value.trim();
     state.locationStatus = document.getElementById('loc-status-filter')?.value || '';
+    state.locationWarehouseId = document.getElementById('loc-wh-filter')?.value || '';
     loadLocations();
 }
 async function newLocation() {
-    showModal(t('location.form.new'), Views.locationForm({}), async () => {
+    await ensureWarehouses();
+    showModal(t('location.form.new'), Views.locationForm({}, state.warehouses), async () => {
         const body = readLocationForm();
         if (!body) return false;
         try {
@@ -1072,7 +1082,8 @@ async function viewLocation(id) {
 async function editLocation(id) {
     try {
         const l = await api.get('/api/locations/' + id);
-        showModal(t('location.form.edit'), Views.locationForm(l), async () => {
+        await ensureWarehouses();
+        showModal(t('location.form.edit'), Views.locationForm(l, state.warehouses), async () => {
             const body = readLocationForm();
             if (!body) return false;
             try {
@@ -1092,6 +1103,8 @@ function delLocation(id) {
             await api.del('/api/locations/' + id);
             toast(t('common.success.delete'), 'success');
             state.locations = [];
+            // 库位数变了,仓库列表上的「库位数」跟着失效
+            state.warehouses = [];
             await loadLocations();
         } catch (e) { toast(e.message, 'error'); }
     });
@@ -1099,11 +1112,95 @@ function delLocation(id) {
 function readLocationForm() {
     const code = document.getElementById('lf-code').value.trim();
     if (!code) { toast(t('location.error.code_required'), 'error'); return null; }
+    const whVal = document.getElementById('lf-warehouse')?.value || '';
     return {
         code,
         name   : document.getElementById('lf-name').value.trim(),
+        warehouseId: whVal ? Number(whVal) : null,
         remark : document.getElementById('lf-remark').value.trim(),
         enabled: document.getElementById('lf-enabled').value === 'true'
+    };
+}
+
+/* ---------- 仓库管理 ---------- */
+async function ensureWarehouses() {
+    if (!state.warehouses || state.warehouses.length === 0) {
+        state.warehouses = await api.get('/api/warehouses');
+    }
+}
+
+async function loadWarehouses() {
+    setActive('warehouses');
+    const qs = new URLSearchParams();
+    if (state.warehouseKw) qs.set('keyword', state.warehouseKw);
+    if (state.warehouseStatus) qs.set('status', state.warehouseStatus);
+    state.warehouses = await api.get('/api/warehouses' + (qs.toString() ? '?' + qs.toString() : ''));
+    document.getElementById('view').innerHTML = Views.warehouses(state.warehouses, state.warehouseStatus);
+}
+
+function searchWarehouses() {
+    state.warehouseKw = document.getElementById('wh-kw').value.trim();
+    state.warehouseStatus = document.getElementById('wh-status-filter')?.value || '';
+    loadWarehouses();
+}
+async function newWarehouse() {
+    showModal(t('warehouse.form.new'), Views.warehouseForm({}), async () => {
+        const body = readWarehouseForm();
+        if (!body) return false;
+        try {
+            await api.post('/api/warehouses', body);
+            toast(t('supplier.toast.created'), 'success');
+            state.warehouses = [];
+            await loadWarehouses();
+        } catch (e) { toast(e.message, 'error'); return false; }
+    });
+}
+async function viewWarehouse(id) {
+    try {
+        const w = await api.get('/api/warehouses/' + id);
+        showModal(t('warehouse.form.view'), Views.warehouseDetail(w), null, true);
+    } catch (e) { toast(e.message, 'error'); }
+}
+async function editWarehouse(id) {
+    try {
+        const w = await api.get('/api/warehouses/' + id);
+        showModal(t('warehouse.form.edit'), Views.warehouseForm(w), async () => {
+            const body = readWarehouseForm();
+            if (!body) return false;
+            try {
+                await api.put('/api/warehouses/' + id, body);
+                toast(t('common.success.save'), 'success');
+                // 改了仓库名:库位列表里的「所属仓库」列也要跟着刷新
+                state.warehouses = [];
+                state.locations = [];
+                await loadWarehouses();
+            } catch (e) { toast(e.message, 'error'); return false; }
+        });
+    } catch (e) { toast(e.message, 'error'); }
+}
+function delWarehouse(id) {
+    const w = (state.warehouses || []).find(x => x.id === id);
+    const label = w ? w.code : ('#' + id);
+    confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}\n\n${t('warehouse.del_tip')}`, async () => {
+        try {
+            await api.del('/api/warehouses/' + id);
+            toast(t('common.success.delete'), 'success');
+            state.warehouses = [];
+            state.locations = [];
+            await loadWarehouses();
+        } catch (e) { toast(e.message, 'error'); }
+    });
+}
+function readWarehouseForm() {
+    const code = document.getElementById('wf-code').value.trim();
+    if (!code) { toast(t('warehouse.error.code_required'), 'error'); return null; }
+    const name = document.getElementById('wf-name').value.trim();
+    if (!name) { toast(t('warehouse.error.name_required'), 'error'); return null; }
+    return {
+        code,
+        name,
+        remark : document.getElementById('wf-remark').value.trim(),
+        enabled: document.getElementById('wf-enabled').value === 'true'
     };
 }
 
@@ -1184,10 +1281,10 @@ function scrapInventory(id, code) {
 
 async function transferInventory(id, code, currentLoc) {
     await ensureLocations();
-    const locOptions = state.locations
-        .filter(l => l.enabled !== false && l.code !== currentLoc)
-        .map(l => `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`)
-        .join('');
+    // 目标库位按所属仓库分组,多仓库下单子长了也不至于混在一起
+    const locOptions = Views.locationOptgroups(
+        state.locations.filter(l => l.enabled !== false && l.code !== currentLoc),
+        l => `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`);
     showModal(t('inventory.modal.transfer_title'), `
         <p style="margin:0 0 12px;font-size:13px;color:var(--c-text-2);">
             ${t('inventory.modal.transfer_tip', { from: currentLoc })}

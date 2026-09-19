@@ -23,8 +23,9 @@ public class LocationController {
     @GetMapping
     public ApiResponse<List<Location>> list(
             @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "status", required = false) String status) {
-        return ApiResponse.ok(locationService.list(keyword, status));
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "warehouseId", required = false) Integer warehouseId) {
+        return ApiResponse.ok(locationService.list(keyword, status, warehouseId));
     }
 
     @GetMapping("/{id}")
