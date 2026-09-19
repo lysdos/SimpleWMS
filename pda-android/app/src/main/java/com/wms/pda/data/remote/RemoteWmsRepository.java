@@ -451,15 +451,16 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void listLocations(WmsCallback<List<String>> cb) {
+    public void listLocations(WmsCallback<List<com.wms.pda.data.model.Location>> cb) {
         Type t = new TypeToken<List<Dto.Location>>(){}.getType();
         api.get("/api/locations", t, new ApiClient.Callback<List<Dto.Location>>() {
             @Override public void onSuccess(List<Dto.Location> list) {
-                List<String> out = new ArrayList<>();
+                List<com.wms.pda.data.model.Location> out = new ArrayList<>();
                 if (list != null) {
                     for (Dto.Location l : list) {
+                        // 只留启用且有码的;停用/空码不进下拉
                         if ((l.enabled == null || l.enabled) && l.code != null && !l.code.isEmpty()) {
-                            out.add(l.code);
+                            out.add(Mappers.toModel(l));
                         }
                     }
                 }

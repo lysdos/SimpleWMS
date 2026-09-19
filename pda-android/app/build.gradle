@@ -44,6 +44,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric 读 R.string / 布局等资源必须打开(默认 false)。
+            // 关着时它在 sdk > 28 上直接以 "doesn't support legacy resources mode after P"
+            // 把整个测试类 skip 掉 —— 表现为 BUILD SUCCESSFUL 但 skipped=N,极易误判为通过。
+            includeAndroidResources = true
+        }
+    }
 }
 
 dependencies {

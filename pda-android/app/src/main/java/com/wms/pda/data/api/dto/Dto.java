@@ -156,11 +156,15 @@ public class Dto {
         public Boolean enabled;
     }
 
-    // ---- 库位(/api/locations,调拨目标用) ----
+    // ---- 库位(/api/locations,调拨目标 / 盘点「按库位」用) ----
+    // warehouseId / warehouseName 由后端 JOIN warehouse 带出;为空 = 未分配仓库。
+    // 多仓库后下拉要按仓库分组(见 ui.common.LocationPicker)。
     public static class Location {
         public Integer id;
         public String code;
         public String name;
+        public Integer warehouseId;
+        public String warehouseName;
         public Boolean enabled;
     }
 
@@ -178,14 +182,6 @@ public class Dto {
         public String createdBy;
         public Integer orderId;
         public String createdAt;
-    }
-
-    // ---- 登录响应 ----
-    public static class LoginResponse {
-        public String token;
-        public String username;
-        public String role;
-        public Boolean mustChangePw;
     }
 
     // ---- 撤销扫码确认(POST /orders/{id}/reset-scans 响应) ----

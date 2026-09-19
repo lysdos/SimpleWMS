@@ -185,6 +185,19 @@ final class Mappers {
         return m;
     }
 
+    static com.wms.pda.data.model.Location toModel(Dto.Location l) {
+        if (l == null) return null;
+        com.wms.pda.data.model.Location m = new com.wms.pda.data.model.Location();
+        m.id = l.id;
+        m.code = l.code;
+        m.name = l.name;
+        m.warehouseId = l.warehouseId;
+        m.warehouseName = l.warehouseName;
+        // 后端 enabled 为空按启用处理(与 supplier 一致)
+        m.enabled = l.enabled == null || l.enabled;
+        return m;
+    }
+
     private static Enums.DocStatus mapStatus(String s) {
         if (s == null) return Enums.DocStatus.PENDING;
         switch (s) {

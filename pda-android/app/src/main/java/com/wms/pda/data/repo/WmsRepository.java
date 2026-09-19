@@ -65,8 +65,12 @@ public interface WmsRepository {
 
     // ---- 库存 ----
     void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb);
-    /** 启用库位代码列表(调拨目标下拉用) */
-    void listLocations(WmsCallback<List<String>> cb);
+    /**
+     * 启用库位列表(调拨目标 / 盘点「按库位」下拉用)。
+     * 带 warehouseName,调用方按仓库做两级选择(见 ui.common.LocationPicker);
+     * 发给后端的仍是裸 code。
+     */
+    void listLocations(WmsCallback<List<com.wms.pda.data.model.Location>> cb);
     /** 调拨库存单元到目标库位 */
     void transfer(int itemId, String toLocation, WmsCallback<Void> cb);
     /** 报废库存单元 */

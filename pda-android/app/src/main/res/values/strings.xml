@@ -110,6 +110,8 @@
     <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
     <string name="transfer_qty">调拨数量</string>
+    <!-- 两级库位选择:未分配仓库的库位归入这一组。必须保留,否则这些库位在 PDA 上选不到 -->
+    <string name="location_warehouse_unassigned">(未分配)</string>
     <string name="scrap_title">库存报废</string>
     <string name="scrap_reason_label">报废原因(可选)</string>
     <string name="scrap_reason_hint">例如:过期 / 损坏 / 测试报废 ...</string>
@@ -122,6 +124,7 @@
     <string name="stocktake_scope_all">全部在库单元</string>
     <string name="stocktake_scope_sku">按 SKU</string>
     <string name="stocktake_scope_location">按库位</string>
+    <string name="stocktake_warehouse_label">仓库</string>
     <string name="stocktake_sku_label">SKU</string>
     <string name="stocktake_sku_hint">输入 SKU,多个用逗号分隔(最多 50 个)</string>
     <string name="stocktake_remark">备注</string>

@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -22,11 +21,12 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.tabs.TabLayout;
 import com.wms.pda.R;
 import com.wms.pda.data.model.Enums;
+import com.wms.pda.data.model.Location;
 import com.wms.pda.data.model.StocktakeOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
+import com.wms.pda.ui.common.LocationPicker;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -101,29 +101,29 @@ public class StocktakeListActivity extends AppCompatActivity {
         TextView tvKeywordLabel = root.findViewById(R.id.tv_keyword_label);
         EditText etKeyword = root.findViewById(R.id.et_keyword);
         Spinner spLocation = root.findViewById(R.id.sp_location);
+        Spinner spWarehouse = root.findViewById(R.id.sp_warehouse);
+        TextView tvWarehouseLabel = root.findViewById(R.id.tv_warehouse_label);
+        TextView tvLocationLabel = root.findViewById(R.id.tv_location_label);
         EditText etRemark = root.findViewById(R.id.et_remark);
 
-        // 库位下拉(按库位盘点时选择,与 web 端一致)
-        List<String> locations = new ArrayList<>();
-        ArrayAdapter<String> locAd = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item, locations);
-        locAd.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spLocation.setAdapter(locAd);
-        RepositoryProvider.get().listLocations(new WmsCallback<List<String>>() {
-            @Override public void onSuccess(List<String> data) {
-                locations.clear();
-                locations.addAll(data);
-                locAd.notifyDataSetChanged();
+        // 库位两级选择(仓库 → 库位),见 LocationPicker;数据到达后才能建,故用数组持有
+        final LocationPicker[] picker = {null};
+        RepositoryProvider.get().listLocations(new WmsCallback<List<Location>>() {
+            @Override public void onSuccess(List<Location> data) {
+                picker[0] = new LocationPicker(spWarehouse, spLocation, data, null);
             }
             @Override public void onError(int code, String msg) { /* 库位加载失败时留空,提交时校验提示 */ }
         });
 
-        // 盘点方式联动:ALL 隐藏输入,SKU 显示关键字输入框,LOCATION 显示库位下拉
+        // 盘点方式联动:ALL 隐藏输入,SKU 显示关键字输入框,LOCATION 显示仓库+库位下拉
         Runnable syncVisibility = () -> {
             boolean sku = rbSku.isChecked();
             boolean loc = rbLoc.isChecked();
             tvKeywordLabel.setVisibility(sku ? View.VISIBLE : View.GONE);
             etKeyword.setVisibility(sku ? View.VISIBLE : View.GONE);
+            tvWarehouseLabel.setVisibility(loc ? View.VISIBLE : View.GONE);
+            spWarehouse.setVisibility(loc ? View.VISIBLE : View.GONE);
+            tvLocationLabel.setVisibility(loc ? View.VISIBLE : View.GONE);
             spLocation.setVisibility(loc ? View.VISIBLE : View.GONE);
         };
         rgScope.setOnCheckedChangeListener((g, id) -> syncVisibility.run());
@@ -147,8 +147,9 @@ public class StocktakeListActivity extends AppCompatActivity {
                     }
                 } else if (rbLoc.isChecked()) {
                     scope = "LOCATION";
-                    Object sel = spLocation.getSelectedItem();
-                    keyword = sel == null ? "" : sel.toString();
+                    // 发给后端的是裸库位码(两级下拉的选中值)
+                    String sel = picker[0] == null ? null : picker[0].getSelectedCode();
+                    keyword = sel == null ? "" : sel;
                     if (keyword.isEmpty()) {
                         Toast.makeText(this, R.string.stocktake_err_loc_empty, Toast.LENGTH_SHORT).show();
                         return;
