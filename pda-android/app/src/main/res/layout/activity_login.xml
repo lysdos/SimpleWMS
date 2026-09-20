@@ -118,7 +118,7 @@
                     android:layout_marginTop="@dimen/space_xs"
                     style="@style/Text.Body"
                     android:textStyle="bold"
-                    tools:text="http://192.168.11.160:9090"
+                    tools:text="http://192.168.11.160:9080"
                     xmlns:tools="http://schemas.android.com/tools" />
 
                 <TextView

@@ -31,7 +31,7 @@
     <!-- 设置 -->
     <string name="settings_title">服务器设置</string>
     <string name="settings_address">服务地址</string>
-    <string name="settings_address_hint">如 http://192.168.11.160:9090</string>
+    <string name="settings_address_hint">如 http://192.168.11.160:9080</string>
     <string name="settings_test">测试连接</string>
     <string name="settings_test_success">连接成功</string>
     <string name="settings_test_fail">连接失败</string>
