@@ -47,11 +47,13 @@ public class OutboundOrder {
         public String unitPrice;     // BigDecimal → String
         public Integer beforeQty;
         public Integer afterQty;
-        public String location;
+        public String location;      // 空 = 自动(跨库位找货),实际分布看 picks
         public String rowRemark;
         public int qty;
         public String uom;           // 后端无字段,PDA 端占位 "件"
         public List<String> codes;   // 每个库存单元的编码(逐件显示用)
+        /** 拣货分布:库位码 → 件数。行上 location 为空时,现场靠这个知道去哪儿拿货。 */
+        public java.util.Map<String, Integer> picks;
 
         public Line() {}
 

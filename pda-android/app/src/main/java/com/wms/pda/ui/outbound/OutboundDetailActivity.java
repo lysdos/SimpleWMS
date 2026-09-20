@@ -19,6 +19,7 @@ import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
 import com.wms.pda.data.model.EpcScanResult;
 import com.wms.pda.data.model.Enums;
+import com.wms.pda.data.model.Location;
 import com.wms.pda.data.model.OutboundOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
@@ -30,8 +31,10 @@ import com.wms.pda.ui.common.StatusPill;
 import com.wms.pda.util.BeepUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -73,6 +76,9 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
     /** 当前活跃的扫码类型(null = 未在扫码) */
     private ScanType activeScanType = null;
+
+    /** 库位码 → 仓库名(展示用)。一个商品会分散在多个库位,光看库位码不知道在哪个仓。 */
+    private final Map<String, String> warehouseByLoc = new HashMap<>();
 
     /** 单据已完成/已取消,扫码入口整体锁定 */
     private boolean scanLocked = false;
@@ -449,6 +455,26 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
     private void render() {
         if (dbId == null || dbId < 0) { finish(); return; }
+        // 先备好"库位码 → 仓库名"再拉单据,首帧就能显示「仓库/库位」。
+        // 拉不到也照常拉单据(退化成只显示库位码)—— 一个展示用的映射不该挡住单据加载。
+        if (warehouseByLoc.isEmpty()) {
+            RepositoryProvider.get().listLocations(new WmsCallback<List<Location>>() {
+                @Override public void onSuccess(List<Location> locs) {
+                    if (locs != null) {
+                        for (Location l : locs) {
+                            if (l.code != null) warehouseByLoc.put(l.code, l.warehouseName);
+                        }
+                    }
+                    loadOrder();
+                }
+                @Override public void onError(int code, String msg) { loadOrder(); }
+            });
+        } else {
+            loadOrder();
+        }
+    }
+
+    private void loadOrder() {
         RepositoryProvider.get().getOutboundOrder(String.valueOf(dbId),
                 new WmsCallback<OutboundOrder>() {
                     @Override public void onSuccess(OutboundOrder o) {
@@ -459,6 +485,13 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         Toast.makeText(OutboundDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
                     }
                 });
+    }
+
+    /** 库位显示:带上级仓库(「主仓库/A-01-01」);查不到仓库就只显示库位码 */
+    private String locLabel(String code) {
+        if (code == null || code.isEmpty()) return "—";
+        String wh = warehouseByLoc.get(code);
+        return (wh == null || wh.isEmpty()) ? code : wh + "/" + code;
     }
 
     private void doRender(OutboundOrder o) {
@@ -522,7 +555,21 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 tvQty.setText("× " + l.qty + " " + (l.uom == null ? "" : l.uom));
 
                 StringBuilder info = new StringBuilder();
-                if (l.location != null && !l.location.isEmpty()) info.append("库位: ").append(l.location).append("  ");
+                if (l.location != null && !l.location.isEmpty()) {
+                    // 历史单:手工指定过库位
+                    info.append("库位: ").append(locLabel(l.location)).append("  ");
+                } else {
+                    // 新单:出库是"自动跨库位找货",行上没有单一库位,靠下面的拣货分布定位
+                    info.append("库位: 自动  ");
+                }
+                if (l.picks != null && !l.picks.isEmpty()) {
+                    StringBuilder p = new StringBuilder();
+                    for (Map.Entry<String, Integer> e : l.picks.entrySet()) {
+                        if (p.length() > 0) p.append(" · ");
+                        p.append(locLabel(e.getKey())).append(" × ").append(e.getValue());
+                    }
+                    info.append("拣货: ").append(p).append("  ");
+                }
                 if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
                 if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
                 tvInfo.setText(info.toString());

@@ -52,6 +52,9 @@ public class InventoryItemDao {
             int ewd = rs.getInt("expiry_warn_days");
             i.setExpiryWarnDays(rs.wasNull() ? null : ewd);
         } catch (java.sql.SQLException ignored) {}
+        try {   // warehouse_name 同理:只有 findItems 联了 location → warehouse
+            i.setWarehouseName(rs.getString("warehouse_name"));
+        } catch (java.sql.SQLException ignored) {}
         i.setCreatedBy(rs.getString("created_by"));
         ts = rs.getTimestamp("created_at");
         i.setCreatedAt(ts == null ? null : ts.toLocalDateTime());
@@ -122,16 +125,6 @@ public class InventoryItemDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
-    /** EPC + 状态同时匹配(给 RFID 出库用,挑 RESERVED 已锁定的) */
-    public InventoryItem findByEpcAndStatus(String epc, String status) {
-        if (epc == null || epc.isBlank()) return null;
-        String e = epc.trim().toUpperCase();
-        List<InventoryItem> list = jdbc.query(
-                "SELECT * FROM inventory_item WHERE RIGHT(code, ?) = ? AND status = ? ORDER BY id ASC LIMIT 1",
-                ROW, e.length(), e, status);
-        return list.isEmpty() ? null : list.get(0);
-    }
-
     /**
      * UHF 扫码用:按 EPC 找"属于该出库单已锁定(RESERVED)的 unit"
      * @return 命中且属于该单 → unit;否则 null
@@ -145,17 +138,6 @@ public class InventoryItemDao {
                 "ORDER BY id ASC LIMIT 1",
                 ROW, e.length(), e, outboundOrderId);
         return list.isEmpty() ? null : list.get(0);
-    }
-
-    /** 按 EPC 把 unit 标记为 OUT(剩余置 0),扣 1 件 */
-    public int consumeForOutboundByEpc(String epc, int outboundOrderId) {
-        if (epc == null || epc.isBlank()) return 0;
-        String e = epc.trim().toUpperCase();
-        return jdbc.update(
-                "UPDATE inventory_item SET status = 'OUT', remaining = 0, " +
-                "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP " +
-                "WHERE RIGHT(code, ?) = ? AND status = 'IN_STOCK'",
-                outboundOrderId, e.length(), e);
     }
 
     /**
@@ -259,11 +241,17 @@ public class InventoryItemDao {
      */
     public List<InventoryItem> findItems(String sku, String location, String status,
                                           String expiryStatus, String expiryFrom, String expiryTo,
-                                          int page, int pageSize) {
-        StringBuilder sb = new StringBuilder("SELECT i.*, p.expiry_warn_days FROM inventory_item i " +
-                "LEFT JOIN product p ON p.id = i.product_id WHERE 1=1");
+                                          Integer warehouseId, int page, int pageSize) {
+        // 联 location → warehouse 带出仓库名:库存单元只存库位码,仓库名在 warehouse 表上
+        // (location 只存 warehouse_id,没有冗余名字)。列表和导出都要显示"仓库 / 库位",
+        // 否则筛选了仓库、导出的 CSV 里还是光秃秃一个码,又回到"看不出是哪个仓"的老问题。
+        StringBuilder sb = new StringBuilder("SELECT i.*, p.expiry_warn_days, w.name AS warehouse_name " +
+                "FROM inventory_item i " +
+                "LEFT JOIN product p ON p.id = i.product_id " +
+                "LEFT JOIN location l ON l.code = i.location_code " +
+                "LEFT JOIN warehouse w ON w.id = l.warehouse_id WHERE 1=1");
         List<Object> args = new ArrayList<>();
-        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo);
+        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo, warehouseId);
         sb.append(" ORDER BY i.id DESC");
         // 导出场景:controller 传 pageSize=5000(导出全部),被 cap 成 20 = 漏数据。
         // 把上限放到 100000(只对导出生效,UI 列表仍走 pageSize=20),确保 export.csv 拿到全集。
@@ -282,11 +270,12 @@ public class InventoryItemDao {
     }
 
     public long countItems(String sku, String location, String status,
-                           String expiryStatus, String expiryFrom, String expiryTo) {
+                           String expiryStatus, String expiryFrom, String expiryTo,
+                           Integer warehouseId) {
         StringBuilder sb = new StringBuilder("SELECT COUNT(*) FROM inventory_item i " +
                 "LEFT JOIN product p ON p.id = i.product_id WHERE 1=1");
         List<Object> args = new ArrayList<>();
-        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo);
+        appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo, warehouseId);
         Long c = jdbc.queryForObject(sb.toString(), Long.class, args.toArray());
         return c == null ? 0L : c;
     }
@@ -294,7 +283,8 @@ public class InventoryItemDao {
     /** findItems / countItems 共用的过滤条件(注意:外层查询用了别名 i,product 别名 p) */
     private void appendItemFilters(StringBuilder sb, List<Object> args,
                                    String sku, String location, String status,
-                                   String expiryStatus, String expiryFrom, String expiryTo) {
+                                   String expiryStatus, String expiryFrom, String expiryTo,
+                                   Integer warehouseId) {
         if (sku != null && !sku.isBlank()) {
             sb.append(" AND i.sku LIKE ?");
             args.add("%" + sku.trim() + "%");
@@ -302,6 +292,15 @@ public class InventoryItemDao {
         if (location != null && !location.isBlank()) {
             sb.append(" AND i.location_code = ?");
             args.add(location.trim());
+        }
+        // 按仓库筛选:库存单元只存库位码,仓库要经 location 表带出来。
+        // 一个商品会分散在多个库位,所以有了这个才看得出"甲仓 60 / 乙仓 40"。
+        // 子查询别名用 loc 而不是 l —— findItems 的外层已经 LEFT JOIN location l 了,
+        // 重名会遮住外层别名,读的人要停下来想一下哪个 l 是哪个。
+        if (warehouseId != null) {
+            sb.append(" AND EXISTS (SELECT 1 FROM location loc " +
+                      "WHERE loc.code = i.location_code AND loc.warehouse_id = ?)");
+            args.add(warehouseId);
         }
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
             sb.append(" AND i.status = ?");
@@ -324,58 +323,6 @@ public class InventoryItemDao {
         }
     }
 
-    /**
-     * 出库时按 FIFO 选同 SKU + 库位 + IN_STOCK 的库存单元,整件扣减。
-     * 优先级:
-     *   1) 优先选 remaining=1(标准一物一码)
-     *   2) 不足时退到 remaining>1 的老数据,整批扣减(remaining→0)
-     * 扣减后 remaining=0 设为 OUT;否则保留 IN_STOCK(老数据可能跨单据分批出库)。
-     * outbound_order_id 仅在本次订单消耗了部分时记录。
-     */
-    public List<ConsumeRecord> consumeForOutbound(int productId, String locationCode, int needQty, int outboundOrderId) {
-        List<ConsumeRecord> consumed = new ArrayList<>();
-        if (needQty <= 0) return consumed;
-
-        // 1) 优先选 remaining=1 的标准一物一码单元
-        List<InventoryItem> units = jdbc.query(
-                "SELECT * FROM inventory_item " +
-                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining = 1 " +
-                "ORDER BY id ASC",
-                ROW, productId, locationCode);
-
-        int left = needQty;
-        for (InventoryItem it : units) {
-            if (left <= 0) break;
-            jdbc.update(
-                    "UPDATE inventory_item SET remaining = 0, status = ?, " +
-                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    InventoryItem.STATUS_OUT, outboundOrderId, it.getId());
-            consumed.add(new ConsumeRecord(it.getId(), 1));
-            left--;
-        }
-        if (left <= 0) return consumed;
-
-        // 2) 退路:选 remaining>1 的老数据单元,整批扣减
-        List<InventoryItem> legacy = jdbc.query(
-                "SELECT * FROM inventory_item " +
-                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining > 1 " +
-                "ORDER BY id ASC",
-                ROW, productId, locationCode);
-        for (InventoryItem it : legacy) {
-            if (left <= 0) break;
-            int take = Math.min(left, it.getRemaining());
-            int newRem = it.getRemaining() - take;
-            String newStatus = (newRem <= 0) ? InventoryItem.STATUS_OUT : InventoryItem.STATUS_IN_STOCK;
-            jdbc.update(
-                    "UPDATE inventory_item SET remaining = ?, status = ?, " +
-                    "outbound_order_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    newRem, newStatus, outboundOrderId, it.getId());
-            consumed.add(new ConsumeRecord(it.getId(), take));
-            left -= take;
-        }
-        return consumed;
-    }
-
     /** 出库消耗记录 */
     public static class ConsumeRecord {
         public final int inventoryItemId;
@@ -390,18 +337,29 @@ public class InventoryItemDao {
      * 锁定后状态 = RESERVED,outbound_order_id 写上。
      * 优先 remaining=1 的标准单元,不足时退到 remaining>1 的老数据(整批锁)。
      * 排序: 有生产日期的按日期升序(最早生产的先出),无日期的按 id 升序(FIFO)。
+     *
+     * locationCode 传 null/空 = **不限库位,把该商品的货放在一个候选池里一起排 FEFO**。
+     * 这是"一个商品会分散在多个库位"之后的默认走法:一批货主仓库位放不下时
+     * 剩下的进副仓库位,出库不该因为"商品默认库位那个码上没货"就报库存不足 ——
+     * 按库位等值匹配会让总量明明够的单子报"库存不足",而且现场看不出原因。
+     *
      * @return 锁定的(行数,总件数)
      */
     public ReserveResult reserveForOutbound(int productId, String locationCode, int needQty, int outboundOrderId) {
         ReserveResult result = new ReserveResult();
         if (needQty <= 0) return result;
 
+        // 库位条件按需拼:不限库位时不加这一段
+        boolean byLocation = locationCode != null && !locationCode.isBlank();
+        String locClause = byLocation ? "AND location_code = ? " : "";
+        Object[] args = byLocation ? new Object[]{productId, locationCode} : new Object[]{productId};
+
         // 1) remaining=1 标准单元 (FEFO: 先到期先出)
         List<InventoryItem> units = jdbc.query(
                 "SELECT * FROM inventory_item " +
-                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining = 1 " +
+                "WHERE product_id = ? " + locClause + "AND status = 'IN_STOCK' AND remaining = 1 " +
                 "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
-                ROW, productId, locationCode);
+                ROW, args);
         int left = needQty;
         for (InventoryItem it : units) {
             if (left <= 0) break;
@@ -418,9 +376,9 @@ public class InventoryItemDao {
         // 2) remaining>1 老数据(整批锁,remaining 不动,等 commit 时再扣) (FEFO: 先到期先出)
         List<InventoryItem> legacy = jdbc.query(
                 "SELECT * FROM inventory_item " +
-                "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK' AND remaining > 1 " +
+                "WHERE product_id = ? " + locClause + "AND status = 'IN_STOCK' AND remaining > 1 " +
                 "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
-                ROW, productId, locationCode);
+                ROW, args);
         for (InventoryItem it : legacy) {
             if (left <= 0) break;
             int take = Math.min(left, it.getRemaining());
@@ -500,23 +458,27 @@ public class InventoryItemDao {
     }
 
     /**
-     * 统计"出库单已锁定的、按 product_id+location 划分的件数"。
-     * 给老 DRAFT 单 reserveDraft 补全时,计算"还差几件"用。
-     * 老数据(remaining>1)按整批贡献 1 个 unit,return 时按 remaining 算件数。
+     * 统计"该商品在这张出库单上已锁定几件"。
+     * 给老 DRAFT 单 reserveDraft 补全时算"还差几件",以及 UHF 扫码时
+     * 显示"已扫 N / 共 M"用。
+     *
+     * **不按库位划分**:一张出库单的一行可以由多个库位共同满足,
+     * 按库位计数会少算 —— 补全会多锁、界面上"共 M 件"也会偏小。
+     * 老数据(remaining>1)按 remaining 算件数。
      */
-    public Integer countReservedForOrder(int outboundOrderId, int productId, String location) {
+    public Integer countReservedForOrder(int outboundOrderId, int productId) {
         // 整件单元:每行 1 件
         Integer a = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM inventory_item " +
                 "WHERE status = 'RESERVED' AND outbound_order_id = ? " +
-                "  AND product_id = ? AND location_code = ? AND remaining = 1",
-                Integer.class, outboundOrderId, productId, location);
+                "  AND product_id = ? AND remaining = 1",
+                Integer.class, outboundOrderId, productId);
         // 老数据:每行算 remaining 件
         Integer b = jdbc.queryForObject(
                 "SELECT COALESCE(SUM(remaining), 0) FROM inventory_item " +
                 "WHERE status = 'RESERVED' AND outbound_order_id = ? " +
-                "  AND product_id = ? AND location_code = ? AND remaining > 1",
-                Integer.class, outboundOrderId, productId, location);
+                "  AND product_id = ? AND remaining > 1",
+                Integer.class, outboundOrderId, productId);
         return (a == null ? 0 : a) + (b == null ? 0 : b);
     }
 
@@ -529,13 +491,24 @@ public class InventoryItemDao {
                 InventoryItem.STATUS_SCRAPPED, remark, id);
     }
 
-    /** 调拨:改 location_code + 记录 from/to */
-    public int transfer(int id, String toLocation) {
+    /**
+     * 调拨:把单元的 location_code 改到目标库位,**状态保持 IN_STOCK**。
+     *
+     * 这里曾经把 status 打成终态 TRANSFERRED 而且**不改 location_code**。
+     * 后果是调拨之后:货从默认库存列表(只看 IN_STOCK)里消失、再也出不了库、
+     * 进不了盘点,而 product.quantity 还把它算着 —— 等于货被调进了黑洞。
+     * 调拨的语义就是"同一个实物换个位置",所以只需要改 location_code。
+     *
+     * transferred_from 由调用方传入,不用 `SET transferred_from = location_code,
+     * location_code = ?` 那种写法取旧值 —— 那依赖 MySQL 非标准的 UPDATE 求值顺序,
+     * 太隐晦,后人一改顺序就静默写错。
+     */
+    public int transfer(int id, String fromLocation, String toLocation) {
         return jdbc.update(
-                "UPDATE inventory_item SET status = ?, transferred_at = CURRENT_TIMESTAMP, " +
-                "transferred_from = location_code, transferred_to = ?, " +
+                "UPDATE inventory_item SET location_code = ?, transferred_at = CURRENT_TIMESTAMP, " +
+                "transferred_from = ?, transferred_to = ?, " +
                 "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'IN_STOCK'",
-                InventoryItem.STATUS_TRANSFERRED, toLocation, id);
+                toLocation, fromLocation, toLocation, id);
     }
 
     /**
@@ -544,6 +517,8 @@ public class InventoryItemDao {
      * (IN_STOCK 可出库、PENDING 等入库单提交、RESERVED 被出库草稿锁定),
      * 商品行一旦被删,出库单提交时的 FIFO 扣减就查不到商品了。
      * OUT / SCRAPPED / TRANSFERRED 是终态,不再参与业务,不阻塞删除。
+     * 注:TRANSFERRED 现在只可能来自历史数据 —— 调拨已改成只挪库位、保持 IN_STOCK
+     * (见 transfer),新数据不会再产生这个状态。
      */
     public int countActiveByProductId(int productId) {
         Integer c = jdbc.queryForObject(
@@ -551,26 +526,5 @@ public class InventoryItemDao {
                 "AND status IN ('IN_STOCK', 'PENDING', 'RESERVED')",
                 Integer.class, productId);
         return c == null ? 0 : c;
-    }
-
-    /** 简单统计:在库总数(供仪表盘参考) */
-    public Long sumRemaining() {
-        Long v = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(remaining), 0) FROM inventory_item WHERE status = 'IN_STOCK'",
-                Long.class);
-        return v == null ? 0L : v;
-    }
-
-    /** 在库单元在某库位的剩余总数(供出库预校验) */
-    public Long sumRemaining(int productId, String locationCode) {
-        try {
-            Long v = jdbc.queryForObject(
-                    "SELECT COALESCE(SUM(remaining), 0) FROM inventory_item " +
-                    "WHERE product_id = ? AND location_code = ? AND status = 'IN_STOCK'",
-                    Long.class, productId, locationCode);
-            return v == null ? 0L : v;
-        } catch (Exception e) {
-            return 0L;
-        }
     }
 }

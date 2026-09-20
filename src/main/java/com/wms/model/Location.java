@@ -11,6 +11,14 @@ import java.time.LocalDateTime;
  */
 public class Location {
 
+    /**
+     * 兜底库位码。商品没设库位、入库明细也没指定库位时落到这里。
+     * 这个字符串是**载荷性的**:入库(写 inventory_item.location_code)、
+     * 出库(锁定/推导商品库位)、商品保存(空值归一)都拿它当兜底,
+     * 改它等于改那几处的行为 —— 所以只留一份,不要在各处再写字面量。
+     */
+    public static final String FALLBACK_CODE = "默认库位";
+
     private Integer id;
     private String code;        // 库位编码,如 "A-01-03"
     private String name;        // 库位名称,可空(便于直接用 code 显示)

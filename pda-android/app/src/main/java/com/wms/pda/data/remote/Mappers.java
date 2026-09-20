@@ -88,6 +88,7 @@ final class Mappers {
                 l.qty = it.quantity == null ? 0 : it.quantity;
                 l.uom = "件";
                 l.codes = it.codes;
+                l.picks = it.picks;
                 m.lines.add(l);
             }
         }

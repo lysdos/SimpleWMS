@@ -178,13 +178,17 @@
 | 方法 | URL | 请求 | 响应 |
 |---|---|---|---|
 | POST | `/` | `{productId, quantity, remark, operator?}` | `InventoryLog` |
-| POST | `/batch` | `{externalNo?, remark?, items:[{productId, quantity, supplier?, rowRemark?}]}` | `InboundOrder` + items |
+| POST | `/batch` | `{externalNo?, remark?, items:[{productId, quantity, supplier?, rowRemark?, productionDate?, shelfLifeDays?, location?}]}` | `InboundOrder` + items |
+
+**明细行的 `location`(2026-09-20 新增,可选)**:指定这批货落在哪个库位;不传则用**商品的默认库位**,商品也没设则落到兜底库位「默认库位」。传了就必须存在且启用,否则 400。
+> 为什么需要它:一个商品的货可能因为主仓库位放不下而分到副仓库位。所以"一个商品只有一个库位"不再成立,同一批次拆到两处时**拆成两行分别指定**。
+> 合并规则:只有 `商品 + 供应商 + 生产日期 + 保质期 + 库位` 全同的两行才会被合并 —— 库位不同的两行**不会**被合并掉。
 
 **草稿单流(PDA 主流)**:
 | 方法 | URL | 请求 | 响应 | 错误 |
 |---|---|---|---|---|
 | POST | `/orders` | `{externalNo?, remark?}` | `InboundOrder{status:DRAFT, totalQuantity:0, itemCount:0}` | 400 |
-| POST | `/orders/{id}/items` | `{productId, quantity, supplier?, rowRemark?}` | `InboundOrder` 刷新(含 items + 每行 codes 已回填) | 400 商品不存在 / 409 单子非 DRAFT |
+| POST | `/orders/{id}/items` | `{productId, quantity, supplier?, rowRemark?, productionDate?, shelfLifeDays?, location?}` | `InboundOrder` 刷新(含 items + 每行 codes 已回填) | 400 商品不存在/库位不存在 / 409 单子非 DRAFT |
 | POST | `/orders/{id}/commit` | — | `InboundOrder`(status=COMMITTED,items[].codes 是生成的 N 个 24 位码) | 409 单子非 DRAFT / 空单 |
 | POST | `/orders/{id}/cancel` | — | `{code:0}` | 409 单子非 DRAFT |
 
@@ -207,9 +211,23 @@
 | 方法 | URL | 请求 | 响应 | 错误 |
 |---|---|---|---|---|
 | POST | `/orders` | `{customer?, externalNo?, remark?}` | `OutboundOrder{status:DRAFT}` | 400 |
+| POST | `/orders/{id}/items` | `{productId, quantity, rowRemark?}` | `OutboundOrder` 刷新(明细 + 已锁单元) | 400 商品不存在 / 409 非 DRAFT |
 | **POST** | **`/orders/{id}/scan`** | **`{code}`** | **`OutboundOrder`** 刷新(items 重建) | **404 码不存在 / 409 码已 OUT/SCRAPPED** |
-| POST | `/orders/{id}/commit` | — | `OutboundOrder`(status=COMMITTED,FIFO 扣减) | 409 非 DRAFT / 空单 |
+| POST | `/orders/{id}/commit` | — | `OutboundOrder`(status=COMMITTED,RESERVED→OUT 扣减) | 409 非 DRAFT / 空单 |
 | POST | `/orders/{id}/cancel` | — | `{code:0}` | 409 非 DRAFT |
+
+**取货库位 = 自动(2026-09-20 起)**:建单锁货时**不再按商品的默认库位做等值匹配**,而是把该商品**全部库位**的货放进一个池子按 FEFO(先到期先出)锁。所以 `outbound_order_item.location` 对新建的单**为空**,表示"自动"。
+
+> 为什么改:同一个商品的主仓库位放不下时,剩下的会进副仓库位。以前按商品默认库位等值锁货,会报「库存不足」—— 而总量其实够,现场完全看不出原因。
+> **去哪儿取货看哪里**:明细行上不再有单一库位,真实取货位置要按**锁定到的库存单元**汇总(Web 出库单详情的「🛒 拣货」行、`export.csv` 的「库位」列会写成 `自动(A-01-01×30 / B-02-02×30)`)。历史单若行上带库位(手工指定过),仍按那个库位锁。
+
+**出库单明细的 `picks` 字段(2026-09-20 新增)**:`GET /orders/{id}` 的每个明细行带 `picks`,是「库位码 → 件数」的映射(如 `{"A-01-01":6,"B-01-01":2}`),按库位码升序。它由**该行真实锁定的库存单元**统计而来,是 `location` 为空时现场唯一能知道"去哪儿拿货"的依据(PDA 出库详情据此渲染「拣货: 主仓库/A-01-01 × 6 · 副仓库/B-01-01 × 2」)。注意它是**响应字段、不存表**。
+> 已知限制:同一张单若存在两行**同商品**的明细,按商品查单元会让两行拿到同一批单元(`codes` 与 `picks` 都会重复)。出库批量建单本身按商品合并,正常不会出现;手工往草稿追加同商品行才会。
+
+**追加明细会并进同商品的行(2026-09-20 起)**:`POST /orders/{id}/items` 若该单已有同商品的行,就**数量相加**到那一行上,不再新插一行(`addItemToDraft`)。这样上面那条"同商品两行"的限制从**入口**上就不可达了 —— 批量建单(`/batch`)本来就按商品合并,这次把 PDA 的追加路径对齐了它。
+> 代价:第二次传的 `rowRemark` 会被丢掉(第一行的备注生效),与批量建单行为一致。
+> 锁货量:每次调用只按**本次传入的 quantity** 追加锁定,不会把整行重新锁一遍;
+> 库存不足时抛异常、事务回滚,不会留下"数量加了但没锁到货"的半截状态。
 
 **查询**:同入库,不传 `status`(或传 `ALL`) = 不过滤。
 
@@ -217,7 +235,7 @@
 
 | 方法 | URL | 鉴权 | 备注 |
 |---|---|---|---|
-| GET | `/?sku&location&status&page&pageSize` | 已登录 | 三过滤 + 分页 |
+| GET | `/?sku&location&warehouseId&status&expiryStatus&expiryFrom&expiryTo&page&pageSize` | 已登录 | 过滤 + 分页;`warehouseId` 按仓库筛(经 `location.warehouse_id`),一个商品分散多仓时用它分别看数 |
 | GET | `/{id}` | 已登录 | |
 | GET | `/by-inbound/{orderId}` | 已登录 | 入库单下所有单元 |
 | GET | `/by-outbound/{orderId}` | 已登录 | 出库单消耗的所有单元 |
@@ -226,8 +244,10 @@
 | GET | `/by-code/{code}/product` | 已登录 | code→InventoryItem→Product(PDA 入库扫码解析) |
 | GET | `/{id}/barcode.png` | 已登录 | CODE_128 PNG |
 | POST | `/{id}/scrap` | 已登录 | `{remark?}`,只能 IN_STOCK→SCRAPPED |
-| POST | `/{id}/transfer` | 已登录 | `{toLocation}`,IN_STOCK→TRANSFERRED,改 location_code |
-| GET | `/export.csv?sku&location&status` | 已登录 | 单次硬编码 5000 行,大库需分页 |
+| POST | `/{id}/transfer` | **ADMIN** | `{toLocation}`,仅 IN_STOCK 可调;改 `location_code`、**状态保持 IN_STOCK**,并写一条 `inventory_log(type=TRANSFER)`。目标库位必须存在且启用,否则 400 |
+| GET | `/export.csv?sku&location&warehouseId&status&...` | 已登录 | 单次硬编码 5000 行,大库需分页;列含「仓库」 |
+
+**调拨语义(2026-09-20 修正)**:此前 `transfer` 把单元打成终态 `TRANSFERRED` 且**不改 `location_code`** —— 货从默认库存列表(只看 `IN_STOCK`)里消失、再也不能出库/盘点,而 `product.quantity` 仍统计它。现在调拨=移动位置,状态不变。
 
 **库存单元状态(`inventory_item.status`)** —— DB 列默认 `IN_STOCK`:
 

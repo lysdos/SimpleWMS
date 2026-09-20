@@ -1,5 +1,6 @@
 package com.wms.dao;
 
+import com.wms.model.Location;
 import com.wms.model.Product;
 import com.wms.model.ProductSupplier;
 import com.wms.model.Supplier;
@@ -122,7 +123,7 @@ public class ProductDao {
             ps.setString(2, p.getName());
             ps.setString(3, emptyTo(p.getCategory(), "默认"));
             ps.setString(4, emptyTo(p.getUnit(), "件"));
-            ps.setString(5, emptyTo(p.getLocation(), "默认库位"));
+            ps.setString(5, emptyTo(p.getLocation(), Location.FALLBACK_CODE));
             ps.setInt(6, p.getQuantity() == null ? 0 : p.getQuantity());
             ps.setBigDecimal(7, p.getUnitPrice() == null ? BigDecimal.ZERO : p.getUnitPrice());
             ps.setInt(8, p.getLowStock() == null ? 10 : p.getLowStock());
@@ -140,7 +141,7 @@ public class ProductDao {
                 "remark=? WHERE id=?";
         return jdbc.update(sql,
                 p.getSku(), p.getName(), emptyTo(p.getCategory(), "默认"),
-                emptyTo(p.getUnit(), "件"), emptyTo(p.getLocation(), "默认库位"),
+                emptyTo(p.getUnit(), "件"), emptyTo(p.getLocation(), Location.FALLBACK_CODE),
                 p.getQuantity(), p.getUnitPrice(), p.getLowStock(),
                 p.getDefaultShelfLifeDays(), p.getExpiryWarnDays(),
                 p.getRemark(), p.getId());

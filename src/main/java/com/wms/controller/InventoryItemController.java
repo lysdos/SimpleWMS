@@ -7,6 +7,7 @@ import com.wms.model.Product;
 import com.wms.service.BarcodeService;
 import com.wms.service.InventoryItemService;
 import com.wms.service.ProductService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -46,11 +47,12 @@ public class InventoryItemController {
 
     // ====================== 列表 + 详情 ======================
 
-    /** 列表(库存管理页)— 支持 sku / location / status / 效期过滤 + 分页 */
+    /** 列表(库存管理页)— 支持 sku / location / warehouseId / status / 效期过滤 + 分页 */
     @GetMapping
     public ApiResponse<Map<String, Object>> list(
             @RequestParam(required = false) String sku,
             @RequestParam(required = false) String location,
+            @RequestParam(required = false) Integer warehouseId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String expiryStatus,
             @RequestParam(required = false) String expiryFrom,
@@ -59,8 +61,10 @@ public class InventoryItemController {
             @RequestParam(defaultValue = "20") int pageSize) {
         int ps = (pageSize <= 0 || pageSize > 200) ? 20 : pageSize;
         int p = page <= 0 ? 1 : page;
-        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo, p, ps);
-        long total = itemService.count(sku, location, status, expiryStatus, expiryFrom, expiryTo);
+        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo,
+                warehouseId, p, ps);
+        long total = itemService.count(sku, location, status, expiryStatus, expiryFrom, expiryTo,
+                warehouseId);
         return ApiResponse.ok(Map.of(
                 "list", list,
                 "total", total,
@@ -140,19 +144,21 @@ public class InventoryItemController {
     @PostMapping("/{id}/scrap")
     @RequireRole("ADMIN")
     public ApiResponse<Void> scrap(@PathVariable int id,
-                                   @RequestBody(required = false) Map<String, String> body) {
+                                   @RequestBody(required = false) Map<String, String> body,
+                                   HttpServletRequest req) {
         String remark = body == null ? null : body.get("remark");
-        itemService.scrap(id, remark);
+        itemService.scrap(id, remark, currentUsername(req));
         return ApiResponse.ok();
     }
 
-    /** 调拨 */
+    /** 调拨(改库位,状态保持 IN_STOCK) */
     @PostMapping("/{id}/transfer")
     @RequireRole("ADMIN")
     public ApiResponse<Void> transfer(@PathVariable int id,
-                                      @RequestBody Map<String, String> body) {
+                                      @RequestBody Map<String, String> body,
+                                      HttpServletRequest req) {
         String toLocation = body == null ? null : body.get("toLocation");
-        itemService.transfer(id, toLocation);
+        itemService.transfer(id, toLocation, currentUsername(req));
         return ApiResponse.ok();
     }
 
@@ -162,20 +168,23 @@ public class InventoryItemController {
     public ResponseEntity<byte[]> exportCsv(
             @RequestParam(required = false) String sku,
             @RequestParam(required = false) String location,
+            @RequestParam(required = false) Integer warehouseId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String expiryStatus,
             @RequestParam(required = false) String expiryFrom,
             @RequestParam(required = false) String expiryTo) {
-        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo, 1, 5000);
+        var list = itemService.list(sku, location, status, expiryStatus, expiryFrom, expiryTo,
+                warehouseId, 1, 5000);
 
         StringBuilder sb = new StringBuilder();
         sb.append('﻿');
-        sb.append("24位编码,SKU,商品名称,库位,原始数量,剩余数量,状态,创建人,创建时间," +
+        sb.append("24位编码,SKU,商品名称,仓库,库位,原始数量,剩余数量,状态,创建人,创建时间," +
                 "入库单ID,出库单ID,报废时间,报废原因,调拨时间,调拨来源,调拨目标,生产日期,到期日\n");
         for (InventoryItem it : list) {
             sb.append(csv(it.getCode())).append(',')
               .append(csv(it.getSku())).append(',')
               .append(csv(it.getProductName())).append(',')
+              .append(csv(it.getWarehouseName())).append(',')
               .append(csv(it.getLocationCode())).append(',')
               .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
               .append(it.getRemaining() == null ? 0 : it.getRemaining()).append(',')
@@ -214,6 +223,11 @@ public class InventoryItemController {
             case "RESERVED":    return "已预留";
             default: return s;
         }
+    }
+
+    private static String currentUsername(HttpServletRequest req) {
+        String op = (String) req.getAttribute("username");
+        return (op == null || op.isBlank()) ? "操作员" : op;
     }
 
     private static String csv(Object v) {

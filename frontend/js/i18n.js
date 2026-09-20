@@ -135,7 +135,9 @@ const I18N = (() => {
         'product.form.cat_placeholder':{ 'zh-CN': '例如 办公耗材',            'en-US': 'e.g. Office Supplies' },
         'product.form.unit':   { 'zh-CN': '单位',                          'en-US': 'Unit' },
         'product.form.unit_placeholder':{ 'zh-CN': '例如 个/箱/包',          'en-US': 'e.g. pcs/box/pkg' },
-        'product.form.loc':    { 'zh-CN': '库位',                          'en-US': 'Location' },
+        // 改名是因为它现在只是"入库时的缺省库位":入库明细可以逐行改成别的库位
+        // (主仓放不下时入副仓),商品本身的货也可以分散在多个库位。
+        'product.form.loc':    { 'zh-CN': '默认库位',                        'en-US': 'Default Location' },
         'product.form.qty':    { 'zh-CN': '初始库存',                      'en-US': 'Initial Qty' },
         'product.form.price':  { 'zh-CN': '单价 (元)',                     'en-US': 'Unit Price (CNY)' },
         'product.form.low':    { 'zh-CN': '低库存预警',                    'en-US': 'Low Stock Threshold' },
@@ -247,9 +249,6 @@ const I18N = (() => {
         'inbound_order.btn.cancel':{ 'zh-CN': '✗ 取消',                     'en-US': '✗ Cancel' },
         'inbound_order.barcode.count':{ 'zh-CN': '📦 本行 {n} 个 24 位编码', 'en-US': '📦 {n} 24-digit codes in this row' },
         'inbound_order.no_barcode':{ 'zh-CN': '(无条码记录)',               'en-US': '(no barcode record)' },
-        'inbound_order.barcode.sku':{ 'zh-CN': 'SKU',                       'en-US': 'SKU' },
-        'inbound_order.barcode.count_total':{ 'zh-CN': '共',                 'en-US': 'Total' },
-        'inbound_order.barcode.unit_codes':{ 'zh-CN': '个独立 24 位编码',    'en-US': 'individual 24-digit codes' },
         'inbound_order.print_title':{ 'zh-CN': '入库单 #{id} 条码标签',     'en-US': 'Inbound Order #{id} - Barcode Labels' },
         'inbound_order.print_subtitle':{ 'zh-CN': '条码标签',                'en-US': 'Barcode Labels' },
         'inbound_order.print_printed_at':{ 'zh-CN': '打印时间',              'en-US': 'Printed At' },
@@ -267,6 +266,8 @@ const I18N = (() => {
         'outbound_order.col.sku':{ 'zh-CN': 'SKU',                         'en-US': 'SKU' },
         'outbound_order.col.product':{ 'zh-CN': '商品',                     'en-US': 'Product' },
         'outbound_order.col.loc':{ 'zh-CN': '库位',                        'en-US': 'Location' },
+        'outbound_order.loc.auto':{ 'zh-CN': '自动',                        'en-US': 'Auto' },
+        'outbound_order.pick.title':{ 'zh-CN': '🛒 拣货',                   'en-US': '🛒 Pick' },
         'outbound_order.col.qty':{ 'zh-CN': '出库数量',                    'en-US': 'Outbound Qty' },
         'outbound_order.col.price':{ 'zh-CN': '单价',                       'en-US': 'Unit Price' },
         'outbound_order.col.row_remark':{ 'zh-CN': '行备注',                 'en-US': 'Row Remark' },
@@ -277,12 +278,9 @@ const I18N = (() => {
         'outbound_order.print_time':{ 'zh-CN': '打印时间',                  'en-US': 'Print Time' },
         'outbound_order.barcode.count':{ 'zh-CN': '📦 本行 {n} 个 24 位编码','en-US': '📦 {n} 24-digit codes in this row' },
         'outbound_order.no_barcode':{ 'zh-CN': '(无条码记录)',              'en-US': '(no barcode record)' },
-        'outbound_order.print_title':{ 'zh-CN': '出库单 #{id} 条码标签(已消耗)','en-US': 'Outbound Order #{id} - Barcode Labels (consumed)' },
         'outbound_order.barcode_count':{ 'zh-CN': '共 {n} 个 24 位编码',     'en-US': 'Total {n} 24-digit codes' },
         'outbound_order.btn.commit':{ 'zh-CN': '✓ 提交出库',                 'en-US': '✓ Commit Outbound' },
         'outbound_order.btn.cancel':{ 'zh-CN': '✗ 取消',                     'en-US': '✗ Cancel' },
-        'outbound_order.barcode_label':{ 'zh-CN': '24 位编码',               'en-US': '24-digit Code' },
-        'outbound_order.strike':{ 'zh-CN': '[已出库]',                     'en-US': '[Consumed]' },
 
         /* ---------- 新增单据(共用) ---------- */
         'new_order.label.product':{ 'zh-CN': '商品',                       'en-US': 'Product' },
@@ -291,6 +289,8 @@ const I18N = (() => {
         'new_order.label.shelf_life':{ 'zh-CN': '保质期(天)',               'en-US': 'Shelf Life (days)' },
         'inbound_order.col.batch':{ 'zh-CN': '批次(生产日期/保质期)',       'en-US': 'Batch (Prod. Date / Shelf Life)' },
         'inbound.shelf_life_unit':{ 'zh-CN': '天',                          'en-US': 'd' },
+        'new_order.label.loc':  { 'zh-CN': '库位',                          'en-US': 'Location' },
+        'new_order.loc.ph':     { 'zh-CN': '用商品默认库位',                 'en-US': 'Product default' },
         'new_order.label.qty':  { 'zh-CN': '数量',                          'en-US': 'Qty' },
         'new_order.label.row_remark':{ 'zh-CN': '行备注',                   'en-US': 'Row Remark' },
         'new_order.label.external_no':{ 'zh-CN': '外部单号',                'en-US': 'External No.' },
@@ -307,7 +307,7 @@ const I18N = (() => {
         'new_order.placeholder.no_supplier':{ 'zh-CN': '暂无供应商',         'en-US': 'No suppliers' },
         'new_order.placeholder.not_set':{ 'zh-CN': '(不填)',                 'en-US': '(empty)' },
         'new_order.btn.add_row':{ 'zh-CN': '+ 添加条目',                    'en-US': '+ Add Row' },
-        'new_order.merge_tip_in':{ 'zh-CN': '(同 商品+供应商 会自动合并 · 每件商品独立 24 位编码)', 'en-US': '(same product+supplier auto-merge · each item gets a 24-digit code)' },
+        'new_order.merge_tip_in':{ 'zh-CN': '(商品/供应商/批次/库位 全同才会合并 · 每件独立 24 位编码)', 'en-US': '(merged only when product/supplier/batch/location all match · each item gets a 24-digit code)' },
         'new_order.merge_tip_out':{ 'zh-CN': '(同 商品 会自动合并 · 整件出库)', 'en-US': '(same product auto-merge · whole-unit outbound)' },
         'new_order.err.no_product':{ 'zh-CN': '存在未选择商品的行',         'en-US': 'A row is missing a product' },
         'new_order.err.qty_invalid':{ 'zh-CN': '数量必须大于 0',            'en-US': 'Qty must be > 0' },
@@ -562,13 +562,7 @@ const I18N = (() => {
         'err.network':         { 'zh-CN': '请求失败',                      'en-US': 'Request failed' },
         'err.not_found':       { 'zh-CN': '未找到单据',                    'en-US': 'Order not found' },
         'err.empty':           { 'zh-CN': '单据数据为空',                  'en-US': 'Empty order data' },
-        'err.no_inventory_for_line':{ 'zh-CN': '该行商品未找到对应的库存单元','en-US': 'No inventory unit found for this line' },
-        'err.no_inventory_for_out_line':{ 'zh-CN': '该行商品未找到对应的库存单元(可能为老数据)', 'en-US': 'No inventory unit found for this line (legacy data?)' },
-        'err.no_inventory_inbound':{ 'zh-CN': '该入库单暂无库存单元',      'en-US': 'No inventory units for this inbound order' },
-        'err.no_inventory_outbound':{ 'zh-CN': '该出库单暂无消耗的库存单元','en-US': 'No consumed inventory units for this outbound order' },
-
-        /* ---------- 图表 ---------- */
-        'barcode.status':      { 'zh-CN': '状态',                          'en-US': 'Status' }
+        'err.no_inventory_inbound':{ 'zh-CN': '该入库单暂无库存单元',      'en-US': 'No inventory units for this inbound order' }
     };
 
     /* ---------- 状态 ---------- */

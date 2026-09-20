@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+
 
 @Service
 public class OutboundService {
@@ -30,7 +32,7 @@ public class OutboundService {
     @Autowired public OutboundService(ProductDao p,InventoryLogDao l,OutboundOrderDao o,InventoryItemDao i){productDao=p;logDao=l;orderDao=o;itemDao=i;}
     /**
      * 单条出库(老接口):改为 DRAFT 语义,不再即时扣库存
-     * 真实生效在 commitDraft() 里完成(adjustQuantity + consumeForOutbound + 写 OUT 流水)
+     * 真实生效在 commitDraft() 里完成(adjustQuantity + commitReservations 把 RESERVED → OUT + 写流水)
      */
     @Transactional public OutboundOrder doOutbound(int productId,int quantity,String remark,String createdBy){
         BatchItem i=new BatchItem();i.productId=productId;i.quantity=quantity;i.rowRemark=remark;
@@ -57,7 +59,9 @@ public class OutboundService {
                 OutboundOrderItem it=new OutboundOrderItem();
                 it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
                 it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
-                it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
+                // 取货库位留空 = 自动。不再写商品的默认库位:一个商品可能分散在多个库位,
+                // 写上去反而会印出一张"说去 A 库位、实际从 A+B 取货"的假拣货单
+                it.setRowRemark(blank(b.rowRemark));
                 it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
                 orderDao.insertItem(it);
             }
@@ -82,12 +86,15 @@ public class OutboundService {
             OutboundOrderItem it=new OutboundOrderItem();
             it.setOrderId(id);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
             it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
-            it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
+            // 取货库位留空 = 自动(见上方分支注释)
+            it.setRowRemark(blank(b.rowRemark));
             it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());
             orderDao.insertItem(it);
             // ====== 方案 A:建单立刻锁定 EPC ======
-            String loc = blank(p.getLocation()) == null ? "默认库位" : p.getLocation();
-            itemDao.reserveForOutbound(p.getId(), loc, b.quantity, id);
+            // 不限库位(null):跨该商品全部库位一起按 FEFO 锁。
+            // 以前按商品默认库位等值锁,商品分散到副仓后会报"库存不足",
+            // 而总量其实够 —— 现场完全看不出原因。
+            itemDao.reserveForOutbound(p.getId(), null, b.quantity, id);
         }
         o=orderDao.findOrderById(id);o.setItems(orderDao.findItemsByOrderId(id));
         return o;
@@ -202,20 +209,40 @@ public class OutboundService {
      * 给 DRAFT 出库单追加一条明细(PDA「添加明细」按钮)。
      * 与新建单保持一致(方案 A):写明细行的同时立刻按 FIFO 锁定
      * quantity 个 IN_STOCK 库存单元(RESERVED),库存不足事务回滚。
+     *
+     * 同商品**并进已有行**,不再新插一行。原因:出库单元只记 outbound_order_id(指向单据),
+     * 没有指向明细行的字段,于是详情页给「每一行」填码和拣货分布时只能按「单据+商品」查 ——
+     * 一旦同商品有两行,两行都会显示该商品的全部码与全部拣货量(数量虚高,打印出来
+     * 现场会按双倍去拿)。批量建单 doOutboundBatch 本来就是按商品合并的,这里对齐它,
+     * 顺便让这种单再也建不出来。
+     * 代价:第二次传进来的行备注会被丢掉(批量建单同样是"第一行的备注生效")。
      */
     @Transactional public OutboundOrder addItemToDraft(int orderId, BatchItem b){
         if(b==null||b.productId==null)throw new IllegalArgumentException("请选择商品");
         if(b.quantity==null||b.quantity<=0)throw new IllegalArgumentException("出库数量必须大于 0");
         requireDraft(orderId);
         Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
-        OutboundOrderItem it=new OutboundOrderItem();
-        it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
-        it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
-        it.setLocation(blank(p.getLocation()));it.setRowRemark(blank(b.rowRemark));
-        it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
-        orderDao.insertItem(it);
-        String loc = blank(p.getLocation()) == null ? "默认库位" : p.getLocation();
-        itemDao.reserveForOutbound(p.getId(), loc, b.quantity, orderId);
+
+        OutboundOrderItem exist=null;
+        for(OutboundOrderItem x:orderDao.findItemsByOrderId(orderId)){
+            if(p.getId().equals(x.getProductId())){exist=x;break;}
+        }
+
+        // 先锁货:库存不足直接抛出去,事务整体回滚 —— 不会留下"数量加了、货没锁到"的半截状态
+        itemDao.reserveForOutbound(p.getId(), null, b.quantity, orderId);
+
+        if(exist!=null){
+            orderDao.updateItemQuantity(exist.getId(),
+                    (exist.getQuantity()==null?0:exist.getQuantity())+b.quantity);
+        }else{
+            OutboundOrderItem it=new OutboundOrderItem();
+            it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
+            it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
+            // 取货库位留空 = 自动(见 doOutboundBatch 里的注释)
+            it.setRowRemark(blank(b.rowRemark));
+            it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
+            orderDao.insertItem(it);
+        }
         orderDao.refreshAggregates(orderId);
         return getOrder(orderId);
     }
@@ -239,12 +266,13 @@ public class OutboundService {
         List<OutboundOrderItem> lines = orderDao.findItemsByOrderId(id);
         if (lines.isEmpty()) throw new IllegalStateException("草稿单无明细行");
         for (OutboundOrderItem x : lines) {
-            // 已经锁过的就跳过(以 outbound_order_id 匹配)
-            Integer alreadyLocked = itemDao.countReservedForOrder(id, x.getProductId(), x.getLocation());
+            // 已经锁过的就跳过(以 outbound_order_id 匹配)。
+            // 计数不按库位划分:一行可能由多个库位共同满足,按库位算会少算导致多锁。
+            Integer alreadyLocked = itemDao.countReservedForOrder(id, x.getProductId());
             int need = x.getQuantity() - (alreadyLocked == null ? 0 : alreadyLocked);
             if (need > 0) {
-                String loc = blank(x.getLocation()) == null ? "默认库位" : x.getLocation();
-                itemDao.reserveForOutbound(x.getProductId(), loc, need, id);
+                // 行上带库位就按它锁(手工指定的历史单),留空则跨全部库位
+                itemDao.reserveForOutbound(x.getProductId(), blank(x.getLocation()), need, id);
             }
         }
         return getOrder(id);
@@ -323,7 +351,9 @@ public class OutboundService {
             // 本单已确认过这个码:不是错误,按"已扫"返回(幂等)。
             // 读卡器循环读卡 / 终端重启后重扫都会走到这里,不能当成报警,
             // 否则界面上的 ✓ 与"已扫 N/共 M"会被打回。
-            int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId(), inv.getLocationCode());
+            // "共 M 件"要按 SKU 全量算,不能按扫码命中的那个库位算 ——
+            // 一行可以由多个库位共同满足,按库位算会让分母偏小、看起来"扫够了"
+            int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId());
             int already = logDao.countScannedForOutbound(orderId, inv.getProductId());
             return ScanResult.already(inv.getId(), inv.getSku(), epc, already, orderId)
                     .withReservedCount(totalReserved)
@@ -343,8 +373,8 @@ public class OutboundService {
         log.setOrderId(orderId);
         logDao.insert(log);
 
-        // 已扫/还差统计
-        int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId(), inv.getLocationCode());
+        // 已扫/还差统计(同上:分母按 SKU 全量,不按库位)
+        int totalReserved = itemDao.countReservedForOrder(orderId, inv.getProductId());
         int already = logDao.countScannedForOutbound(orderId, inv.getProductId());
         return ScanResult.ok(inv.getId(), inv.getSku(), epc, already, orderId)
                 .withReservedCount(totalReserved)
@@ -369,14 +399,21 @@ public class OutboundService {
         OutboundOrder o = orderDao.findOrderById(id);
         if (o != null) {
             List<OutboundOrderItem> items = orderDao.findItemsByOrderId(id);
-            // 为每个明细行填充关联的库存单元编码(逐件显示用)
+            // 为每个明细行填充关联的库存单元编码(逐件显示用)+ 拣货分布
             for (OutboundOrderItem item : items) {
                 List<InventoryItem> units = itemDao.findByOutboundOrderAndProduct(id, item.getProductId());
                 List<String> codes = new java.util.ArrayList<>();
+                // 库位码 → 件数。TreeMap 让库位码有序,界面/打印输出稳定。
+                Map<String, Integer> picks = new TreeMap<>();
                 for (InventoryItem u : units) {
                     codes.add(u.getCode());
+                    String loc = u.getLocationCode() == null ? "" : u.getLocationCode();
+                    // 整件单元 remaining=1,每行 1 件;老数据(remaining>1)整批锁,按 remaining 算
+                    int qty = u.getRemaining() == null ? 1 : Math.max(1, u.getRemaining());
+                    picks.merge(loc, qty, Integer::sum);
                 }
                 item.setCodes(codes);
+                item.setPicks(picks);
             }
             o.setItems(items);
             // 回填已扫码确认的库存单元编码(条码日志存完整 code,UHF 日志存 epc 需反查)

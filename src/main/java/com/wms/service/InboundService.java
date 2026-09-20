@@ -4,11 +4,13 @@ import com.wms.controller.NotFoundException;
 import com.wms.dao.InboundOrderDao;
 import com.wms.dao.InventoryItemDao;
 import com.wms.dao.InventoryLogDao;
+import com.wms.dao.LocationDao;
 import com.wms.dao.ProductDao;
 import com.wms.model.InboundOrder;
 import com.wms.model.InboundOrderItem;
 import com.wms.model.InventoryItem;
 import com.wms.model.InventoryLog;
+import com.wms.model.Location;
 import com.wms.model.Product;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
@@ -32,6 +34,7 @@ public class InboundService {
     private final InventoryLogDao logDao;
     private final InboundOrderDao orderDao;
     private final InventoryItemDao itemDao;
+    private final LocationDao locationDao;
     private final CodeGenerator codeGenerator;
     private final JdbcTemplate jdbc;
 
@@ -40,14 +43,56 @@ public class InboundService {
                           InventoryLogDao logDao,
                           InboundOrderDao orderDao,
                           InventoryItemDao itemDao,
+                          LocationDao locationDao,
                           CodeGenerator codeGenerator,
                           JdbcTemplate jdbc) {
         this.productDao = productDao;
         this.logDao = logDao;
         this.orderDao = orderDao;
         this.itemDao = itemDao;
+        this.locationDao = locationDao;
         this.codeGenerator = codeGenerator;
         this.jdbc = jdbc;
+    }
+
+    // ==================== 库位解析 ====================
+
+    /** 商品默认库位;商品也没设就用兜底库位 */
+    private String defaultLocationOf(Product p) {
+        String dflt = blankToNull(p.getLocation());
+        return dflt == null ? Location.FALLBACK_CODE : dflt;
+    }
+
+    /**
+     * 校验**用户显式指定**的库位:必须存在且启用,否则 400。
+     * 只校验用户输入的那一个 —— 行上沿用的老库位不校验,否则库位一停用,
+     * 连"只改数量"的编辑都会失败。
+     */
+    private String requireValidLocation(String code) {
+        Location loc = locationDao.findByCode(code);
+        if (loc == null) throw new IllegalArgumentException("库位不存在: " + code);
+        if (Boolean.FALSE.equals(loc.getEnabled())) {
+            throw new IllegalArgumentException("库位已停用: " + code);
+        }
+        return code;
+    }
+
+    /**
+     * 一条入库明细最终落在哪个库位码。
+     *
+     * 解析顺序:行上显式指定 > 商品默认库位 > 兜底库位。
+     * 允许逐行覆盖是因为"商品只有一个库位"这个旧假设已经不成立 ——
+     * 一批货主仓库位放不下时,剩下的要能指定到副仓库位。
+     *
+     * ⚠️ **这里不校验**。校验(存在 + 启用)只做在用户输入进来的那一处
+     * ({@code addItemsToDraftInternal} / {@code updateDraftItem}),因为往后传的值
+     * 里有两种**不是用户现在选的、不该拦**的东西:商品默认库位、行上沿用的老库位 ——
+     * 库位能被删掉/停用(LocationService.delete 没有"在用"保护),
+     * 对这些值再校验一次,会让"商品默认库位事后被停用"变成入库/改单直接 400。
+     */
+    private String resolveLocationCode(String requested, Product p) {
+        String code = blankToNull(requested);
+        return code == null ? defaultLocationOf(p) : code;
     }
 
     /**
@@ -220,6 +265,20 @@ public class InboundService {
         Integer effShelfDays = patch.shelfLifeDays != null
                 ? patch.shelfLifeDays : item.getShelfLifeDays();
 
+        // 库位:显式传了就用传的;没传时 —— 换商品则跟随新商品的默认库位,
+        // 否则沿用行上现值(只改数量/备注不该把货挪走)。
+        // 注意沿用现值时**不校验**:库位事后被停用/删除的话,连改个数量都会失败。
+        String requestedLoc = blankToNull(patch.location);
+        String effLocation;
+        if (requestedLoc != null) {
+            effLocation = requireValidLocation(requestedLoc);
+        } else if (productChanged) {
+            effLocation = defaultLocationOf(product);
+        } else {
+            effLocation = item.getLocation() != null
+                    ? item.getLocation() : defaultLocationOf(product);
+        }
+
         if (productChanged) {
             // 换商品:旧商品占位码全部作废,按新商品+新数量重建
             itemDao.deletePendingByInboundItem(itemId, Integer.MAX_VALUE);
@@ -230,6 +289,7 @@ public class InboundService {
             regen.rowRemark = blankToNull(patch.rowRemark);
             regen.productionDate = effProdDate;
             regen.shelfLifeDays = effShelfDays;
+            regen.location = effLocation;
             List<InventoryItem> generated = processItemBatch(regen, operator, orderId);
             for (InventoryItem u : generated) {
                 itemDao.updateInboundItemId(itemId, u.getId());
@@ -243,6 +303,7 @@ public class InboundService {
             extra.rowRemark = blankToNull(patch.rowRemark);
             extra.productionDate = effProdDate;
             extra.shelfLifeDays = effShelfDays;
+            extra.location = effLocation;
             List<InventoryItem> generated = processItemBatch(extra, operator, orderId);
             for (InventoryItem u : generated) {
                 itemDao.updateInboundItemId(itemId, u.getId());
@@ -256,7 +317,7 @@ public class InboundService {
         item.setSku(product.getSku());
         item.setProductName(product.getName());
         item.setUnitPrice(product.getUnitPrice() == null ? BigDecimal.ZERO : product.getUnitPrice());
-        item.setLocation(blankToNull(product.getLocation()));
+        item.setLocation(effLocation);
         item.setQuantity(newQty);
         item.setSupplier(blankToNull(patch.supplier));
         item.setProductionDate(effProdDate);
@@ -391,15 +452,24 @@ public class InboundService {
             }
             b.supplier = blankToNull(b.supplier);
             b.rowRemark = blankToNull(b.rowRemark);
+            // 库位也归一化(空串→null),因为它进了下面的合并 key。
+            // 顺带在这里做**唯一一次**校验:这是用户指定的库位进入系统的入口,
+            // 再往后(resolveLocationCode)就不再校验了,免得把商品默认库位、
+            // 行上沿用的老库位也拦下来。
+            b.location = blankToNull(b.location);
+            if (b.location != null) requireValidLocation(b.location);
         }
 
         // 本批合并。key 必须含批次字段(生产日期/保质期):同 SKU 同供应商但
-        // 生产日期不同的两行是两个批次,合并会把另一批的日期抹掉
+        // 生产日期不同的两行是两个批次,合并会把另一批的日期抹掉。
+        // 库位同理:同一批次拆到主仓/副仓两行时,合并会把这批的库位抹成第一行的,
+        // 另一边的货凭空跑到主仓去,且不报任何错。
         Map<String, BatchItem> merged = new LinkedHashMap<>();
         for (BatchItem raw : items) {
             String key = raw.productId + "|" + (raw.supplier == null ? "" : raw.supplier)
                     + "|" + (raw.productionDate == null ? "" : raw.productionDate)
-                    + "|" + (raw.shelfLifeDays == null ? "" : raw.shelfLifeDays);
+                    + "|" + (raw.shelfLifeDays == null ? "" : raw.shelfLifeDays)
+                    + "|" + (raw.location == null ? "" : raw.location);
             BatchItem acc = merged.get(key);
             if (acc == null) {
                 merged.put(key, raw);
@@ -436,7 +506,7 @@ public class InboundService {
         java.time.LocalDate expiry = (b.productionDate != null && b.shelfLifeDays != null && b.shelfLifeDays > 0)
                 ? b.productionDate.plusDays(b.shelfLifeDays) : null;
 
-        String locCode = blankToNull(p.getLocation()) == null ? "默认库位" : p.getLocation();
+        String locCode = resolveLocationCode(b.location, p);
         List<InventoryItem> generated = new ArrayList<>();
         for (int unit = 0; unit < b.quantity; unit++) {
             InventoryItem ii = new InventoryItem();
@@ -481,7 +551,7 @@ public class InboundService {
         it.setUnitPrice(p.getUnitPrice() == null ? BigDecimal.ZERO : p.getUnitPrice());
         it.setBeforeQty(b._beforeQty);
         it.setAfterQty(b._afterQty);
-        it.setLocation(blankToNull(p.getLocation()));
+        it.setLocation(resolveLocationCode(b.location, p));
         it.setProductionDate(b.productionDate);
         it.setShelfLifeDays(b.shelfLifeDays);
         it.setRowRemark(b.rowRemark);
@@ -561,6 +631,7 @@ public class InboundService {
         public String rowRemark;
         public java.time.LocalDate productionDate;  // 批次生产日期(可选)
         public Integer shelfLifeDays;               // 批次保质期天数(可选)
+        public String location;                     // 目标库位码(可选;空=用商品默认库位)
 
         // 内部传递用(由 processItemBatch 设置,供 persistOrderItem/persistInventoryLog 读)
         Integer _beforeQty;

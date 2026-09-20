@@ -85,7 +85,25 @@ function freshModalOk(text) {
     return fresh;
 }
 
+/**
+ * 设置弹窗宽度档位:'modal-wide'(880,单据详情/盘点详情)、
+ * 'modal-xwide'(1120,新增单据的明细表)、null = 默认窄弹窗。
+ *
+ * 必须显式切换,不能只 add:宽度类是挂在**同一个** .modal 元素上的,
+ * 上一个宽弹窗留下的类会跟着进下一个窄弹窗(历史上已经有一个 opener
+ * 为此单独写 remove('modal-wide'),说明踩过)。
+ */
+function setModalWidth(cls) {
+    const m = document.querySelector('.modal');
+    if (!m) return;
+    m.classList.remove('modal-wide', 'modal-xwide');
+    if (cls) m.classList.add(cls);
+}
+
 function showModal(title, bodyHtml, onOk) {
+    // 先复位成默认宽度:需要宽屏的调用方在 showModal 之后自己加档。
+    // 不复位的话,开过一个宽弹窗再开窄弹窗,窄弹窗会莫名其妙地很宽。
+    setModalWidth(null);
     document.getElementById('modal-title').textContent = title;
     const modalBody = document.getElementById('modal-body');
     // 重置内联样式:盘点详情弹窗为 sticky 贴底按钮行会把 paddingBottom 置 0,

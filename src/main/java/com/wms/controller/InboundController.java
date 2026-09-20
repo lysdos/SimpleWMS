@@ -48,7 +48,8 @@ public class InboundController {
 
     /**
      * 新接口:批量入库
-     * 入参:{ externalNo, remark, items:[{productId,quantity,supplier,rowRemark}] }
+     * 入参:{ externalNo, remark, items:[{productId,quantity,supplier,rowRemark,productionDate,shelfLifeDays,location}] }
+     * location 可选:不传则用商品的默认库位。同一商品要拆到多个库位时,拆成多行分别指定。
      * 返回:完整入库单(含明细)
      * 注意:supplier 移到明细行(同一单据可多供应商)
      */
@@ -72,22 +73,27 @@ public class InboundController {
             it.rowRemark  = asString(r.get("rowRemark"));
             it.productionDate = asDate(r.get("productionDate"));
             it.shelfLifeDays  = asInt(r.get("shelfLifeDays"));
+            it.location       = asString(r.get("location"));
             items.add(it);
         }
         InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, createdBy, null);
         return ApiResponse.ok(order);
     }
 
-    /** 入库单详情(弹窗展示)— COMMITTED 单子需要返回 24 位码,用 getOrderWithCodes */
+    /**
+     * 入库单详情(弹窗展示)——明细行的 24 位码一并返回。
+     *
+     * 码不在 inbound_order_item 表里,要从 inventory_item 按 inbound_item_id 反查,
+     * 所以统一走 getOrderWithCodes。**草稿单也要给**:草稿的占位单元(PENDING)
+     * 一样有码、用户就是要在提交前打标签。
+     * (以前这里限定 COMMITTED 才补码,导致草稿单详情没有码,前端只好另外拉一次
+     *  /inventory/items/by-inbound 再自己按 SKU 分组 —— 多一次请求,而且同一商品
+     *  拆成多行时两行会各显示该 SKU 的全部码。)
+     */
     @GetMapping("/orders/{id}")
     public ApiResponse<InboundOrder> getOrder(@PathVariable int id) {
-        InboundOrder o = inboundService.getOrder(id);
+        InboundOrder o = inboundService.getOrderWithCodes(id);
         if (o == null) throw new NotFoundException("入库单不存在, id=" + id);
-        // COMMITTED 单子的 inbound_order_item.codes 需要从 inventory_item 查,补一次 codes
-        if (InboundOrder.STATUS_COMMITTED.equals(o.getStatus())) {
-            InboundOrder withCodes = inboundService.getOrderWithCodes(id);
-            if (withCodes != null) return ApiResponse.ok(withCodes);
-        }
         return ApiResponse.ok(o);
     }
 
@@ -153,6 +159,7 @@ public class InboundController {
         it.rowRemark = asString(body.get("rowRemark"));
         it.productionDate = asDate(body.get("productionDate"));
         it.shelfLifeDays  = asInt(body.get("shelfLifeDays"));
+        it.location       = asString(body.get("location"));
         return ApiResponse.ok(inboundService.addItemToDraft(id, it));
     }
 
@@ -169,8 +176,9 @@ public class InboundController {
     }
 
     /**
-     * 修改 DRAFT 单明细行(数量/供应商/行备注;productId 变更时换商品并重建占位码)。
-     * body: { "quantity": 5, "productId": 3(可选,换商品时传), "supplier": "可选", "rowRemark": "可选" }
+     * 修改 DRAFT 单明细行(数量/库位/供应商/行备注;productId 变更时换商品并重建占位码)。
+     * body: { "quantity": 5, "productId": 3(可选,换商品时传), "supplier": "可选",
+     *         "rowRemark": "可选", "location": "可选(不传则沿用行上现值)" }
      */
     @PutMapping("/orders/{id}/items/{itemId}")
     public ApiResponse<InboundOrder> updateItem(@PathVariable int id, @PathVariable int itemId,
@@ -183,6 +191,7 @@ public class InboundController {
         it.rowRemark = asString(body.get("rowRemark"));
         it.productionDate = asDate(body.get("productionDate"));
         it.shelfLifeDays  = asInt(body.get("shelfLifeDays"));
+        it.location       = asString(body.get("location"));
         return ApiResponse.ok(inboundService.updateDraftItem(id, itemId, it));
     }
 

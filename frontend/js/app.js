@@ -14,6 +14,10 @@ const state = {
     locationKw: '',
     locationStatus: '',
     locationWarehouseId: '',
+    // 库位码 → 仓库名(null = 未分配仓库)的全量映射,只给显示用。
+    // null = 还没加载。**必须与 state.locations 分开**:loadLocations 会把
+    // 筛选后的结果直接赋给 state.locations,拿它反查会缺项。
+    locMap: null,
     warehouses: [],
     warehouseKw: '',
     warehouseStatus: '',
@@ -24,6 +28,7 @@ const state = {
     userDateTo: '',
     inventoryKw: '',
     inventoryLoc: '',
+    inventoryWarehouse: '',
     inventoryStatus: 'IN_STOCK',
     inventoryExpiryStatus: '',
     inventoryExpiryFrom: '',
@@ -60,17 +65,19 @@ const routes = {
     'stock-checks': loadStockChecks
 };
 
-function go(route) {
+async function go(route) {
     if (location.hash !== '#/' + route) {
         location.hash = '#/' + route;
         return;
     }
+    await prepareLocMap();
     (routes[route] || loadDashboard)();
 }
 
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
     const r = (location.hash || '#/dashboard').replace('#/', '');
     setActive(r);
+    await prepareLocMap();
     (routes[r] || loadDashboard)();
 });
 
@@ -247,10 +254,12 @@ async function loadLocations() {
 async function loadInventory() {
     setActive('inventory');
     await ensureLocations();
+    await ensureWarehouses();   // 仓库筛选下拉要用
     updateInventoryExportHref();
     const qs = new URLSearchParams();
     if (state.inventoryKw)     qs.set('sku', state.inventoryKw);
     if (state.inventoryLoc)    qs.set('location', state.inventoryLoc);
+    if (state.inventoryWarehouse) qs.set('warehouseId', state.inventoryWarehouse);
     if (state.inventoryStatus) qs.set('status', state.inventoryStatus);
     if (state.inventoryExpiryStatus) qs.set('expiryStatus', state.inventoryExpiryStatus);
     if (state.inventoryExpiryFrom)   qs.set('expiryFrom', state.inventoryExpiryFrom);
@@ -370,43 +379,6 @@ function openNewStockCheckModal() {
     paintScopeUi();
 }
 
-/* ---------- 入库单 → 每件条码展示 ---------- */
-async function viewInboundOrderBarcodes(orderId, sku, productName) {
-    try {
-        const items = await api.get(`/api/inventory/items/by-inbound/${orderId}`);
-        const filtered = items.filter(it => it.sku === sku);
-        if (filtered.length === 0) {
-            toast(t('err.no_inventory_for_line'), 'error');
-            return;
-        }
-        const cards = filtered.map(it => `
-            <div style="display:inline-block;border:1px solid var(--c-border);padding:10px;margin:6px;border-radius:var(--r-md);background:#fff;text-align:center;width:240px;">
-                <img src="/api/inventory/items/${it.id}/barcode.png" alt="${escapeHtml(it.code)}"
-                     style="max-width:100%;height:auto;display:block;margin:0 auto;" />
-                <div style="font-family:var(--font-mono);font-size:13px;letter-spacing:1px;margin-top:6px;color:var(--c-text);">
-                    ${escapeHtml(it.code)}
-                </div>
-                <div style="font-size:11px;color:var(--c-text-3);margin-top:2px;">
-                    ${escapeHtml(it.locationCode || '-')} · ${t('barcode.status')}:${statusLabel(it.status)}
-                </div>
-                <a href="/api/inventory/items/${it.id}/barcode.png" download="${escapeHtml(it.code)}.png"
-                   style="display:inline-block;margin-top:6px;font-size:12px;color:var(--c-brand);text-decoration:none;">
-                   ⬇ ${t('common.export')}
-                </a>
-            </div>
-        `).join('');
-        showModal(`${productName} · ${filtered.length} ${t('outbound_order.barcode_label')}`, `
-            <div style="background:var(--c-bg-soft);padding:8px 12px;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;color:var(--c-text-2);">
-                ${t('inbound_order.barcode.sku')} <strong>${escapeHtml(sku)}</strong> · ${t('inbound.col.order_no')} ID=${orderId} · ${t('inbound_order.barcode.count_total')} <strong>${filtered.length}</strong> ${t('inbound_order.barcode.unit_codes')}
-            </div>
-            <div style="max-height:60vh;overflow-y:auto;">${cards}</div>
-        `);
-        freshModalOk(t('common.close'));
-    } catch (e) {
-        toast(e.message, 'error');
-    }
-}
-
 async function printAllInboundBarcodes(orderId) {
     try {
         const items = await api.get(`/api/inventory/items/by-inbound/${orderId}`);
@@ -429,7 +401,7 @@ async function printAllInboundBarcodes(orderId) {
             <div class="card">
                 <img src="${window.location.origin}/api/inventory/items/${it.id}/barcode.png" alt="${escapeHtml(it.code)}" />
                 <div class="code">${escapeHtml(it.code)}</div>
-                <div style="font-size:11px;color:#6b7280;">${escapeHtml(it.sku)} · ${escapeHtml(it.locationCode || '-')}</div>
+                <div style="font-size:11px;color:#6b7280;">${escapeHtml(it.sku)} · ${Views.locLabel(it.locationCode)}</div>
             </div>`).join('');
         w.document.write(`
             <!doctype html><html><head><meta charset="utf-8"><title>${t('inbound_order.print_title', { id: orderId })}</title>
@@ -446,91 +418,12 @@ async function printAllInboundBarcodes(orderId) {
     }
 }
 
-/* ---------- 出库单 → 展示消耗的条码 ---------- */
-async function viewOutboundOrderBarcodes(orderId, sku, productName) {
-    try {
-        const items = await api.get(`/api/inventory/items/by-outbound/${orderId}`);
-        const filtered = items.filter(it => it.sku === sku);
-        if (filtered.length === 0) {
-            toast(t('err.no_inventory_for_out_line'), 'error');
-            return;
-        }
-        const cards = filtered.map(it => `
-            <div style="display:inline-block;border:1px solid var(--c-border);padding:10px;margin:6px;border-radius:var(--r-md);background:#fff;text-align:center;width:240px;">
-                <img src="/api/inventory/items/${it.id}/barcode.png" alt="${escapeHtml(it.code)}"
-                     style="max-width:100%;height:auto;display:block;margin:0 auto;" />
-                <div style="font-family:var(--font-mono);font-size:13px;letter-spacing:1px;margin-top:6px;color:var(--c-text);">
-                    ${escapeHtml(it.code)}
-                </div>
-                <div style="font-size:11px;color:var(--c-text-3);margin-top:2px;">
-                    ${escapeHtml(it.locationCode || '-')} · ${t('barcode.status')}:${statusLabel(it.status)}
-                </div>
-                <a href="/api/inventory/items/${it.id}/barcode.png" download="${escapeHtml(it.code)}.png"
-                   style="display:inline-block;margin-top:6px;font-size:12px;color:var(--c-brand);text-decoration:none;">
-                   ⬇ ${t('common.export')}
-                </a>
-            </div>
-        `).join('');
-        showModal(`${productName} · ${t('outbound_order.title')} ${filtered.length}`, `
-            <div style="background:var(--c-bg-soft);padding:8px 12px;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;color:var(--c-text-2);">
-                ${t('inbound_order.barcode.sku')} <strong>${escapeHtml(sku)}</strong> · ${t('outbound.col.order_no')} ID=${orderId} · ${t('common.total')} <strong>${filtered.length}</strong> ${t('inbound_order.barcode.unit_codes')}
-            </div>
-            <div style="max-height:60vh;overflow-y:auto;">${cards}</div>
-        `);
-        freshModalOk(t('common.close'));
-    } catch (e) {
-        toast(e.message, 'error');
-    }
-}
-
-async function printAllOutboundBarcodes(orderId) {
-    try {
-        const items = await api.get(`/api/inventory/items/by-outbound/${orderId}`);
-        if (items.length === 0) {
-            toast(t('err.no_inventory_outbound'), 'error');
-            return;
-        }
-        const w = window.open('', '_blank');
-        const css = `
-            body { font-family: -apple-system, "Microsoft YaHei", sans-serif; padding: 16px; background:#fff; }
-            h2 { margin:0 0 12px 0; font-size:18px; color:#1f2937; }
-            .meta { font-size:12px; color:#6b7280; margin-bottom:18px; }
-            .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
-            .card { border:1px solid #e5e7eb; padding:10px; text-align:center; border-radius:6px; page-break-inside: avoid; }
-            .card img { max-width:100%; height:auto; }
-            .code { font-family:monospace; font-size:12px; letter-spacing:1px; margin-top:6px; }
-            .strike { color:#ef4444; font-size:11px; }
-            @media print { body { padding: 8px; } }
-        `;
-        const cards = items.map(it => `
-            <div class="card">
-                <img src="${window.location.origin}/api/inventory/items/${it.id}/barcode.png" alt="${escapeHtml(it.code)}" />
-                <div class="code">${escapeHtml(it.code)}</div>
-                <div style="font-size:11px;color:#6b7280;">${escapeHtml(it.sku)} · ${escapeHtml(it.locationCode || '-')}</div>
-                <div class="strike">${t('outbound_order.strike')}</div>
-            </div>`).join('');
-        w.document.write(`
-            <!doctype html><html><head><meta charset="utf-8"><title>${t('outbound_order.print_title', { id: orderId })}</title>
-            <style>${css}</style></head><body>
-                <h2>${t('outbound_order.print_title', { id: orderId })}</h2>
-                <div class="meta">${t('outbound_order.barcode_count', { n: items.length })} · ${t('inbound_order.print_printed_at')}:${new Date().toLocaleString()}</div>
-                <div class="grid">${cards}</div>
-                <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
-            </body></html>
-        `);
-        w.document.close();
-    } catch (e) {
-        toast(e.message, 'error');
-    }
-}
-
 /* ---------- 库存盘点详情 ---------- */
 async function openStockCheckDetail(id) {
     try {
         const c = await api.get('/api/stock-checks/' + id);
         showModal(t('stock_check.modal.title.detail') + ' ' + c.checkNo, Views.stockCheckDetail(c));
-        const modal = document.querySelector('.modal');
-        if (modal) modal.classList.add('modal-wide');
+        setModalWidth('modal-wide');
         // 底部按钮行是 sticky 贴底的,去掉 body 底部内边距才能贴到真正的底边
         const mbody = document.getElementById('modal-body');
         if (mbody) mbody.style.paddingBottom = '0';
@@ -751,8 +644,7 @@ function openEditOrderModal(type, order) {
     document.getElementById('modal-body').innerHTML = Views.editOrderModal(type, order);
     document.getElementById('modal-mask').hidden = false;
     freshModalOk(t('common.save')).addEventListener('click', () => submitEditOrder(type, order.id));
-    const modal = document.querySelector('.modal');
-    if (modal) modal.classList.remove('modal-wide');
+    setModalWidth(null);
 }
 
 async function submitEditOrder(type, orderId) {
@@ -784,22 +676,13 @@ async function viewOrderDetail(id, typeHint) {
     state._viewingOrder = id;
     try {
         // 不再用 orderNo 拼进 inline onclick;按 ID 直接拉详情
+        // 单据响应里 items[].codes 后端已经按**明细行**填好了
+        // (入库:InboundService.getOrderWithCodes 按 inbound_item_id 精确归属;
+        //  出库:OutboundService.getOrder 填 codes + 按库位汇总的 picks),
+        // 所以这里只拉一次单据就够,不再额外拉 /inventory/items/by-* 再按 SKU 自己分组 ——
+        // 多一次请求,而且同商品拆多行时会分错(两行各显示该 SKU 的全部码)。
         const full = await api.get(`${base}/orders/${id}`);
         if (!full || !full.id) { toast(t('err.empty'), 'error'); return; }
-        const inventoryPath = tt === 'IN'
-            ? `/api/inventory/items/by-inbound/${id}`
-            : `/api/inventory/items/by-outbound/${id}`;
-        try {
-            const items = await api.get(inventoryPath);
-            const map = {};
-            for (const it of items) {
-                if (!map[it.sku]) map[it.sku] = [];
-                map[it.sku].push(it);
-            }
-            full.barcodesBySku = map;
-        } catch (_) {
-            full.barcodesBySku = {};
-        }
         openOrderDetailModal(tt, full);
     } catch (e) { toast(e.message, 'error'); }
     finally { state._viewingOrder = null; }
@@ -815,8 +698,7 @@ function openOrderDetailModal(type, o) {
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
     freshModalOk(t('common.close')).addEventListener('click', closeModal);
-    const modal = document.querySelector('.modal');
-    if (modal) modal.classList.add('modal-wide');
+    setModalWidth('modal-wide');
 }
 
 /* 提交入库单 */
@@ -951,6 +833,35 @@ async function ensureLocations() {
     }
 }
 
+/**
+ * 加载"库位码 → 仓库名"映射,供 Views.locLabel 在单据/库存/盘点里显示"仓库 / 库位"。
+ *
+ * 走**独立的 state.locMap**,不复用 state.locations:库位管理页的
+ * loadLocations 会把筛选结果直接赋给 state.locations,一旦用户按仓库筛过,
+ * 拿它反查就会缺项,库位标签会莫名其妙退回光秃秃的码。
+ * 只在为空时拉一次;库位/仓库增改删时调 invalidateLocMap() 作废。
+ */
+async function ensureLocMap() {
+    if (state.locMap) return;
+    const list = await api.get('/api/locations');
+    const map = {};
+    for (const l of (list || [])) map[l.code] = l.warehouseName || null;
+    state.locMap = map;
+}
+
+function invalidateLocMap() {
+    state.locMap = null;
+}
+
+/**
+ * 路由守卫:进任何页面前先把库位→仓库映射备好,让「仓库 / 库位」标签
+ * 第一次渲染就是对的,不用等再切一次页面。
+ * 拉不到就算了 —— 一个显示用的映射不该把整页卡住,标签会降级成只显示库位码。
+ */
+async function prepareLocMap() {
+    try { await ensureLocMap(); } catch (_) { /* 忽略,降级显示 */ }
+}
+
 function readProductForm() {
     const id    = document.getElementById('pf-id').value;
     const sku   = document.getElementById('pf-sku').value.trim();
@@ -1069,6 +980,7 @@ async function newLocation() {
             await api.post('/api/locations', body);
             toast(t('supplier.toast.created'), 'success');
             state.locations = [];
+            invalidateLocMap();
             await loadLocations();
         } catch (e) { toast(e.message, 'error'); return false; }
     });
@@ -1090,6 +1002,7 @@ async function editLocation(id) {
                 await api.put('/api/locations/' + id, body);
                 toast(t('common.success.save'), 'success');
                 state.locations = [];
+                invalidateLocMap();
                 await loadLocations();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
@@ -1103,6 +1016,7 @@ function delLocation(id) {
             await api.del('/api/locations/' + id);
             toast(t('common.success.delete'), 'success');
             state.locations = [];
+            invalidateLocMap();
             // 库位数变了,仓库列表上的「库位数」跟着失效
             state.warehouses = [];
             await loadLocations();
@@ -1170,9 +1084,11 @@ async function editWarehouse(id) {
             try {
                 await api.put('/api/warehouses/' + id, body);
                 toast(t('common.success.save'), 'success');
-                // 改了仓库名:库位列表里的「所属仓库」列也要跟着刷新
+                // 改了仓库名:库位列表里的「所属仓库」列,以及各处
+                // 「仓库 / 库位」标签用的映射,都要跟着刷新
                 state.warehouses = [];
                 state.locations = [];
+                invalidateLocMap();
                 await loadWarehouses();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
@@ -1187,6 +1103,7 @@ function delWarehouse(id) {
             toast(t('common.success.delete'), 'success');
             state.warehouses = [];
             state.locations = [];
+            invalidateLocMap();
             await loadWarehouses();
         } catch (e) { toast(e.message, 'error'); }
     });
@@ -1208,6 +1125,7 @@ function readWarehouseForm() {
 function searchInventory() {
     state.inventoryKw     = document.getElementById('inv-kw').value.trim();
     state.inventoryLoc    = document.getElementById('inv-loc').value;
+    state.inventoryWarehouse = document.getElementById('inv-wh')?.value || '';
     // 不能用 || 'IN_STOCK':下拉新增了"全部"(空值),|| 会把它强行改回在库,导致选了"全部"没反应
     state.inventoryStatus = document.getElementById('inv-status')?.value ?? 'IN_STOCK';
     state.inventoryExpiryStatus = document.getElementById('inv-expiry').value || '';
@@ -1218,7 +1136,8 @@ function searchInventory() {
     loadInventory();
 }
 function resetInventoryFilter() {
-    state.inventoryKw = ''; state.inventoryLoc = ''; state.inventoryStatus = 'IN_STOCK';
+    state.inventoryKw = ''; state.inventoryLoc = ''; state.inventoryWarehouse = '';
+    state.inventoryStatus = 'IN_STOCK';
     state.inventoryExpiryStatus = ''; state.inventoryExpiryFrom = ''; state.inventoryExpiryTo = '';
     state.inventoryPage = 1;
     updateInventoryExportHref();
@@ -1230,6 +1149,7 @@ function updateInventoryExportHref() {
     const qs = new URLSearchParams();
     if (state.inventoryKw)     qs.set('sku', state.inventoryKw);
     if (state.inventoryLoc)    qs.set('location', state.inventoryLoc);
+    if (state.inventoryWarehouse) qs.set('warehouseId', state.inventoryWarehouse);
     if (state.inventoryStatus) qs.set('status', state.inventoryStatus);
     if (state.inventoryExpiryStatus) qs.set('expiryStatus', state.inventoryExpiryStatus);
     if (state.inventoryExpiryFrom)   qs.set('expiryFrom', state.inventoryExpiryFrom);
@@ -1313,12 +1233,14 @@ async function openNewOrderModal(type) {
     // 强制拉一次最新 product / supplier(避免下拉里"在库"数字滞后)
     state.products = await api.get('/api/products');
     state.suppliers = await api.get('/api/suppliers');
+    // 入库行的库位下拉要用(出库不用库位,由系统自动跨库位取货)
+    await ensureLocations();
     document.getElementById('modal-title').textContent = type === 'IN' ? t('inbound.modal.title.new') : t('outbound.modal.title.new');
-    document.getElementById('modal-body').innerHTML = Views.newOrderModal(type, state.products, state.suppliers);
+    document.getElementById('modal-body').innerHTML = Views.newOrderModal(type, state.products, state.suppliers, state.locations);
     document.getElementById('modal-mask').hidden = false;
     freshModalOk(t('common.submit')).addEventListener('click', submitNewOrder);
-    const modal = document.querySelector('.modal');
-    if (modal) modal.classList.add('modal-wide');
+    // 入库明细有 9 列(含库位),要比普通宽弹窗再宽一档
+    setModalWidth('modal-xwide');
     document.querySelectorAll('#nw-rows .nw-product').forEach(sel => {
         sel.addEventListener('change', onNewOrderProductChange);
         if (sel.value) onNewOrderProductChange.call(sel);
@@ -1339,6 +1261,14 @@ function onNewOrderProductChange() {
         const dfltShelf = opt.getAttribute('data-shelf-life') || '';
         if (dfltShelf !== '') shelf.value = dfltShelf;
     }
+    // 入库行:带出商品默认库位(可改)。
+    // 只在空的时候填:用户已经手动改过库位(比如主仓放不下改到副仓)时,
+    // 再换商品不该把他的选择冲掉。填进去的值在下拉里可见,不存在"偷偷改库位"。
+    const loc = tr.querySelector('.nw-loc');
+    if (loc && !loc.value) {
+        const dfltLoc = opt.getAttribute('data-loc') || '';
+        if (dfltLoc !== '') loc.value = dfltLoc;
+    }
 }
 
 function addNewOrderRow() {
@@ -1353,6 +1283,8 @@ function addNewOrderRow() {
     if (pd) pd.value = '';
     const shelf = clone.querySelector('.nw-shelf-life');
     if (shelf) shelf.value = '';
+    const loc = clone.querySelector('.nw-loc');
+    if (loc) loc.value = '';
     clone.querySelector('.nw-row-remark').value = '';
     tbody.appendChild(clone);
     clone.querySelector('.nw-product').addEventListener('change', onNewOrderProductChange);
@@ -1371,6 +1303,8 @@ function removeNewOrderRow(btn) {
         if (pd) pd.value = '';
         const shelf = tr.querySelector('.nw-shelf-life');
         if (shelf) shelf.value = '';
+        const loc = tr.querySelector('.nw-loc');
+        if (loc) loc.value = '';
         tr.querySelector('.nw-row-remark').value = '';
         return;
     }
@@ -1400,6 +1334,9 @@ function readNewOrderItems() {
         const shelfEl = tr.querySelector('.nw-shelf-life');
         const shelfRaw = shelfEl ? shelfEl.value.trim() : '';
         const shelfLifeDays = shelfRaw === '' ? null : Number(shelfRaw);
+        // 入库行的库位;空串=用商品默认库位(后端负责兜底)
+        const locEl = tr.querySelector('.nw-loc');
+        const location = locEl ? locEl.value.trim() : '';
         const rowRemark = tr.querySelector('.nw-row-remark').value.trim();
         if (!productId && !qtyRaw) return;
         if (!productId) { toast(t('new_order.err.no_product'), 'error'); hasError = true; return; }
@@ -1408,7 +1345,7 @@ function readNewOrderItems() {
         }
         items.push({
             productId, quantity, supplier, rowRemark,
-            productionDate, shelfLifeDays
+            productionDate, shelfLifeDays, location
         });
     });
     return hasError ? null : items;
@@ -1475,8 +1412,7 @@ function openInboundOrderModal(order) {
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
     freshModalOk(t('common.close')).addEventListener('click', closeModal);
-    const modal = document.querySelector('.modal');
-    if (modal) modal.classList.add('modal-wide');
+    setModalWidth('modal-wide');
 }
 
 function openOutboundOrderModal(order) {
@@ -1486,8 +1422,7 @@ function openOutboundOrderModal(order) {
     const tm = document.getElementById('order-print-time');
     if (tm) tm.textContent = new Date().toLocaleString();
     freshModalOk(t('common.close')).addEventListener('click', closeModal);
-    const modal = document.querySelector('.modal');
-    if (modal) modal.classList.add('modal-wide');
+    setModalWidth('modal-wide');
 }
 
 function printInboundOrder() { window.print(); }
@@ -1544,6 +1479,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         const r = (location.hash || '#/dashboard').replace('#/', '');
         setActive(r);
+        // 首次进站(以及 F5 刷新)也走一遍路由守卫,否则 state.locMap 是空的,
+        // 「仓库 / 库位」标签在首屏会退化成光秃秃的库位码 —— 而首屏正是用户最常看到的一屏。
+        // go()/hashchange 那两条路径都调了,这里漏掉的话只有刷新才暴露。
+        await prepareLocMap();
         (routes[r] || loadDashboard)();
     } catch (e) {
         // api._handle 已跳 /login

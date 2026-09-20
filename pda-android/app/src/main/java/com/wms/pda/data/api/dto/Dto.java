@@ -78,10 +78,11 @@ public class Dto {
         public String unitPrice;
         public Integer beforeQty;
         public Integer afterQty;
-        public String location;
+        public String location;      // 取货库位;空 = 自动(跨库位找货),实际分布看 picks
         public String rowRemark;
         public String createdAt;
         public List<String> codes;   // 每个库存单元的编码(逐件显示用)
+        public java.util.Map<String, Integer> picks; // 库位码 → 件数(该行实际从各库位取几件)
     }
 
     // ---- 盘点 ----

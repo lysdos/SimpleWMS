@@ -3,6 +3,7 @@ package com.wms.model;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class OutboundOrderItem {
 
@@ -19,6 +20,13 @@ public class OutboundOrderItem {
     private String rowRemark;
     private LocalDateTime createdAt;
     private List<String> codes; // 每个库存单元的编码(逐件显示用)
+    /**
+     * 拣货分布:库位码 → 件数(该行实际从各库位取几件),不存表。
+     *
+     * 出库改成"自动跨库位找货"之后,行上的 {@link #location} 是空的(表示自动),
+     * 现场要知道去哪儿拿货只能看这个 —— 它按**真实锁定的库存单元**统计。
+     */
+    private Map<String, Integer> picks;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -46,4 +54,6 @@ public class OutboundOrderItem {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public List<String> getCodes() { return codes; }
     public void setCodes(List<String> codes) { this.codes = codes; }
+    public Map<String, Integer> getPicks() { return picks; }
+    public void setPicks(Map<String, Integer> picks) { this.picks = picks; }
 }

@@ -128,7 +128,7 @@ UNIQUE(product_id, supplier_id)
 | 列 | 类型 | 约束 |
 |---|---|---|
 | id | INT | PK |
-| type | VARCHAR(16) | `IN` / `OUT` |
+| type | VARCHAR(16) | `IN` / `OUT` / `SCAN`(UHF 扫码确认)/ `CHECK`(盘点)/ `SCRAP`(报废)/ `TRANSFER`(调拨) |
 | product_id | INT | FK→product |
 | sku / product_name | VARCHAR | 冗余(防止商品改名后历史流水失真) |
 | quantity | INT | 正数(出库负数在旧实现有,现统一存正数,type 区分方向) |
@@ -145,7 +145,7 @@ UNIQUE(product_id, supplier_id)
 | id | INT | PK | |
 | **code** | **VARCHAR(24)** | **NOT NULL UNIQUE** | **每件实物一个唯一码,系统生成,贴实物** |
 | product_id / sku / product_name | | FK + 冗余 | |
-| location_code | VARCHAR(32) | NOT NULL | 入库时按商品 location 冗余记录 |
+| location_code | VARCHAR(32) | NOT NULL | 入库时按**明细行的 location**(缺省则商品 `product.location`,再缺省则兜底库位「默认库位」)冗余记录。同一商品的不同单元可以在**不同库位** |
 | quantity | INT | NOT NULL DEFAULT 1 | 一物一码场景永远 = 1 |
 | remaining | INT | NOT NULL DEFAULT 1 | 出库部分扣减后剩余;remaining=0 → status=OUT |
 | **status** | VARCHAR(16) | NOT NULL DEFAULT 'IN_STOCK' | `IN_STOCK` / `PENDING`(待入库)/ `RESERVED`(已预留)/ `OUT` / `SCRAPPED` / `TRANSFERRED` |
@@ -266,8 +266,9 @@ UNIQUE(check_id, inventory_item_id)
 | | `RESERVED → IN_STOCK` | 出库草稿取消 → `releaseReservations` |
 | | `IN_STOCK / RESERVED → OUT` | 出库 commit(消费本单 RESERVED 单元) |
 | | `IN_STOCK → SCRAPPED` | scrap 端点 |
-| | `IN_STOCK → TRANSFERRED` | transfer 端点 |
-| | OUT / SCRAPPED / TRANSFERRED 终态 | |
+| | `IN_STOCK → IN_STOCK`(只挪库位) | transfer 端点(**2026-09-20 起**)|
+| | OUT / SCRAPPED 终态 | |
+| | `TRANSFERRED` | **历史遗留**:旧 transfer 把单元打成这个终态且不改 `location_code`(见 §4 的修复说明) |
 
 > ⚠️ 与**单据状态**是两套维度:出入库单 / 盘点单的状态只有 `DRAFT` / `COMMITTED` / `CANCELLED`。
 > `inventory_item` 的 `PENDING` 是「待入库」,与 PDA `DocStatus.PENDING("待执行")` 只是同名。
@@ -280,7 +281,10 @@ UNIQUE(check_id, inventory_item_id)
 | UNIQUE | 几乎每张表 | 见上 |
 | **24 位 code** | `inventory_item` | `code` — 不可变,后端生成,见 `CodeGenerator` |
 | 一物一码 | `inventory_item` | `quantity=1, remaining=1` |
-| FIFO 扣减 | `outbound_order_item` | 后端 `consumeForOutbound` 按 `id ASC` |
+| FEFO 锁定 | `inventory_item` | 出库建单 `reserveForOutbound` 按 `(production_date IS NULL) ASC, production_date ASC, id ASC`;**不限库位**(商品全部库位的货在一个池子里排) |
+| 一个商品可跨库位 | `inventory_item` | `location_code` 是**单元级**属性,同一 `product_id` 的单元可分布在不同库位(入库时逐行指定) |
+| 入库行合并 | `inbound_order_item` | 仅 `商品+供应商+生产日期+保质期+库位` **全同**才合并(`InboundService.addItemsToDraftInternal` 的 key) |
+| 调拨不动状态 | `inventory_item` | `transfer` 只改 `location_code`,保持 `IN_STOCK`;`transferred_from/to` 是**最后一次调拨**的审计快照 |
 | 唯一默认供应商 | `product_supplier` | (product_id, is_default=TRUE) 唯一 |
 | 行级 supplier | `inbound_order_item.supplier` | 同一单据可多供应商 |
 | 盘点唯一关联 | `stock_check_item` | (check_id, inventory_item_id) UNIQUE |

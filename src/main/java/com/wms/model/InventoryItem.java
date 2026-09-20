@@ -45,6 +45,7 @@ public class InventoryItem {
     private Integer shelfLifeDays;                // 保质期天数(批次,可空)
     private java.time.LocalDate expiryDate;       // 到期日=生产日期+保质期天数(可空;空=不参与效期预警)
     private Integer expiryWarnDays;               // 联表展示(product.expiry_warn_days),不存表
+    private String warehouseName;                 // 联表展示(location.warehouse_name),不存表
 
     private String createdBy;
     private LocalDateTime createdAt;
@@ -92,6 +93,8 @@ public class InventoryItem {
     public void setExpiryDate(java.time.LocalDate expiryDate) { this.expiryDate = expiryDate; }
     public Integer getExpiryWarnDays() { return expiryWarnDays; }
     public void setExpiryWarnDays(Integer expiryWarnDays) { this.expiryWarnDays = expiryWarnDays; }
+    public String getWarehouseName() { return warehouseName; }
+    public void setWarehouseName(String warehouseName) { this.warehouseName = warehouseName; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -1,13 +1,17 @@
 # =====================================================
 #  SimpleWMS Frontend - Nginx 反向代理
-#  - 提供 SPA 静态文件
+#  - 提供 SPA 静态文件(唯一一份:后端不再自带界面)
 #  - /api/* 反向代理到 backend
 # =====================================================
 
 FROM nginx:1.27-alpine
 
-# 拷贝前端静态文件
-COPY src/main/resources/static /usr/share/nginx/html
+# 拷贝前端静态文件。
+# 注意源目录是顶层的 frontend/,**不是** src/main/resources/static —— 放那儿会被 Maven
+# 打进 jar,后端就也能提供一个界面:既多一份副本(两处构建容易漂移),
+# 又让 9090 这个本该只给 PDA 调 API 的端口多出一个 Web 入口。
+# (目录叫 frontend 而不是 web:Java 侧已经有个包叫 com.wms.web,重名容易看错)
+COPY frontend /usr/share/nginx/html
 
 # 拷贝 nginx 配置
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf

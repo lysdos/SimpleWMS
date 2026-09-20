@@ -153,7 +153,7 @@ const Views = {
                 <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(r.code)}</span></td>
                 <td><strong>${escapeHtml(r.sku)}</strong></td>
                 <td>${escapeHtml(r.productName)}</td>
-                <td>${escapeHtml(r.locationCode || '-')}</td>
+                <td>${Views.locLabel(r.locationCode)}</td>
                 <td>${escapeHtml(r.expiryDate || '-')}</td>
                 <td>${r.daysLeft < 0 ? '0' : r.daysLeft} ${t('inventory.expiry.day')}</td>
                 <td>${badge(isExpired)}</td>
@@ -415,9 +415,10 @@ const Views = {
     },
 
     /* ================== 新增入库/出库单 弹窗 ================== */
-    newOrderModal(type, products, suppliers) {
+    newOrderModal(type, products, suppliers, locations) {
         products = products || [];
         suppliers = suppliers || [];
+        locations = locations || [];
         const isIn = type === 'IN';
 
         // 空占位项必须放在最前:否则商品列表非空时浏览器会自动选中第一项,
@@ -427,9 +428,15 @@ const Views = {
             ? `<option value="">${t('new_order.placeholder.pick_product')}</option>` + products.map(p => {
                 const low = p.quantity <= p.lowStock ? ` [${t('product.low_badge')}]` : '';
                 const dflt = p.defaultSupplier ? ` (${t('new_order.label.supplier')}:${escapeHtml(p.defaultSupplier)})` : '';
-                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}" data-shelf-life="${p.defaultShelfLifeDays ?? ''}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
+                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}" data-shelf-life="${p.defaultShelfLifeDays ?? ''}" data-loc="${escapeHtml(p.location||'')}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
             }).join('')
             : `<option value="">${t('new_order.placeholder.no_product')}</option>`;
+
+        // 入库行的库位下拉:按仓库分组(一个商品可能因主仓放不下而分到副仓,
+        // 所以要能逐行改)。空值 = 用商品的默认库位,后端会兜底。
+        const locOpts = Views.locationOptgroups(
+            locations.filter(l => l.enabled !== false),
+            l => `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`);
 
         const supplierOpts = suppliers
             .filter(s => s.enabled !== false)
@@ -437,18 +444,21 @@ const Views = {
             .join('');
 
         const blankRow = () => {
-            const productCell  = `<select class="select nw-product" style="width:240px;">${productOpts}</select>`;
+            const productCell  = `<select class="select nw-product" style="width:185px;">${productOpts}</select>`;
             const supplierCell = isIn
-                ? `<select class="select nw-supplier" style="width:150px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
+                ? `<select class="select nw-supplier" style="width:115px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
                 : '';
             const prodDateCell = isIn
-                ? `<input type="date" class="input nw-prod-date" style="width:150px;">`
+                ? `<input type="date" class="input nw-prod-date" style="width:115px;">`
                 : '';
             const shelfCell = isIn
-                ? `<input type="number" min="1" class="input nw-shelf-life" placeholder="—" style="width:90px;">`
+                ? `<input type="number" min="1" class="input nw-shelf-life" placeholder="—" style="width:70px;">`
                 : '';
-            const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:90px;">`;
-            const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}" style="width:180px;">`;
+            const locCell = isIn
+                ? `<select class="select nw-loc" style="width:140px;"><option value="">${t('new_order.loc.ph')}</option>${locOpts}</select>`
+                : '';
+            const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:70px;">`;
+            const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}" style="width:110px;">`;
             return `
             <tr class="nw-row">
                 <td class="num row-idx">1</td>
@@ -456,21 +466,27 @@ const Views = {
                 ${isIn ? `<td>${supplierCell}</td>` : ''}
                 ${isIn ? `<td>${prodDateCell}</td>` : ''}
                 ${isIn ? `<td>${shelfCell}</td>` : ''}
+                ${isIn ? `<td>${locCell}</td>` : ''}
                 <td>${qtyCell}</td>
                 <td>${remarkCell}</td>
                 <td class="actions"><button class="btn-link danger" onclick="removeNewOrderRow(this)">${t('common.delete')}</button></td>
             </tr>`;
         };
 
+        // 列宽要和 .modal-xwide(1180px)配套:每列实际占用 = 下面单元格上写的
+        // inline 宽度 + 单元格左右内边距(各 14px)。合计超出弹窗可用宽度时,
+        // 「数量」会被推到表格横向滚动区外面,填数量得先左右拉表。
+        // 改这里或改 inline 宽度都要重新算一遍总宽。
         const ths = isIn
             ? `<th style="width:36px;">#</th>
-               <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
-               <th style="width:150px;">${t('new_order.label.supplier')}</th>
-               <th style="width:150px;">${t('new_order.label.production_date')}</th>
-               <th style="width:90px;">${t('new_order.label.shelf_life')}</th>
-               <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
-               <th>${t('new_order.label.row_remark')}</th>
-               <th style="width:66px;">${t('common.actions')}</th>`
+               <th style="width:190px;">${t('new_order.label.product')}<span class="req">*</span></th>
+               <th style="width:120px;">${t('new_order.label.supplier')}</th>
+               <th style="width:120px;">${t('new_order.label.production_date')}</th>
+               <th style="width:70px;">${t('new_order.label.shelf_life')}</th>
+               <th style="width:145px;">${t('new_order.label.loc')}</th>
+               <th style="width:70px;">${t('new_order.label.qty')}<span class="req">*</span></th>
+               <th style="min-width:110px;">${t('new_order.label.row_remark')}</th>
+               <th style="width:60px;">${t('common.actions')}</th>`
             : `<th style="width:36px;">#</th>
                <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
                <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
@@ -538,20 +554,68 @@ const Views = {
         </div>`;
     },
 
+    /**
+     * 库位显示:带上所属仓库,如「默认仓库 / A-01-01」。
+     *
+     * 单据明细、库存单元里存的是**库位码快照**(不是外键),后端响应里没有仓库名,
+     * 所以靠 app.js 维护的 state.locMap(码 → 仓库名)反查。多仓库之后光看一个码
+     * 不知道货在哪个仓,这个函数就是为了让所有"只印码"的地方都能看出仓库。
+     *
+     * 查不到(库位已删除、locMap 还没加载)退回原码,不显示成空白 ——
+     * 历史单据照样要看。返回值已经过 HTML 转义,调用方不要再包 escapeHtml。
+     */
+    locLabel(code) {
+        if (!code) return '-';
+        const esc = escapeHtml(code);
+        // views.js 与 app.js 都是经典脚本,共用全局词法作用域;调用发生在渲染期,
+        // 那时 app.js 早已执行完,不存在 TDZ 问题。
+        const map = state.locMap;
+        if (!map || !(code in map)) return esc;
+        const wh = map[code] || t('location.warehouse.none');
+        return escapeHtml(wh) + ' / ' + esc;
+    },
+
+    /**
+     * 拣货明细:把后端给的「库位码 → 件数」渲染成
+     * "主仓库 / A-01-01 × 30 · 副仓库 / B-02-02 × 30"。
+     *
+     * 出库改成"自动跨库位找货"后,明细行上不再有单一库位 ——
+     * 货实际在哪儿、该去哪儿拿,只有锁定到的单元说得清。所以这行是给现场看的
+     * 拣货依据,不是装饰。
+     *
+     * 数据**取后端算好的 picks**,不再由前端拿单元自己分组:同一套数算两遍的话,
+     * 以后改取货规则(比如优先同仓)容易只改一边 —— PDA 那边读的就是这个字段。
+     *
+     * @param picks 库位码 → 件数(见 OutboundOrderItem.picks)
+     */
+    pickLines(picks) {
+        if (!picks) return '';
+        const entries = Object.entries(picks);
+        if (entries.length === 0) return '';
+        const parts = entries
+            .map(([loc, qty]) => `${loc ? Views.locLabel(loc) : '—'} × ${qty}`)
+            .join(' · ');
+        return `<div style="font-size:12px;color:var(--c-text-3);margin-bottom:4px;">
+            ${t('outbound_order.pick.title')}: ${parts}
+        </div>`;
+    },
+
     /* ================== 出库单详情 Modal ================== */
     outboundOrderModal(o) {
-        const barcodeMap = o.barcodesBySku || {};
         const rows = (o.items || []).map((it, i) => {
-            const codes = barcodeMap[it.sku] || [];
+            // it.codes 是后端按行填好的码字符串列表(不是库存单元对象)
+            const codes = it.codes || [];
             const codesText = codes.length === 0
                 ? `<span style="color:#9ca3af;font-size:12px;">${t('outbound_order.no_barcode')}</span>`
-                : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c.code)}</span>`).join('') + '</div>';
+                : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c)}</span>`).join('') + '</div>';
+            // 拣货明细:这批货实际从哪些库位各取几件(后端按真实锁定的单元算好的)
+            const pickText = Views.pickLines(it.picks);
             return `
             <tr>
                 <td class="num">${i + 1}</td>
                 <td><strong>${escapeHtml(it.sku)}</strong></td>
                 <td>${escapeHtml(it.productName)}</td>
-                <td>${escapeHtml(it.location || '-')}</td>
+                <td>${it.location ? Views.locLabel(it.location) : t('outbound_order.loc.auto')}</td>
                 <td class="num">${it.quantity}</td>
                 <td class="num">¥${formatMoney(it.unitPrice)}</td>
                 <td>${escapeHtml(it.rowRemark || '')}</td>
@@ -561,6 +625,7 @@ const Views = {
                     <div style="font-size:12px;color:var(--c-text-3);margin-bottom:4px;">
                         ${t('outbound_order.barcode.count', { n: codes.length })}
                     </div>
+                    ${pickText}
                     ${codesText}
                 </td>
             </tr>`;
@@ -735,12 +800,14 @@ const Views = {
 
     /* ================== 入库单详情 Modal ================== */
     inboundOrderModal(o) {
-        const barcodeMap = o.barcodesBySku || {};
         const rows = (o.items || []).map((it, i) => {
-            const codes = barcodeMap[it.sku] || [];
+            // it.codes 是后端**按明细行**填好的码字符串列表(按 inbound_item_id 精确归属,
+            // 见 InboundService.getOrderWithCodes)。同一商品拆成多行时每行只拿到自己的码 ——
+            // 早先是前端拉 /by-inbound 再按 SKU 分组,那样两行会各显示该 SKU 的全部码。
+            const codes = it.codes || [];
             const codesText = codes.length === 0
                 ? `<span style="color:#9ca3af;font-size:12px;">${t('inbound_order.no_barcode')}</span>`
-                : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c.code)}</span>`).join('') + '</div>';
+                : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c)}</span>`).join('') + '</div>';
             const batchText = (it.productionDate || '-')
                 + (it.shelfLifeDays != null ? ` / ${it.shelfLifeDays}${t('inbound.shelf_life_unit')}` : '');
             return `
@@ -749,7 +816,7 @@ const Views = {
                 <td>${escapeHtml(it.supplier || '-')}</td>
                 <td><strong>${escapeHtml(it.sku)}</strong></td>
                 <td>${escapeHtml(it.productName)}</td>
-                <td>${escapeHtml(it.location || '-')}</td>
+                <td>${Views.locLabel(it.location)}</td>
                 <td>${escapeHtml(batchText)}</td>
                 <td class="num">${it.quantity}</td>
                 <td class="num">¥${formatMoney(it.unitPrice)}</td>
@@ -832,7 +899,7 @@ const Views = {
             <div style="color:var(--c-text-3);">${t('product.col.price')}</div><div>¥${formatMoney(p.unitPrice)}</div>
             <div style="color:var(--c-text-3);">${t('product.col.value')}</div><div>¥${formatMoney((p.unitPrice||0)*p.quantity)}</div>
             <div style="color:var(--c-text-3);">${t('product.form.low')}</div><div>${p.lowStock ?? '-'}</div>
-            <div style="color:var(--c-text-3);">${t('product.form.loc')}</div><div>${escapeHtml(p.location || '-')}</div>
+            <div style="color:var(--c-text-3);">${t('product.form.loc')}</div><div>${Views.locLabel(p.location)}</div>
             <div style="color:var(--c-text-3);">${t('product.form.shelf_life')}</div><div>${p.defaultShelfLifeDays ?? '-'}</div>
             <div style="color:var(--c-text-3);">${t('product.form.warn_days')}</div><div>${p.expiryWarnDays ?? '-'}</div>
         </div>`;
@@ -1497,6 +1564,13 @@ const Views = {
             return `<option value="${escapeHtml(l.code)}"${sel}>${escapeHtml(l.code)}${nm}</option>`;
         });
 
+        // 仓库筛选:一个商品分散在多个库位之后,总数量是合并值,看不出各仓多少,
+        // 这个下拉就是用来按仓看的(后端按 location.warehouse_id 过滤)
+        const whOpts = (state.warehouses || []).map(w => {
+            const sel = String(state.inventoryWarehouse) === String(w.id) ? ' selected' : '';
+            return `<option value="${w.id}"${sel}>${escapeHtml(w.name || w.code)}</option>`;
+        }).join('');
+
         const statusMap = {
             'IN_STOCK'   : `<span class="badge ok">${t('inventory.status.IN_STOCK')}</span>`,
             'PENDING'    : `<span class="badge" style="background:#fef3c7;color:#92400e;">${t('inventory.status.PENDING')}</span>`,
@@ -1522,7 +1596,7 @@ const Views = {
                     <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(it.code)}</span></td>
                     <td><strong>${escapeHtml(it.sku)}</strong></td>
                     <td>${escapeHtml(it.productName)}</td>
-                    <td>${escapeHtml(it.locationCode || '-')}</td>
+                    <td>${Views.locLabel(it.locationCode)}</td>
                     <td class="num">${it.quantity || 0}</td>
                     <td class="num"><strong>${it.remaining || 0}</strong></td>
                     <td>${statusMap[it.status] || escapeHtml(it.status)}</td>
@@ -1548,6 +1622,10 @@ const Views = {
         <div class="card">
             <div class="toolbar">
                 <input id="inv-kw" class="input input-sm" placeholder="${t('inventory.kw_placeholder')}" value="${escapeHtml(state.inventoryKw||'')}" style="width:200px;">
+                <select id="inv-wh" class="select" style="width:150px;">
+                    <option value="">${t('location.warehouse.all')}</option>
+                    ${whOpts}
+                </select>
                 <select id="inv-loc" class="select" style="width:160px;">
                     <option value="">${t('inventory.loc_all')}</option>
                     ${locOpts}

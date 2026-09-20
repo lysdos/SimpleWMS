@@ -1,5 +1,6 @@
 package com.wms.db;
 
+import com.wms.model.Location;
 import com.wms.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -153,11 +154,12 @@ public class DataSeeder implements CommandLineRunner {
 
         try {
             Integer cnt = jdbc.queryForObject(
-                    "SELECT COUNT(*) FROM location WHERE code = ?", Integer.class, "默认库位");
+                    "SELECT COUNT(*) FROM location WHERE code = ?", Integer.class,
+                    Location.FALLBACK_CODE);
             if (cnt == null || cnt == 0) {
                 jdbc.update("INSERT INTO location (code, name, warehouse_id, remark, enabled, created_by) " +
                             "VALUES (?,?,?,?,?,?)",
-                        "默认库位", "默认库位", wid,
+                        Location.FALLBACK_CODE, Location.FALLBACK_CODE, wid,
                         "商品未设置库位时的兜底库位(系统初始化自动创建)", Boolean.TRUE, "system");
                 log.info("DataSeeder: 已创建兜底库位「默认库位」");
             }

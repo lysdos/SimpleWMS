@@ -138,10 +138,12 @@ public class OutboundController {
     }
 
     /**
-     * UHF-Rader 扫到 EPC 后调用此接口,后端:
-     *  1) 校验 EPC 存在且 IN_STOCK
-     *  2) 校验 EPC 所属 SKU 在出库单明细里(不在 → 不报警 success=false)
-     *  3) 调 consumeForOutboundByEpc 扣 1 件 + 写 OUT 流水
+     * UHF-Rader 扫到 EPC 后调用此接口,后端(方案 A:建单时就锁码,这里只做确认):
+     *  1) 校验 EPC 是 24 位十六进制
+     *  2) 查 inventory_item 必须是 status=RESERVED 且 outbound_order_id=本单;
+     *     命中不了则按具体状态给出原因(别的单锁了/已出库/PENDING/...)
+     *  3) 写一条 SCAN 标记流水(quantity=0,不扣库存);**扣减在 commit 时做**
+     *  幂等:同一个 EPC 重复扫返回 alreadyScanned=true,不算错误。
      * body: { "epc": "FE019178", "createdBy": "admin" 可选 }
      */
     @PostMapping("/orders/{id}/scan-epc")
@@ -264,32 +266,7 @@ public class OutboundController {
         OutboundOrder o = outboundService.getOrder(id);
         if (o == null) throw new NotFoundException("出库单不存在, id=" + id);
 
-        StringBuilder sb = new StringBuilder();
-        sb.append('\ufeff');
-        sb.append("出库单号,").append(csv(o.getOrderNo())).append('\n');
-        sb.append("领用方,").append(csv(o.getCustomer())).append('\n');
-        sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
-        sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
-        sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
-        sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
-        sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
-        sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
-        sb.append('\n');
-        sb.append("序号,SKU,商品名称,库位,数量,单价,行备注\n");
-        int idx = 1;
-        if (o.getItems() != null) {
-            for (OutboundOrderItem it : o.getItems()) {
-                sb.append(idx++).append(',')
-                  .append(csv(it.getSku())).append(',')
-                  .append(csv(it.getProductName())).append(',')
-                  .append(csv(it.getLocation())).append(',')
-                  .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
-                  .append(it.getUnitPrice() == null ? "0.00" : it.getUnitPrice().toPlainString()).append(',')
-                  .append(csv(it.getRowRemark())).append('\n');
-            }
-        }
-
-        byte[] body = sb.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] body = buildCsv(o).getBytes(StandardCharsets.UTF_8);
         String fname = URLEncoder.encode(
                 (o.getOrderNo() == null ? ("outbound_" + id) : o.getOrderNo()) + ".csv",
                 StandardCharsets.UTF_8).replace("+", "%20");
@@ -346,13 +323,33 @@ public class OutboundController {
                 sb.append(idx++).append(',')
                   .append(csv(it.getSku())).append(',')
                   .append(csv(it.getProductName())).append(',')
-                  .append(csv(it.getLocation())).append(',')
+                  .append(csv(locationCell(it))).append(',')
                   .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
                   .append(it.getUnitPrice() == null ? "0.00" : it.getUnitPrice().toPlainString()).append(',')
                   .append(csv(it.getRowRemark())).append('\n');
             }
         }
         return sb.toString();
+    }
+
+    /**
+     * 「库位」列内容。行上带了库位(手工指定的历史单)就直接用它;
+     * 留空表示「自动」—— 此时把真实拣货分布写出来,否则导出/打印出来
+     * 现场不知道去哪儿拿货。
+     */
+    private static String locationCell(OutboundOrderItem it) {
+        if (it.getLocation() != null && !it.getLocation().isBlank()) return it.getLocation();
+        Map<String, Integer> picks = it.getPicks();
+        if (picks == null || picks.isEmpty()) return "自动";
+        StringBuilder s = new StringBuilder("自动(");
+        boolean first = true;
+        for (Map.Entry<String, Integer> e : picks.entrySet()) {
+            if (!first) s.append(" / ");
+            String loc = (e.getKey() == null || e.getKey().isBlank()) ? "未指定库位" : e.getKey();
+            s.append(loc).append('×').append(e.getValue());
+            first = false;
+        }
+        return s.append(')').toString();
     }
 
     private static String csv(Object v) {

@@ -190,6 +190,37 @@ public class DtoContractTest {
         assertEquals("A-01-01", o.items.get(0).location);
     }
 
+    /**
+     * 来源:GET /api/outbound/orders/{id}(出库改"自动跨库位找货"之后的响应)。
+     *
+     * 行上的 location 变成 **null**(= 自动),真正去哪几个库位取货看 picks。
+     * PDA 出库详情靠这两个字段决定显示「库位: 自动」+「拣货: 主仓库/A-01-01 × 2 …」,
+     * 所以字段名和"空 location + 非空 picks"这组语义必须锁住 —— 名字对不上 Gson 只会
+     * 静默给 null,界面上就少一整行,现场不知道去哪儿拿货。
+     *
+     * 注意 picks 的**值类型是数字**(不是字符串),Gson 读进 Map<String,Integer> 才不炸。
+     */
+    @Test
+    public void outboundOrder_autoLocation_withPicks() {
+        String json = "{\"id\":2,\"orderNo\":\"OUT-20260920113526-767\",\"customer\":\"项目部\","
+                + "\"totalQuantity\":8,\"itemCount\":1,\"status\":\"DRAFT\","
+                + "\"items\":[{\"id\":1,\"orderId\":2,\"productId\":1,\"sku\":\"SP-001\","
+                + "\"productName\":\"新冠疫苗\",\"quantity\":8,\"unitPrice\":10.0,\"beforeQty\":10,\"afterQty\":10,"
+                + "\"location\":null,\"rowRemark\":null,\"createdAt\":\"2026-09-20T11:35:26\","
+                + "\"codes\":[\"202609201131424987460942\",\"202609201131424987604953\"],"
+                + "\"picks\":{\"A-01-01\":6,\"B-01-01\":2}}],"
+                + "\"scannedCodes\":[],\"uhfDispatchedAt\":null,\"uhfDeviceCode\":null}";
+
+        Dto.OutboundOrder o = parse(json, Dto.OutboundOrder.class);
+        Dto.OutboundOrderItem it = o.items.get(0);
+        assertNull(it.location);
+        assertNotNull(it.picks);
+        assertEquals(2, it.picks.size());
+        assertEquals(Integer.valueOf(6), it.picks.get("A-01-01"));
+        assertEquals(Integer.valueOf(2), it.picks.get("B-01-01"));
+        assertEquals(2, it.codes.size());
+    }
+
     /** 来源:GET /api/products(默认供应商/默认保质期是入库选商品要用的字段) */
     @Test
     public void product_defaultSupplierAndShelfLife() {

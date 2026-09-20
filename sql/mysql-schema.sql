@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS outbound_order_item (
     created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_by     VARCHAR(64) DEFAULT NULL COMMENT '更新人',
     updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    location       VARCHAR(32) DEFAULT NULL COMMENT '取货库位(按此库位锁定库存单元)',
+    location       VARCHAR(32) DEFAULT NULL COMMENT '取货库位(限定从此库位锁货);空=自动,跨全部库位按 FEFO 锁,实际取货分布看锁到的库存单元',
     PRIMARY KEY (`id`),
     KEY `idx_outbound_item_order` (`order_id`),
     KEY `idx_outbound_item_product` (`product_id`)
@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS inventory_item (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS inventory_log (
     id             INT NOT NULL AUTO_INCREMENT COMMENT '主键',
-    type           VARCHAR(16) NOT NULL COMMENT '流水类型:IN=入库 / OUT=出库 / SCAN=UHF 扫码确认 / CHECK=盘点调整 / SCRAP=报废',
+    type           VARCHAR(16) NOT NULL COMMENT '流水类型:IN=入库 / OUT=出库 / SCAN=UHF 扫码确认 / CHECK=盘点调整 / SCRAP=报废 / TRANSFER=调拨',
     product_id     INT NOT NULL COMMENT '商品ID → product.id',
     sku            VARCHAR(64) NOT NULL COMMENT '商品编码(快照)',
     product_name   VARCHAR(128) NOT NULL COMMENT '商品名称(快照)',
