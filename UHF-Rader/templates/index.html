@@ -411,7 +411,7 @@
         <p class="subtitle" data-i18n="login.subtitle">UHF RFID 出库扫码终端 · 登录 WMS 后台</p>
         <div class="field">
             <label for="loginWmsUrl" data-i18n="login.wmsUrl">WMS 地址(独立部署才填)</label>
-            <input id="loginWmsUrl" data-i18n-placeholder="login.wmsUrl.ph" placeholder="http://192.168.1.100:9090 等" />
+            <input id="loginWmsUrl" data-i18n-placeholder="login.wmsUrl.ph" placeholder="http://192.168.1.100:9080 等" />
         </div>
         <div class="field">
             <label for="loginUser" data-i18n="login.username">账号</label>
@@ -554,7 +554,7 @@ const I18N_DICT = {
     // 登录屏
     'login.subtitle':      { 'zh-CN':'UHF RFID 出库扫码终端 · 登录 WMS 后台', 'en-US':'UHF RFID Outbound Terminal · Sign in to WMS' },
     'login.wmsUrl':        { 'zh-CN':'WMS 地址(独立部署才填)', 'en-US':'WMS URL (standalone only)' },
-    'login.wmsUrl.ph':     { 'zh-CN':'例如 http://192.168.1.100:9090,本地 Docker 部署留空', 'en-US':'e.g. http://192.168.1.100:9090 — leave blank for Docker' },
+    'login.wmsUrl.ph':     { 'zh-CN':'例如 http://192.168.1.100:9080,本地 Docker 部署留空', 'en-US':'e.g. http://192.168.1.100:9080 — leave blank for Docker' },
     'login.username':      { 'zh-CN':'账号', 'en-US':'Username' },
     'login.username.ph':   { 'zh-CN':'WMS 用户名', 'en-US':'WMS username' },
     'login.password':      { 'zh-CN':'密码', 'en-US':'Password' },
@@ -563,8 +563,8 @@ const I18N_DICT = {
     'login.empty':         { 'zh-CN':'请填写账号和密码', 'en-US':'Enter your username and password' },
     'login.fail':          { 'zh-CN':'登录失败: {msg}', 'en-US':'Sign-in failed: {msg}' },
     'login.netErr':        { 'zh-CN':'登录失败: 网络错误 - {msg}', 'en-US':'Sign-in failed: network error - {msg}' },
-    'login.hint':          { 'zh-CN':'ℹ Docker 部署:WMS 地址留空即可,终端自动连内置 backend。<br>独立部署(非 Docker):填 WMS 所在机器地址,如 http://192.168.1.100:9090。<br>使用 WMS 后台账号,登录信息保存在本浏览器。',
-                             'en-US':'ℹ Docker: leave WMS URL blank — the terminal auto-connects to the built-in backend.<br>Standalone (not in Docker): enter the WMS address, e.g. http://192.168.1.100:9090.<br>Use your WMS account; it is remembered in this browser.' },
+    'login.hint':          { 'zh-CN':'ℹ Docker 部署:WMS 地址留空即可,终端自动连内置 backend。<br>独立部署(非 Docker):填 WMS 所在机器地址,如 http://192.168.1.100:9080(nginx 入口,端口 9080)。<br>使用 WMS 后台账号,登录信息保存在本浏览器。',
+                             'en-US':'ℹ Docker: leave WMS URL blank — the terminal auto-connects to the built-in backend.<br>Standalone (not in Docker): enter the WMS address, e.g. http://192.168.1.100:9080 (the nginx entry, port 9080).<br>Use your WMS account; it is remembered in this browser.' },
 
     // 顶部
     'brand.subtitle':      { 'zh-CN':'UHF RFID 出库扫码终端', 'en-US':'UHF RFID Outbound Terminal' },
@@ -637,7 +637,7 @@ const I18N_DICT = {
 
 const I18N = {
     // 与 WMS 用同一键 'wms.lang';但 localStorage 按 origin 隔离,
-    // 5001(本终端)与 9080/9090(WMS)各自独立记忆,不会真正跨应用共享。
+    // 5001(本终端)与 9080(WMS 的 nginx 入口)各自独立记忆,不会真正跨应用共享。
     key: 'wms.lang',
     currentLang: 'zh-CN',
     t(key, params) {
@@ -699,7 +699,7 @@ let selectedOrderId = null;
 let selectedOrderNo = null;
 let scanResults = [];   // [{epc, sku, matched, reason, ts}]
 let expectedEpcs = [];  // [{code, sku, productName, ...}] 当前单锁定的 EPC 列表
-let _wmsBase = '';      // WMS 后端地址,如 "http://192.168.1.100:9090"
+let _wmsBase = '';      // WMS 入口地址(nginx),如 "http://192.168.1.100:9080"
 let _currentUser = null; // 当前登录的 WMS 用户
 let _dispatchAutoSelectArmed = false; // 首次自动认领只做一次
 let _bootstrapped = false;            // onLoginSuccess 幂等,防重复轮询
@@ -755,7 +755,9 @@ async function init() {
     const savedUrl = localStorage.getItem('wms_base_url') || '';
     document.getElementById('loginWmsUrl').value = savedUrl;
     if (!savedUrl) {
-        const guess = location.protocol + '//' + location.hostname + ':9090';
+        // 猜的是 WMS 的 **nginx 入口(9080)**,不是后端直连端口(9090)——
+        // 后端那个端口只绑本机回环,局域网里只有 9080 这道门,/api/* 由 nginx 反代。
+        const guess = location.protocol + '//' + location.hostname + ':9080';
         document.getElementById('loginWmsUrl').placeholder = guess;
     }
     const lastUser = localStorage.getItem('wms_last_user') || '';

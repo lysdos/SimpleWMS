@@ -16,7 +16,11 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
-        buildConfigField "String", "API_BASE_URL", "\"http://192.168.11.160:9090\""
+        // 默认指 nginx(9080),不是后端直连端口(9090):
+        // 后端 9090 已收回 loopback(只对本机开放),局域网里只剩 nginx 这一道门,
+        // 它会把 /api/* 反代到后端,所以 PDA 走的是同一个后端。
+        // 装机后可在「设置」里改;设置里存过的值优先于这里。
+        buildConfigField "String", "API_BASE_URL", "\"http://192.168.11.160:9080\""
     }
 
     signingConfigs {

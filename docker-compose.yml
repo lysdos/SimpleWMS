@@ -101,9 +101,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (32+ bytes)}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
     ports:
-      # PDA 局域网需要访问,绑定所有网卡(原 127.0.0.1 仅本机)
-      # 原 8080 被 Windows Hyper-V 预留,改 9090
-      - "9090:8080"
+      # 只绑本机回环:局域网里唯一对外开放的门是 nginx(9080),它把 /api/* 反代进来。
+      # PDA / UHF 都走 9080 —— 原先为了让 PDA 直连而放开到局域网(9090:8080),
+      # 结果是 9090 上多出一个完整的 Web 界面入口,两道门还会各自漂移。
+      # 本机调试仍可 curl 127.0.0.1:9090;原 8080 被 Windows Hyper-V 预留才改成 9090。
+      - "127.0.0.1:9090:8080"
     networks:
       - simplewms-net
 
@@ -152,7 +154,9 @@ services:
       # 设备号(UHF-Rader 通过此标识 WMS 系统中的设备)
       DEFAULT_DEVICE_CODE: ${UHF_DEVICE_CODE:-MOCK-UHF-001}
     ports:
-      # Web UI 本机访问
+      # UHF 终端自己的 Web UI。注意:**绑的是所有网卡**(不是注释以前写的"本机访问"),
+      # 也就是局域网可达 —— 目前局域网里除了 nginx(9080),还有它和 MySQL(23306)在听。
+      # 只给自己的机器用的话可改成 "127.0.0.1:5001:5000"。
       - "5001:5000"
     networks:
       - simplewms-net

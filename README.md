@@ -16,11 +16,15 @@
 
 ```bat
 build.bat       :: 首次构建(需要 Maven 与 JDK 17+)
-run.bat         :: 启动应用 → 浏览器访问 http://localhost:8080/
+run.bat         :: 启动后端 → http://localhost:8080/api/...
 ```
 
-启动后:
-- 主界面:<http://localhost:8080/>
+启动后(**只有 API**,后端不再自带界面):
+- 后端 API:<http://localhost:8080/api/dashboard/stats>
+- 要看界面请用 Docker 的 frontend 服务:<http://localhost:9080/>
+
+> 前端源码在顶层 `frontend/`,由 nginx 镜像(frontend 服务)打包提供。本机裸跑只起后端,
+> 所以没有界面 —— 换来的好处是静态文件只有一份、也不会让 API 端口兼职当 Web 入口。
 
 > 使用 **MySQL** 数据库:本地裸跑连 `localhost:23306`(即 docker compose 暴露的
 > MySQL 端口),所以启动前需先 `docker compose --env-file .env up -d mysql`。
@@ -30,8 +34,11 @@ run.bat         :: 启动应用 → 浏览器访问 http://localhost:8080/
 
 ### 端口被占用?
 
+本机裸跑的默认端口是 `8080`。被占用时换个没冲突的(别用 `9080`/`9090`/`23306` —— 那些是
+Docker 的 nginx / 后端 / MySQL 在占):
+
 ```bat
-run.bat --server.port=9090
+run.bat --server.port=8190
 ```
 
 或在 `src/main/resources/application.yml` 中改 `server.port` 后重新构建。
@@ -69,12 +76,16 @@ SimpleWMS/
 ├── pom.xml
 ├── README.md
 ├── build.bat            # 一键构建(支持离线 + 内置 .m2-repo 镜像)
-├── run.bat              # 一键启动
+├── run.bat              # 一键启动(仅后端 API)
 ├── sql/
 │   └── mysql-schema.sql        # MySQL 建库脚本
 ├── .m2-repo/            # 离线 Maven 镜像(首次构建后生成)
 ├── target/
-│   └── simple-wms.jar   # Spring Boot fat-jar
+│   └── simple-wms.jar   # Spring Boot fat-jar(只含 API,不含界面)
+├── frontend/            # 前端 SPA(只有 frontend 镜像打包它)
+│   ├── index.html
+│   ├── css/app.css
+│   └── js/  api.js / views.js / app.js
 └── src/main/
     ├── java/com/wms/
     │   ├── WmsApplication.java
@@ -85,12 +96,12 @@ SimpleWMS/
     │   └── db/         DataSeeder
     └── resources/
         ├── application.yml        # 默认配置(直连 MySQL,支持 env 覆盖)
-        ├── application-mysql.yml  # mysql profile(容器内 SET NAMES utf8mb4)
-        └── static/                # 前端 SPA
-            ├── index.html
-            ├── css/app.css
-            └── js/  api.js / views.js / app.js
+        └── application-mysql.yml  # mysql profile(容器内 SET NAMES utf8mb4)
 ```
+
+> 前端源码**故意放在顶层 `frontend/`** 而不是 `src/main/resources/static/`:放后者会被 Maven
+> 打进 jar,后端就也能提供一个界面 —— 多一份副本(两处构建容易漂移),而且 `9090`
+> 这个本该只给 PDA 调 API 的端口会多出一个 Web 入口。
 
 ## 📡 REST 接口一览
 
@@ -149,9 +160,10 @@ docker compose up -d --build
 
 启动后:
 
-- 🌐 前端 (用户访问入口):<http://localhost/>
-- 🔌 后端 API (直连):<http://localhost:8080/api/dashboard/stats>
-- 🗄️ MySQL (供 Navicat/DBeaver 调试):`localhost:3306` 账号 `wms` / 密码 `wmspass`,库 `simple_wms`
+- 🌐 **局域网唯一入口(界面 + API 反代)**:<http://localhost:9080/> — PDA 也连这个
+- 🔌 后端 API(只对本机开放,调试用,**不提供界面**):<http://localhost:9090/api/dashboard/stats>
+- 🗄️ MySQL(供 Navicat/DBeaver 调试):`localhost:23306` 账号 `wms` / 密码 `wmspass`,库 `simple_wms`
+- 📡 UHF-Rader 自己的 Web UI:<http://localhost:5001/>
 
 ### 停止
 
@@ -169,20 +181,24 @@ docker compose down -v       :: 停服务 + 删除数据卷(数据清空)
 ### 架构
 
 ```
-[浏览器] -> [simplewms-frontend :80 nginx]
-                  |  静态文件 (/css /js /index.html)
-                  └─ /api/* -> [simplewms-backend :8080 Spring Boot]
-                                          |
+[浏览器 / PDA 手持机] -> [simplewms-frontend :80 nginx]   ← 局域网唯一的门(9080)
+                  |  静态文件 (frontend/ 打进来的)
+                  └─ /api/* -> [simplewms-backend :8080 Spring Boot]   ← 纯 API
+                                          |                 ↑
+                                          |                 └── [UHF-Rader] 容器网络内直连 backend:8080
                                           └─> [simplewms-mysql :3306 MySQL 8]
 ```
 
-| 容器 | 镜像 | 端口映射 | 数据持久化 |
+| 容器 | 镜像 | 端口映射(宿主:容器) | 数据持久化 |
 | ---- | ---- | -------- | ---------- |
-| `simplewms-mysql` | `mysql:8.0` | `3306:3306` (可选) | 卷 `simplewms-mysql-data` |
-| `simplewms-backend` | `simplewms-backend:1.0.0` (本地构建) | `8080:8080` (可选) | 无 |
-| `simplewms-frontend` | `simplewms-frontend:1.0.0` (本地构建) | `80:80` | 无 |
+| `simplewms-mysql` | `mysql:8.0` | `23306:3306` | 卷 `simplewms-mysql-data` |
+| `simplewms-backend` | `simplewms-backend:1.0.0`(本地构建) | `127.0.0.1:9090:8080` | 无 |
+| `simplewms-frontend` | `simplewms-frontend:1.0.0`(本地构建) | `9080:80` | 无 |
+| `simplewms-uhf-rader` | `simplewms-uhf-rader:1.0.0`(本地构建) | `5001:5000` | 无 |
 
 所有服务在同一个自定义桥接网络 `simplewms-net`,容器间通过服务名互访 (`mysql`、`backend`)。
+后端容器里的 `8080` 只是容器内端口;宿主机的 `9090` **只绑本机回环**,局域网访问不到 ——
+手持机和 UHF 都走 nginx(`9080`),它再把 `/api/*` 反代给后端。
 
 ### 配置文件
 
@@ -223,13 +239,14 @@ docker volume rm simplewms-mysql-data      :: 删除 MySQL 数据卷(慎用!)
 
 ### 端口冲突?
 
-如 80 / 8080 / 3306 已被占用,编辑 `docker-compose.yml` 把映射改成其他端口:
+当前用的是 `9080`(nginx)/ `9090`(后端 API)/ `23306`(MySQL)/ `5001`(UHF),本来就是为了
+避开 Windows Hyper-V 占用的 `80`、`8033-8132`、`3306`。还有冲突时编辑 `docker-compose.yml`:
 
 ```yaml
 ports:
-  - "8081:80"          # 前端改到 8081
-  - "8080:8080"        # 后端保持
-  - "3307:3306"        # MySQL 改到 3307
+  - "9180:80"          # 前端(nginx)改到 9180
+  - "9190:8080"        # 后端改到 9190 —— 注意 PDA 的服务器地址要跟着改
+  - "24306:3306"       # MySQL 改到 24306
 ```
 ## 📱 PDA Android 手持机 App
 
@@ -254,10 +271,15 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 `pda-android/app/build.gradle`:
 ```gradle
-buildConfigField "String", "API_BASE_URL", "\"http://192.168.1.100:8080\""
+buildConfigField "String", "API_BASE_URL", "\"http://192.168.11.160:9080\""
 ```
 
-模拟器用 `http://10.0.2.2:8080`,真机改成后端实际 IP。
+真机改成**跑 Docker 那台电脑的局域网 IP**;端口用 **`9080`**(nginx,局域网唯一的门,`/api/*` 由它反代到后端)。
+不要填 `9090` —— 那个端口只绑本机回环,手持机连不上。模拟器用 `http://10.0.2.2:9080`。
+
+> ⚠️ **「设置」里存过的地址优先于打包默认值。** 所以已经配过 `:9090` 的机器,装上新 APK 后
+> 仍然会去连 `:9090`,必须手动改一次:进 App 的「设置」→ 要么把地址改成 `http://<PC的IP>:9080`,
+> 要么点「恢复默认」(它会清掉存的地址、回落到新默认值)。
 
 ### 业务流程
 

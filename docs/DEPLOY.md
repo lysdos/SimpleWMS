@@ -238,7 +238,7 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
        ┌─────────────────┐
        │  simplewms-     │  Spring Boot 3.3 + JRE 21
        │  backend        │  ├─ REST API (/api/*)
-       │  127.0.0.1:9090 │  ├─ 静态文件 (内置,绕过 nginx 也能用)
+       │  127.0.0.1:9090 │  ├─ 不提供界面(前端只有 nginx 那一份)
        │   → 8080        │  └─ (数据库为外部 MySQL,无内置控制台)
        └────────┬────────┘
                 │ jdbc:mysql://mysql:3306/simple_wms
@@ -246,7 +246,7 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
        ┌─────────────────┐
        │  simplewms-     │  MySQL 8.0
        │  mysql          │  数据卷:mysql-data
-       │  (无 host 映射) │  首次启动自动跑 sql/mysql-schema.sql
+       │  23306 → 3306   │  首次启动自动跑 sql/mysql-schema.sql
        └─────────────────┘
 ```
 
@@ -254,9 +254,20 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
 
 | 端口 | 绑定 | 服务 | 说明 |
 |------|------|------|------|
-| `9080` | `0.0.0.0` | frontend (nginx) | **用户唯一推荐入口** |
-| `127.0.0.1:9090` | loopback | backend (Spring) | 本机调试 API 用,局域网/外网**不可达** |
-| `3306` | (无 host 映射) | mysql | 容器间通信用,host 上**不暴露** |
+| `9080` | `0.0.0.0` | frontend (nginx) | **局域网唯一入口**(Web 界面 + `/api/*` 反代给 PDA/UHF 用) |
+| `9090` | `127.0.0.1` | backend (Spring) | **纯 API,只对本机开放**;本机 `curl` 调试用,不提供界面 |
+| `23306` | `0.0.0.0` | mysql | 映射到容器 3306,方便 Navicat/DBeaver 连 |
+| `5001` | `0.0.0.0` | uhf-rader | UHF 终端自己的 Web UI(独立应用,不是本项目的界面) |
+
+> **只有 nginx 一道门(2026-09-20 收敛)**
+> 局域网里能从外面访问到的**只有 `9080`(nginx)**:Web 界面由它提供,`/api/*` 由它反代到 backend。
+> **PDA 和 UHF-Rader 都走这道门**(PDA 默认服务器地址就是 `http://<你的PC>:9080`)。
+>
+> `9090` 因此收回 `127.0.0.1`。在此之前的做法是把它放开到局域网让 PDA 直连,代价是
+> `9090` 上会多出一个**完整的 Web 界面入口**(前端源码当时放在 `src/main/resources/static/`,
+> 会被打进 jar),两个入口各自构建、会漂移,而且对外多了个门。
+>
+> 代价:PDA/手持机从此依赖 nginx 活着(nginx 挂了它们也连不上)。
 
 > 💡 **为什么 8080 → 9090、80 → 9080?**
 > Windows 上 Hyper-V 默认占用 `80`、`8033-8132` 等端口,直接绑会被拒。换到 9090/9080 避坑。其他系统无此限制时可改回。
@@ -265,12 +276,12 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
 
 | 路径 | 内容 |
 |------|------|
-| `docker-compose.yml` | 编排三容器 |
+| `docker-compose.yml` | 编排四容器 |
 | `docker/Dockerfile.backend` | 后端多阶段构建 |
 | `docker/Dockerfile.frontend` | 前端 nginx 镜像 |
 | `docker/nginx.conf` | nginx 反代配置 |
 | `sql/mysql-schema.sql` | MySQL 建库建表 + GRANT |
-| `src/main/resources/static/` | 前端源码(被两个镜像分别 COPY) |
+| `frontend/` | 前端源码(**只有 nginx 镜像 COPY 它**) |
 | `.env` | 运行时配置(**不入 git**) |
 | `.env.example` | `.env` 模板(入 git) |
 
@@ -280,7 +291,13 @@ docker run --rm -v simplewms-mysql-data:/data -v $(pwd):/backup alpine tar czf /
 
 ### 6.1 启动报 `port 8080 already in use`
 
-本机 8080 已被占用。改 `.env` 加一个 `BACKEND_PORT` 变量,然后同步改 `docker-compose.yml`(参考 `127.0.0.1:9090:8080` 改法)。**当前 compose 不支持直接 env 改端口,需要手改 compose 文件。**
+先分清是哪个端口:
+
+- **`9080`(nginx)被占**:手改 `docker-compose.yml` 里 frontend 服务的 `ports` 行。这是局域网唯一的门,
+  **PDA 的服务器地址要跟着改成新端口**(手持机「设置」里改,或点"恢复默认"后重装 App)。
+- **`9090`(后端)被占**:只影响本机调试,改 backend 的 `ports` 行即可,不用通知任何终端。
+
+**当前 compose 不支持直接 env 改端口,需要手改 compose 文件。**
 
 ### 6.2 MySQL 容器一直 restarting
 
@@ -300,7 +317,7 @@ docker logs simplewms-mysql
 
 ### 6.4 改了前端代码但浏览器看到旧的
 
-nginx 容器内嵌一份 static,改前端后必须重打:
+前端静态文件**只有一份**,在 nginx 镜像里(源目录 `frontend/`),改完必须重打 frontend:
 
 ```bash
 docker compose --env-file .env build frontend
@@ -308,6 +325,11 @@ docker compose --env-file .env up -d --force-recreate frontend
 ```
 
 nginx.conf 里已经给所有静态资源设了 `Cache-Control: no-store`,正常发版不会缓存;但**容器镜像层**是另一回事,文件层没变浏览器就还是旧。
+
+> 2026-09-20 之前前端源码放在 `src/main/resources/static/`,于是被**两个镜像各 COPY 一份**
+> (jar 里一份、nginx 里一份),后端也能提供一个界面(9090 打开也是完整 Web)。
+> 那样一来只重建一个镜像就会让两个入口显示不同版本,而且 9090 这个本该只给 PDA 调
+> API 的端口多出一个界面入口。已把源码移到顶层 `frontend/`,后端不再打包静态文件。
 
 ### 6.5 backend healthy 但接口 401/500
 
@@ -320,13 +342,20 @@ curl -X POST http://localhost:9080/api/auth/login \
   -d '{"username":"admin","password":"你的ADMIN_PASSWORD"}'
 ```
 
-### 6.6 8088/9090 都能打开 web,正常吗?
+### 6.6 9090 打开是 404 / 白板,正常吗?
 
-正常。Spring Boot 内嵌 Tomcat 会自动 serve `static/` 下的文件:
-- `http://localhost:9080/` ← 走 nginx,推荐
-- `http://127.0.0.1:9090/` ← 直连 backend 容器,调试用(本机专属,局域网不可达)
+正常,**这是设计使然**:`9090` 是后端的纯 API 端口,不提供任何界面(前端只有 nginx 那一份,
+源码在 `frontend/`)。要开界面用 `http://localhost:9080/`。
 
-两者看到完全一样的页面,因为前端代码就是同一份。
+而且它**只绑本机回环**,局域网里访问不到 —— 唯一对外的是 `9080`(nginx),`/api/*` 由它反代。
+所以从别的机器(包括手持机)连 `9090` 会得到"连接被拒",这也是正常的。
+
+> 2026-09-20 收敛前后:
+> - 之前:前端源码在 `src/main/resources/static/`,会被打进 jar,于是 9090 上也能打开一个
+>   完整 Web —— 两个入口、两份副本、只重建一个就版本不一致。而且为了让 PDA 直连 API,
+>   9090 被放开到了局域网,等于把"内部产物界面"也放了出去。
+> - 现在:源码移到 `frontend/` 只由 nginx 打包;PDA 改走 `9080`;`9090` 收回 loopback。
+>   局域网里只剩一道门。
 
 ### 6.7 `docker compose` 报 `JWT_SECRET must be set in .env (32+ bytes)`
 

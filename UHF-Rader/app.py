@@ -438,7 +438,8 @@ def api_wms_login():
     """UHF 前端登录入口:接收用户名/密码 → bridge 代为调 WMS /api/auth/login,
     拿到 token 存到 wms_bridge.state,后续所有 /api/wms/* 都用这个 token 调 WMS。
 
-    query: ?wms=http://192.168.1.100:9090  登录时覆盖 WMS URL(独立部署用)
+    query: ?wms=http://192.168.1.100:9080  登录时覆盖 WMS URL(独立部署用;
+           填 nginx 入口 9080,不是后端直连的 9090 —— 那个端口只绑本机回环)
     之所以这样设计:
       - 前端只需要跟同源 5001 通信,避开 CORS
       - token 不必下发给浏览器,只存在 bridge 进程里
