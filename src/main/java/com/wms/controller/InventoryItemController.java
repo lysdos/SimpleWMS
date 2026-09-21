@@ -7,6 +7,7 @@ import com.wms.model.Product;
 import com.wms.service.BarcodeService;
 import com.wms.service.InventoryItemService;
 import com.wms.service.ProductService;
+import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -22,15 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/inventory/items")
 public class InventoryItemController {
-
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final InventoryItemService itemService;
     private final ProductService productService;
@@ -190,12 +188,12 @@ public class InventoryItemController {
               .append(it.getRemaining() == null ? 0 : it.getRemaining()).append(',')
               .append(csv(statusLabel(it.getStatus()))).append(',')
               .append(csv(it.getCreatedBy())).append(',')
-              .append(csv(it.getCreatedAt() == null ? "" : it.getCreatedAt().format(FMT))).append(',')
+              .append(csv(Dates.fmt(it.getCreatedAt()))).append(',')
               .append(it.getInboundOrderId() == null ? "" : it.getInboundOrderId()).append(',')
               .append(it.getOutboundOrderId() == null ? "" : it.getOutboundOrderId()).append(',')
-              .append(csv(it.getScrappedAt() == null ? "" : it.getScrappedAt().format(FMT))).append(',')
+              .append(csv(Dates.fmt(it.getScrappedAt()))).append(',')
               .append(csv(it.getScrappedRemark())).append(',')
-              .append(csv(it.getTransferredAt() == null ? "" : it.getTransferredAt().format(FMT))).append(',')
+              .append(csv(Dates.fmt(it.getTransferredAt()))).append(',')
               .append(csv(it.getTransferredFrom())).append(',')
               .append(csv(it.getTransferredTo())).append(',')
               .append(csv(it.getProductionDate() == null ? "" : it.getProductionDate().toString())).append(',')

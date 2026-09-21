@@ -5,6 +5,7 @@ import com.wms.model.ApiResponse;
 import com.wms.model.StockCheck;
 import com.wms.model.StockCheckItem;
 import com.wms.service.StockCheckService;
+import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -58,17 +59,20 @@ public class StockCheckController {
 
     /**
      * 创建盘点单(快照在库单元到明细)。
-     * body: { scope, keyword, remark }
+     * body: { scope, keyword, warehouseId, remark }
+     *   keyword: SKU 模式=多个 SKU;LOCATION 模式=单个库位码;
+     *            WAREHOUSE 模式=可选的库位码列表(逗号分隔,空=整个仓库)
      */
     @PostMapping
     @RequireRole("ADMIN")
-    public ApiResponse<StockCheck> create(@RequestBody Map<String, String> body, HttpServletRequest req) {
+    public ApiResponse<StockCheck> create(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         String op = (String) req.getAttribute("username");
         if (op == null || op.isBlank()) op = "操作员";
         StockCheck c = service.create(
-                body == null ? null : body.get("scope"),
-                body == null ? null : body.get("keyword"),
-                body == null ? null : body.get("remark"),
+                asString(body == null ? null : body.get("scope")),
+                asString(body == null ? null : body.get("keyword")),
+                asInt(body == null ? null : body.get("warehouseId")),
+                asString(body == null ? null : body.get("remark")),
                 op);
         return ApiResponse.ok(c);
     }
@@ -158,11 +162,27 @@ public class StockCheckController {
         sb.append("创建人,").append(csv(c.getCreatedBy())).append('\n');
         sb.append("备注,").append(csv(c.getRemark())).append('\n');
         sb.append("状态,").append(csv(statusLabel(c.getStatus()))).append('\n');
-        sb.append("创建时间,").append(csv(c.getCreatedAt() == null ? "" : c.getCreatedAt().toString())).append('\n');
-        sb.append("提交时间,").append(csv(c.getCommittedAt() == null ? "" : c.getCommittedAt().toString())).append('\n');
+        sb.append("创建时间,").append(csv(Dates.fmt(c.getCreatedAt()))).append('\n');
+        sb.append("提交时间,").append(csv(Dates.fmt(c.getCommittedAt()))).append('\n');
         sb.append("明细总数,").append(c.getTotalCount()).append('\n');
         sb.append("已盘数,").append(c.getCountedCount()).append('\n');
         sb.append("差异数,").append(c.getDiffCount()).append('\n');
+        // 盘盈/盘亏件数:从明细现算(不落库、不加列)。口径:盘盈 = 实盘-账面 之和;
+        // 盘亏 = 账面-实盘 之和,未盘行按实盘 0 计入 —— 与 filter=short 的口径一致。
+        int overQty = 0, shortQty = 0;
+        for (StockCheckItem it : over) {
+            overQty += (it.getCountedQty() == null ? 0 : it.getCountedQty())
+                     - (it.getSystemQty() == null ? 0 : it.getSystemQty());
+        }
+        for (StockCheckItem it : normal) {
+            String st = rowState(it);
+            if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) {
+                shortQty += (it.getSystemQty() == null ? 0 : it.getSystemQty())
+                          - (it.getCountedQty() == null ? 0 : it.getCountedQty());
+            }
+        }
+        sb.append("盘盈数(件),").append(overQty).append('\n');
+        sb.append("盘亏数(件),").append(shortQty).append('\n');
         sb.append("导出范围,").append(csv(onlyOver ? "仅盘盈" : onlyShort ? "仅盘亏" : "全部")).append("\n\n");
 
         if (onlyOver) {
@@ -230,9 +250,10 @@ public class StockCheckController {
     private static String scopeLabel(String s) {
         if (s == null) return "";
         switch (s) {
-            case "ALL":      return "全部";
-            case "SKU":      return "按 SKU";
-            case "LOCATION": return "按库位";
+            case "ALL":       return "全部";
+            case "SKU":       return "按 SKU";
+            case "LOCATION":  return "按库位";
+            case "WAREHOUSE": return "按仓库";
             default: return s;
         }
     }
@@ -256,5 +277,12 @@ public class StockCheckController {
 
     private static String asString(Object o) {
         return o == null ? null : o.toString().trim();
+    }
+
+    private static Integer asInt(Object o) {
+        if (o == null) return null;
+        if (o instanceof Number) return ((Number) o).intValue();
+        String s = o.toString().trim();
+        return s.isEmpty() ? null : Integer.valueOf(s);
     }
 }

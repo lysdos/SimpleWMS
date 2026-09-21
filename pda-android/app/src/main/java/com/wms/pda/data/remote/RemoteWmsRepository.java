@@ -193,13 +193,15 @@ public class RemoteWmsRepository implements WmsRepository {
 
     @Override
     public void addInboundItem(String orderId, int productId, int quantity, String supplier,
-                               String rowRemark, String productionDate, Integer shelfLifeDays,
+                               String rowRemark, String location, String productionDate, Integer shelfLifeDays,
                                WmsCallback<InboundOrder> cb) {
         Map<String, Object> body = new HashMap<>();
         body.put("productId", productId);
         body.put("quantity", quantity);
         if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
         if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        // 不带 location = 用商品的默认库位(后端 resolveLocation 的兜底)
+        if (location != null && !location.isEmpty()) body.put("location", location);
         if (productionDate != null && !productionDate.isEmpty()) body.put("productionDate", productionDate);
         if (shelfLifeDays != null) body.put("shelfLifeDays", shelfLifeDays);
         api.post("/api/inbound/orders/" + orderId + "/items", body,
@@ -235,13 +237,15 @@ public class RemoteWmsRepository implements WmsRepository {
 
     @Override
     public void updateInboundItem(String orderId, String itemId, int productId, int quantity,
-                                  String supplier, String rowRemark, String productionDate,
+                                  String supplier, String rowRemark, String location, String productionDate,
                                   Integer shelfLifeDays, WmsCallback<InboundOrder> cb) {
         Map<String, Object> body = new HashMap<>();
         body.put("productId", productId);
         body.put("quantity", quantity);
         if (supplier != null && !supplier.isEmpty()) body.put("supplier", supplier);
         if (rowRemark != null && !rowRemark.isEmpty()) body.put("rowRemark", rowRemark);
+        // 不带 location = 保持原库位(后端只改数量/备注时不重置库位)
+        if (location != null && !location.isEmpty()) body.put("location", location);
         if (productionDate != null && !productionDate.isEmpty()) body.put("productionDate", productionDate);
         if (shelfLifeDays != null) body.put("shelfLifeDays", shelfLifeDays);
         api.put("/api/inbound/orders/" + orderId + "/items/" + itemId, body,
@@ -423,15 +427,20 @@ public class RemoteWmsRepository implements WmsRepository {
 
     // ---- 库存 ----
     @Override
-    public void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb) {
+    public void searchInventory(String keyword, String status, String expiryStatus,
+                                WmsCallback<List<InventoryItem>> cb) {
         String k = keyword == null ? "" : keyword.trim();
-        // 后端 inventory_item 列表支持 sku / location / status 过滤(无 name/code 模糊)。
+        // 后端 inventory_item 列表支持 sku(同时命中 24 位码)/ status / expiryStatus / warehouse 过滤。
         // PDA 端"按 SKU/名称/条码搜索"先用 sku 过滤,fallback 拉全部 + 客户端再模糊。
-        String path = k.isEmpty()
-                ? "/api/inventory/items?page=1&pageSize=200"
-                : "/api/inventory/items?sku=" + java.net.URLEncoder.encode(k, java.nio.charset.StandardCharsets.UTF_8)
-                  + "&page=1&pageSize=200";
-        api.get(path, ListInvItemWrap.class, new ApiClient.Callback<ListInvItemWrap>() {
+        StringBuilder path = new StringBuilder("/api/inventory/items?page=1&pageSize=200");
+        if (!k.isEmpty()) {
+            path.append("&sku=").append(java.net.URLEncoder.encode(k, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        if (status != null && !status.isEmpty()) path.append("&status=").append(status);
+        if (expiryStatus != null && !expiryStatus.isEmpty()) {
+            path.append("&expiryStatus=").append(expiryStatus);
+        }
+        api.get(path.toString(), ListInvItemWrap.class, new ApiClient.Callback<ListInvItemWrap>() {
             @Override public void onSuccess(ListInvItemWrap w) {
                 List<InventoryItem> out = new ArrayList<>();
                 if (w == null || w.list == null) { cb.onSuccess(out); return; }
@@ -501,7 +510,12 @@ public class RemoteWmsRepository implements WmsRepository {
             @Override public void onSuccess(ListStockWrap w) {
                 List<StocktakeOrder> out = new ArrayList<>();
                 if (w == null || w.list == null) { cb.onSuccess(out); return; }
-                for (Dto.StockCheck o : w.list) out.add(Mappers.toModel(o));
+                for (Dto.StockCheck o : w.list) {
+                    // 「已完成」区剔除草稿 —— 与入库/出库列表同一口径(see :150 / :309)。
+                    // 后端 status=ALL 会把草稿一起返回,不过滤的话草稿会同时出现在两个 Tab 里。
+                    if (!onlyPending && "DRAFT".equals(o.status)) continue;
+                    out.add(Mappers.toModel(o));
+                }
                 cb.onSuccess(out);
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
@@ -523,11 +537,13 @@ public class RemoteWmsRepository implements WmsRepository {
     }
 
     @Override
-    public void createStocktake(String scope, String keyword, String remark, WmsCallback<StocktakeOrder> cb) {
-        // 后端接口 body: {scope, keyword, remark};scope = ALL / SKU / LOCATION
+    public void createStocktake(String scope, String keyword, Integer warehouseId,
+                                String remark, WmsCallback<StocktakeOrder> cb) {
+        // 后端接口 body: {scope, keyword, warehouseId, remark};scope = ALL / SKU / LOCATION / WAREHOUSE
         Map<String, Object> body = new HashMap<>();
         body.put("scope", scope == null || scope.isEmpty() ? "ALL" : scope);
         body.put("keyword", keyword == null ? "" : keyword);
+        if (warehouseId != null) body.put("warehouseId", warehouseId);
         body.put("remark", remark == null ? "" : remark);
         api.post("/api/stock-checks", body, Dto.StockCheck.class, new ApiClient.Callback<Dto.StockCheck>() {
             @Override public void onSuccess(Dto.StockCheck o) { cb.onSuccess(Mappers.toModel(o)); }

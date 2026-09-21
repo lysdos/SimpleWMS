@@ -41,7 +41,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BarcodeScannerImpl implements ScannerService {
 
     private static final String TAG = "BarcodeScannerImpl";
-    private final BarcodeScanner mlKitScanner;
+    /** 懒创建,见 mlKit() */
+    private volatile BarcodeScanner mlKitScanner;
 
     private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean scanning = new AtomicBoolean(false);
@@ -49,19 +50,40 @@ public class BarcodeScannerImpl implements ScannerService {
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
 
-    public BarcodeScannerImpl() {
-        BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(
-                        Barcode.FORMAT_CODE_128,    // 24 位字母数字
-                        Barcode.FORMAT_CODE_39,
-                        Barcode.FORMAT_CODE_93,
-                        Barcode.FORMAT_EAN_13,
-                        Barcode.FORMAT_EAN_8,
-                        Barcode.FORMAT_QR_CODE,
-                        Barcode.FORMAT_UPC_A,
-                        Barcode.FORMAT_UPC_E)
-                .build();
-        mlKitScanner = BarcodeScanning.getClient(options);
+    /**
+     * 懒创建 ML Kit 客户端。
+     *
+     * **不能放在构造函数里**:ScanManager 会无条件 new 出一个摄像头兜底实例,而
+     * `BarcodeScanning.getClient` 会触发 ML Kit 动态模块加载 —— 真机 logcat 里那条
+     * `DynamiteModule` 就是它(十几毫秒,量不大,但发生在冷启动的主线程上)。
+     * 关键是硬件扫把头可用时这条路径根本走不到 —— 全项目没有地方调 attachBarcodeCamera,
+     * 所以这份工作是白做的。现在只有真要用摄像头时才建,且调用点在 analysisExecutor 上,不占主线程。
+     *
+     * 注:冷启动那近 2 秒的卡顿不是这里,是 ScanManager 在主线程同步调厂商的
+     * `BarcodeFactory...open()`(见 BarcodeHardwareScannerImpl.init)。
+     */
+    private BarcodeScanner mlKit() {
+        BarcodeScanner s = mlKitScanner;
+        if (s == null) {
+            synchronized (this) {
+                if (mlKitScanner == null) {
+                    BarcodeScannerOptions options = new BarcodeScannerOptions.Builder()
+                            .setBarcodeFormats(
+                                    Barcode.FORMAT_CODE_128,    // 24 位字母数字
+                                    Barcode.FORMAT_CODE_39,
+                                    Barcode.FORMAT_CODE_93,
+                                    Barcode.FORMAT_EAN_13,
+                                    Barcode.FORMAT_EAN_8,
+                                    Barcode.FORMAT_QR_CODE,
+                                    Barcode.FORMAT_UPC_A,
+                                    Barcode.FORMAT_UPC_E)
+                            .build();
+                    mlKitScanner = BarcodeScanning.getClient(options);
+                }
+                s = mlKitScanner;
+            }
+        }
+        return s;
     }
 
     @Override
@@ -95,6 +117,7 @@ public class BarcodeScannerImpl implements ScannerService {
         scanning.set(false);
     }
 
+    /** 摄像头路径可用 = ML Kit 客户端已建(即 attachCamera 之后);没绑摄像头就谈不上可用 */
     @Override
     public boolean isReady() {
         return mlKitScanner != null;
@@ -158,7 +181,7 @@ public class BarcodeScannerImpl implements ScannerService {
         }
         InputImage inputImage = InputImage.fromMediaImage(
                 mediaImage, imageProxy.getImageInfo().getRotationDegrees());
-        mlKitScanner.process(inputImage)
+        mlKit().process(inputImage)
                 .addOnSuccessListener(barcodes -> {
                     if (barcodes != null && !barcodes.isEmpty() && scanning.get()) {
                         for (Barcode b : barcodes) {

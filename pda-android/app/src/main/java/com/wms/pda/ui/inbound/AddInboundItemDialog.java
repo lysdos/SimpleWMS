@@ -13,10 +13,12 @@ import androidx.appcompat.app.AlertDialog;
 
 import com.wms.pda.R;
 import com.wms.pda.data.model.InboundOrder;
+import com.wms.pda.data.model.Location;
 import com.wms.pda.data.model.Product;
 import com.wms.pda.data.model.Supplier;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
+import com.wms.pda.ui.common.LocationPicker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +28,8 @@ import java.util.List;
  * - 商品下拉(listProducts,编辑模式锁定商品)
  * - 数量
  * - 供应商下拉(listSuppliers,"不指定" 为默认项)
+ * - 库位(仓库→库位两级;默认「不指定」= 用商品的默认库位,编辑时带出原库位)
+ * - 生产日期 / 保质期
  * - 行备注
  */
 final class AddInboundItemDialog {
@@ -45,12 +49,13 @@ final class AddInboundItemDialog {
                                     InboundOrder.InboundLine editLine, Runnable onDone) {
         final List<Product> products = new ArrayList<>();
         final List<Supplier> suppliers = new ArrayList<>();
+        final List<Location> locations = new ArrayList<>();
         final boolean[] productFailed = {false};
-        final int[] pending = {2};
+        final int[] pending = {3};
         final Runnable settle = () -> {
             if (--pending[0] != 0) return;
             if (productFailed[0]) return;
-            showLoaded(ctx, orderDbId, editLine, products, suppliers, onDone);
+            showLoaded(ctx, orderDbId, editLine, products, suppliers, locations, onDone);
         };
 
         RepositoryProvider.get().listProducts(new WmsCallback<List<Product>>() {
@@ -75,10 +80,22 @@ final class AddInboundItemDialog {
                 settle.run();
             }
         });
+
+        RepositoryProvider.get().listLocations(new WmsCallback<List<Location>>() {
+            @Override public void onSuccess(List<Location> list) {
+                if (list != null) locations.addAll(list);
+                settle.run();
+            }
+            @Override public void onError(int code, String msg) {
+                // 库位加载失败不阻断,下拉只剩"不指定"(= 用商品默认库位)
+                settle.run();
+            }
+        });
     }
 
     private static void showLoaded(Context ctx, Integer orderDbId, InboundOrder.InboundLine editLine,
-                                   List<Product> products, List<Supplier> suppliers, Runnable onDone) {
+                                   List<Product> products, List<Supplier> suppliers,
+                                   List<Location> locations, Runnable onDone) {
         if (editLine == null && products.isEmpty()) {
             Toast.makeText(ctx, R.string.msg_no_products, Toast.LENGTH_SHORT).show();
             return;
@@ -91,6 +108,15 @@ final class AddInboundItemDialog {
         EditText etRowRemark = v.findViewById(R.id.et_row_remark);
         EditText etProductionDate = v.findViewById(R.id.et_production_date);
         EditText etShelfLife = v.findViewById(R.id.et_shelf_life);
+
+        // 库位两级下拉(仓库 → 库位)。allowNone=true:首项「不指定」表示"用商品的默认库位"
+        // —— 空值直接不放进请求,后端会回落到商品的默认库位(与 Web 端那个空选项同义)。
+        LocationPicker locPicker = new LocationPicker(
+                v.findViewById(R.id.sp_location_warehouse),
+                v.findViewById(R.id.sp_location),
+                locations, null, true);
+        // 编辑模式:带出这一行原来的库位,免得"只改数量"顺手把库位改没了
+        if (editLine != null) locPicker.select(editLine.location);
 
         // 商品下拉
         List<String> productLabels = new ArrayList<>();
@@ -211,6 +237,8 @@ final class AddInboundItemDialog {
             int sIdx = spSupplier.getSelectedItemPosition();
             String supplier = (sIdx > 0 && sIdx < supplierLabels.size()) ? supplierLabels.get(sIdx) : null;
             String rowRemark = etRowRemark.getText().toString().trim();
+            // null = 不指定 → 请求里不带 location,后端回落到商品默认库位
+            String location = locPicker.getSelectedCode();
             String productionDate = etProductionDate.getText().toString().trim();
             if (productionDate.isEmpty()) productionDate = null;
             Integer shelfLifeDays = null;
@@ -230,10 +258,10 @@ final class AddInboundItemDialog {
 
             if (editLine == null) {
                 RepositoryProvider.get().addInboundItem(orderId, productId, qty, supplier, rowRemark,
-                        productionDate, shelfLifeDays, cb);
+                        location, productionDate, shelfLifeDays, cb);
             } else {
                 RepositoryProvider.get().updateInboundItem(orderId, String.valueOf(editLine.id),
-                        productId, qty, supplier, rowRemark, productionDate, shelfLifeDays, cb);
+                        productId, qty, supplier, rowRemark, location, productionDate, shelfLifeDays, cb);
             }
         }));
         dialog.show();

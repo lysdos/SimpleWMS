@@ -5,6 +5,7 @@ import com.wms.model.InboundOrder;
 import com.wms.model.InboundOrderItem;
 import com.wms.model.InventoryLog;
 import com.wms.service.InboundService;
+import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -233,7 +234,7 @@ public class InboundController {
         sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
         sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
         sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
-        sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
+        sb.append("创建时间,").append(csv(Dates.fmt(o.getCreatedAt()))).append('\n');
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
         sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
         sb.append('\n');
@@ -297,7 +298,7 @@ public class InboundController {
         sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
         sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
         sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
-        sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
+        sb.append("创建时间,").append(csv(Dates.fmt(o.getCreatedAt()))).append('\n');
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
         sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
         sb.append('\n');

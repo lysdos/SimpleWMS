@@ -9,6 +9,7 @@ import com.wms.model.StockCheck;
 import com.wms.model.StockCheckItem;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,23 +32,46 @@ public class StockCheckService {
         this.jdbc = jdbc;
     }
 
+    /** 盘点快照只取这六列(其余字段用不上);几个 scope 分支共用一个映射。 */
+    private static final RowMapper<InventoryItem> SNAPSHOT_ROW = (rs, n) -> {
+        InventoryItem i = new InventoryItem();
+        i.setId(rs.getInt("id"));
+        i.setCode(rs.getString("code"));
+        i.setSku(rs.getString("sku"));
+        i.setProductName(rs.getString("product_name"));
+        i.setLocationCode(rs.getString("location_code"));
+        i.setRemaining(rs.getInt("remaining"));
+        return i;
+    };
+
+    /** 仓库名(scope_keyword 存人读的范围描述,要能读出仓库名)。查不到就退回 "仓库#id"。 */
+    private String warehouseName(Integer warehouseId) {
+        List<String> names = jdbc.query("SELECT name FROM warehouse WHERE id = ?",
+                (rs, n) -> rs.getString(1), warehouseId);
+        return (names.isEmpty() || names.get(0) == null) ? ("仓库#" + warehouseId) : names.get(0);
+    }
+
     /**
      * 创建盘点单 — 立即把当前在库单元(IN_STOCK)按 scope 快照到 stock_check_item。
+     *
+     * @param keyword     SKU 模式=多个 SKU;LOCATION 模式=单个库位码;
+     *                    WAREHOUSE 模式=可选的库位码列表(逗号分隔,空=整个仓库)
+     * @param warehouseId WAREHOUSE 模式必填
      */
     @Transactional
-    public StockCheck create(String scope, String keyword, String remark, String createdBy) {
+    public StockCheck create(String scope, String keyword, Integer warehouseId, String remark, String createdBy) {
         if (scope == null || scope.isBlank()) scope = StockCheck.SCOPE_ALL;
         if (!StockCheck.SCOPE_ALL.equals(scope) &&
             !StockCheck.SCOPE_SKU.equals(scope) &&
-            !StockCheck.SCOPE_LOCATION.equals(scope)) {
-            throw new IllegalArgumentException("scope 必须是 ALL / SKU / LOCATION");
+            !StockCheck.SCOPE_LOCATION.equals(scope) &&
+            !StockCheck.SCOPE_WAREHOUSE.equals(scope)) {
+            throw new IllegalArgumentException("scope 必须是 ALL / SKU / LOCATION / WAREHOUSE");
         }
         if (createdBy == null || createdBy.isBlank()) createdBy = "操作员";
 
         StockCheck c = new StockCheck();
         c.setCheckNo(genCheckNo());
         c.setScope(scope);
-        c.setScopeKeyword(keyword);
         c.setRemark(remark);
         c.setCreatedBy(createdBy);
         c.setStatus(StockCheck.STATUS_DRAFT);
@@ -56,55 +80,56 @@ public class StockCheckService {
         c.setDiffCount(0);
 
         // 查范围
-        List<InventoryItem> items = new ArrayList<>();
+        List<InventoryItem> items;
         if (StockCheck.SCOPE_ALL.equals(scope)) {
+            c.setScopeKeyword(keyword);
             items = jdbc.query(
                     "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' ORDER BY id",
-                    (rs, n) -> {
-                        InventoryItem i = new InventoryItem();
-                        i.setId(rs.getInt("id"));
-                        i.setCode(rs.getString("code"));
-                        i.setSku(rs.getString("sku"));
-                        i.setProductName(rs.getString("product_name"));
-                        i.setLocationCode(rs.getString("location_code"));
-                        i.setRemaining(rs.getInt("remaining"));
-                        return i;
-                    });
+                    SNAPSHOT_ROW);
         } else if (StockCheck.SCOPE_SKU.equals(scope)) {
             // 支持一次盘点多个 SKU:逗号/顿号/分号/空白 分隔
-            List<String> skus = parseSkus(keyword);
+            List<String> skus = parseList(keyword);
             if (skus.isEmpty()) {
                 throw new IllegalArgumentException("SKU 模式必须提供 SKU 关键字");
             }
+            c.setScopeKeyword(keyword);
             String placeholders = String.join(",", java.util.Collections.nCopies(skus.size(), "?"));
             items = jdbc.query(
                     "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND sku IN (" + placeholders + ") ORDER BY id",
-                    (rs, n) -> {
-                        InventoryItem i = new InventoryItem();
-                        i.setId(rs.getInt("id"));
-                        i.setCode(rs.getString("code"));
-                        i.setSku(rs.getString("sku"));
-                        i.setProductName(rs.getString("product_name"));
-                        i.setLocationCode(rs.getString("location_code"));
-                        i.setRemaining(rs.getInt("remaining"));
-                        return i;
-                    }, skus.toArray());
-        } else {
+                    SNAPSHOT_ROW, skus.toArray());
+        } else if (StockCheck.SCOPE_LOCATION.equals(scope)) {
             if (keyword == null || keyword.isBlank()) {
                 throw new IllegalArgumentException("LOCATION 模式必须提供库位编码");
             }
+            c.setScopeKeyword(keyword);
             items = jdbc.query(
                     "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND location_code = ? ORDER BY id",
-                    (rs, n) -> {
-                        InventoryItem i = new InventoryItem();
-                        i.setId(rs.getInt("id"));
-                        i.setCode(rs.getString("code"));
-                        i.setSku(rs.getString("sku"));
-                        i.setProductName(rs.getString("product_name"));
-                        i.setLocationCode(rs.getString("location_code"));
-                        i.setRemaining(rs.getInt("remaining"));
-                        return i;
-                    }, keyword.trim());
+                    SNAPSHOT_ROW, keyword.trim());
+        } else {
+            // WAREHOUSE:盘该仓库下的库位。keyword 里给了库位码就只盘这几个,空 = 整个仓库。
+            // 库位集从 location 表取(仓库归属只记在 location 上),所以已删/未挂仓库的库位里的货
+            // 自然落在范围外 —— 与 LOCATION 模式"只看该库位"的语义一致。
+            if (warehouseId == null) {
+                throw new IllegalArgumentException("WAREHOUSE 模式必须提供仓库");
+            }
+            List<String> locs = parseList(keyword);
+            StringBuilder sql = new StringBuilder(
+                    "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND location_code IN ("
+                    + "SELECT l.code FROM location l WHERE l.warehouse_id = ?");
+            List<Object> args = new ArrayList<>();
+            args.add(warehouseId);
+            if (!locs.isEmpty()) {
+                sql.append(" AND l.code IN (")
+                   .append(String.join(",", java.util.Collections.nCopies(locs.size(), "?")))
+                   .append(")");
+                args.addAll(locs);
+            }
+            sql.append(") ORDER BY id");
+            items = jdbc.query(sql.toString(), SNAPSHOT_ROW, args.toArray());
+            // scope_keyword 存**人读的范围描述** —— 详情/列表直接把这一格打印出来,不解析。
+            // 整仓就只写仓库名;勾了库位就把库位码带上。仓库名在后端查,省得 Web 和 PDA 各拼一套。
+            String whName = warehouseName(warehouseId);
+            c.setScopeKeyword(locs.isEmpty() ? whName : whName + " / " + String.join(" / ", locs));
         }
 
         c.setTotalCount(items.size());
@@ -201,17 +226,32 @@ public class StockCheckService {
         recalcStats(checkId);
     }
 
-    /** 统一重算盘点单统计:总数 / 已盘数 / 差异数(未盘行不计入已盘,也不计入差异) */
+    /**
+     * 盘盈行(账面没有、实物扫到了):扫码扫到盘点范围外的单元时,scanCodeToCheck 会追加一条
+     * {@code systemQty=0, countedQty=1} 的行。
+     *
+     * 它不属于"应盘"的对象,所以**不计入应盘数/已盘数** —— 否则现场扫到一个范围外的码,
+     * 「已盘 6/7」就会变成「6/8」,看起来像盘点单自己变大了。
+     */
+    private static boolean isSurplus(StockCheckItem it) {
+        int sys = it.getSystemQty() == null ? 0 : it.getSystemQty();
+        Integer counted = it.getCountedQty();
+        return sys == 0 && counted != null && counted > 0;
+    }
+
+    /** 统一重算盘点单统计:总数 / 已盘数 / 差异数(未盘行不计入已盘,也不计入差异;盘盈行两样都不计) */
     private void recalcStats(int checkId) {
         List<StockCheckItem> all = dao.findItemsByCheckId(checkId);
-        int counted = 0, diffCount = 0;
+        int total = 0, counted = 0, diffCount = 0;
         for (StockCheckItem it : all) {
+            if (isSurplus(it)) continue;
+            total++;
             if (it.getCountedQty() != null) {
                 counted++;
                 if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
             }
         }
-        dao.updateStats(checkId, all.size(), counted, diffCount);
+        dao.updateStats(checkId, total, counted, diffCount);
     }
 
     /**
@@ -291,25 +331,28 @@ public class StockCheckService {
         return get(checkId);
     }
 
-    /** 单次盘点允许的最大 SKU 数(防 IN 列表过长) */
-    private static final int MAX_SKUS = 50;
+    /** 单次盘点允许的最大条目数(防 IN 列表过长);SKU 列表与 WAREHOUSE 模式的库位列表共用 */
+    private static final int MAX_ITEMS = 50;
     /** 原始输入字符上限,与 stock_check.scope_keyword VARCHAR(512) 对齐,防超列宽 */
-    private static final int MAX_SKU_INPUT_CHARS = 500;
+    private static final int MAX_KEYWORD_CHARS = 500;
 
-    /** 解析多 SKU 输入:逗号(中英)/顿号/分号/空白 分隔,去重去空,保序 */
-    private static List<String> parseSkus(String raw) {
+    /**
+     * 解析多值输入(SKU 列表 / WAREHOUSE 模式的库位码列表):
+     * 逗号(中英)/顿号/分号/空白 分隔,去重去空,保序。
+     */
+    private static List<String> parseList(String raw) {
         if (raw == null || raw.isBlank()) return List.of();
-        if (raw.length() > MAX_SKU_INPUT_CHARS) {
+        if (raw.length() > MAX_KEYWORD_CHARS) {
             throw new IllegalArgumentException(
-                    "SKU 列表过长(最多 " + MAX_SKU_INPUT_CHARS + " 字符),请分批创建盘点单");
+                    "关键字过长(最多 " + MAX_KEYWORD_CHARS + " 字符),请分批创建盘点单");
         }
         java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
         for (String s : raw.split("[,，、;；\\s]+")) {
             String v = s.trim();
             if (!v.isEmpty()) set.add(v);
         }
-        if (set.size() > MAX_SKUS) {
-            throw new IllegalArgumentException("一次最多盘点 " + MAX_SKUS + " 个 SKU,当前 " + set.size() + " 个");
+        if (set.size() > MAX_ITEMS) {
+            throw new IllegalArgumentException("一次最多盘点 " + MAX_ITEMS + " 项,当前 " + set.size() + " 项");
         }
         return new ArrayList<>(set);
     }

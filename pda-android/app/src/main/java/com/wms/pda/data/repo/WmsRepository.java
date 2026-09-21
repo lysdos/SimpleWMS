@@ -25,15 +25,15 @@ public interface WmsRepository {
     void listInbound(boolean onlyPending, WmsCallback<List<InboundOrder>> cb);
     void getInboundOrder(String orderId, WmsCallback<InboundOrder> cb);
     void createInbound(String supplier, String warehouse, String remark, WmsCallback<InboundOrder> cb);
-    /** 选商品+数量+库位+备注追加到 DRAFT 单。返回最新单(含 items[]) */
+    /** 选商品+数量+库位+备注追加到 DRAFT 单。返回最新单(含 items[]);location 传 null = 用商品默认库位 */
     void addInboundItem(String orderId, int productId, int quantity, String supplier,
-                        String rowRemark, String productionDate, Integer shelfLifeDays,
+                        String rowRemark, String location, String productionDate, Integer shelfLifeDays,
                         WmsCallback<InboundOrder> cb);
     /** 修改 DRAFT 单头(外部单号/备注) */
     void updateInboundHeader(String orderId, String externalNo, String remark, WmsCallback<InboundOrder> cb);
-    /** 修改 DRAFT 单明细行(可换商品,换时后端重建占位码) */
+    /** 修改 DRAFT 单明细行(可换商品,换时后端重建占位码);location 传 null = 保持原库位不动 */
     void updateInboundItem(String orderId, String itemId, int productId, int quantity,
-                           String supplier, String rowRemark, String productionDate,
+                           String supplier, String rowRemark, String location, String productionDate,
                            Integer shelfLifeDays, WmsCallback<InboundOrder> cb);
     /** 删除 DRAFT 单明细行 */
     void deleteInboundItem(String orderId, String itemId, WmsCallback<InboundOrder> cb);
@@ -64,7 +64,9 @@ public interface WmsRepository {
                          WmsCallback<OutboundOrder> cb);
 
     // ---- 库存 ----
-    void searchInventory(String keyword, WmsCallback<List<InventoryItem>> cb);
+    /** @param status 空=全部状态;@param expiryStatus 空=全部,EXPIRING=临期,EXPIRED=已过期 */
+    void searchInventory(String keyword, String status, String expiryStatus,
+                         WmsCallback<List<InventoryItem>> cb);
     /**
      * 启用库位列表(调拨目标 / 盘点「按库位」下拉用)。
      * 带 warehouseName,调用方按仓库做两级选择(见 ui.common.LocationPicker);
@@ -79,7 +81,9 @@ public interface WmsRepository {
     // ---- 盘点 ----
     void listStocktake(boolean onlyPending, WmsCallback<List<StocktakeOrder>> cb);
     void getStocktake(String orderDbId, WmsCallback<StocktakeOrder> cb);
-    void createStocktake(String scope, String keyword, String remark, WmsCallback<StocktakeOrder> cb);
+    /** @param warehouseId 仅 scope=WAREHOUSE 时需要;keyword 为可选的库位码列表(逗号分隔,空=整个仓库) */
+    void createStocktake(String scope, String keyword, Integer warehouseId,
+                         String remark, WmsCallback<StocktakeOrder> cb);
     /** 手填实盘数量;countedQty = -1 表示清空 */
     void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb);
     /** 扫码定位行;单外码/非在库码由后端自动追加盘盈行 */

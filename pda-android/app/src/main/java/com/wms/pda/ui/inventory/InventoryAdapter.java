@@ -46,7 +46,14 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
         h.tvSku.setText(i.sku == null ? "?" : i.sku);
         h.tvName.setText(i.productName == null ? "" : i.productName);
         h.tvCode.setText(i.code == null ? "" : i.code);
-        h.tvLocation.setText("库位: " + (i.locationCode == null ? "—" : i.locationCode));
+        // 库位带上仓库(「主仓库/A-01-01」):一个商品会分散在多仓,只给一个库位码看不出在哪个仓。
+        // 仓库名由后端列表带出(warehouseName),查不到就退回裸码 —— 与 Web 库存列表一致。
+        String loc = (i.locationCode == null || i.locationCode.isEmpty()) ? "—" : i.locationCode;
+        String wh  = i.warehouseName == null ? "" : i.warehouseName.trim();
+        h.tvLocation.setText("库位: " + ("—".equals(loc) || wh.isEmpty() ? loc : wh + "/" + loc));
+        h.tvExpiry.setText((i.expiryDate == null || i.expiryDate.isEmpty())
+                ? h.tvExpiry.getContext().getString(R.string.inventory_expiry_none)
+                : h.tvExpiry.getContext().getString(R.string.inventory_expiry_fmt, i.expiryDate));
 
         int qty = i.remaining == null ? 0 : i.remaining;
         h.tvQty.setText(String.valueOf(qty));
@@ -85,7 +92,7 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
     public int getItemCount() { return data.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        final TextView tvSku, tvName, tvCode, tvLocation, tvQty, tvStatus;
+        final TextView tvSku, tvName, tvCode, tvLocation, tvExpiry, tvQty, tvStatus;
         final View btnTransfer, btnScrap;
         VH(View v) {
             super(v);
@@ -93,6 +100,7 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
             tvName    = v.findViewById(R.id.tv_name);
             tvCode    = v.findViewById(R.id.tv_code);
             tvLocation = v.findViewById(R.id.tv_location);
+            tvExpiry  = v.findViewById(R.id.tv_expiry);
             tvQty     = v.findViewById(R.id.tv_qty);
             tvStatus  = v.findViewById(R.id.tv_status);
             btnTransfer = v.findViewById(R.id.btn_transfer);

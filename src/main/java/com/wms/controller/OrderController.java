@@ -79,13 +79,26 @@ public class OrderController {
         if (total == null) total = 0L;
 
         // DATA — 用子查询 UNION ALL + ORDER BY + LIMIT/OFFSET
+        //
+        // partner(列表上「供应商 / 领用方」那一列)必须和 external_no 分开取:
+        // 之前出库分支把 customer 别名成了 external_no,于是「外部单号」列显示的是领用方,
+        // 前端又拿同一个值去填「合作方」列 —— 两列永远同值。
+        //
+        // 入库侧没有单头级的供应商(inbound_order.supplier 是死列,从没被写过),真相在
+        // 行级的 inbound_order_item.supplier;一张单可能拆成多家供应商,所以去重后拼起来。
         String dataSql = "SELECT * FROM ("
-                + " SELECT id, order_no, 'IN' AS type, external_no, remark, created_by, created_at,"
+                + " SELECT id, order_no, 'IN' AS type, external_no,"
+                + "   (SELECT GROUP_CONCAT(DISTINCT ii.supplier ORDER BY ii.supplier SEPARATOR ' / ')"
+                + "      FROM inbound_order_item ii"
+                + "     WHERE ii.order_id = inbound_order.id"
+                + "       AND ii.supplier IS NOT NULL AND ii.supplier <> '') AS partner,"
+                + "   remark, created_by, created_at,"
                 + "   item_count, total_quantity, status"
                 + "   FROM inbound_order WHERE 1=1" + whereClause
                 + " UNION ALL"
-                + " SELECT id, order_no, 'OUT' AS type,"
-                + "   customer AS external_no, remark, created_by, created_at,"
+                + " SELECT id, order_no, 'OUT' AS type, external_no,"
+                + "   customer AS partner,"
+                + "   remark, created_by, created_at,"
                 + "   item_count, total_quantity, status"
                 + "   FROM outbound_order WHERE 1=1" + whereClause
                 + ") t ORDER BY id DESC LIMIT ? OFFSET ?";

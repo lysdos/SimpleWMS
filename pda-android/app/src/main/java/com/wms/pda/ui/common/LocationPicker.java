@@ -34,11 +34,18 @@ import java.util.TreeMap;
  */
 public final class LocationPicker {
 
+    private final Spinner spWarehouse;
     private final Spinner spLocation;
     /** 组名 → 该组库位。仓库按 warehouseId 升序放入,未分配组固定最后 */
     private final Map<String, List<Location>> groups = new LinkedHashMap<>();
+    /** 组名 → 仓库 id(「(未分配)」组记为 null)。按仓库盘点要把 warehouseId 发给后端 */
+    private final Map<String, Integer> idOfGroup = new LinkedHashMap<>();
     /** 与 spLocation 的条目一一对应,用于按 position 取回真实库位(避免从显示文案反解) */
     private List<Location> current = new ArrayList<>();
+    /** 仓库切换后的回调。Spinner 只允许一个监听器,所以依赖"当前仓库"的 UI 走这个口子刷新。 */
+    private Runnable onGroupChanged;
+    /** 库位下拉最前面是否加一项「不指定」(选中时 getSelectedCode() 返回 null) */
+    private final boolean allowNone;
 
     /**
      * @param preferredLocationCode 期望默认选中的库位码(如「该单元当前所在库位」);
@@ -46,6 +53,17 @@ public final class LocationPicker {
      */
     public LocationPicker(Spinner spWarehouse, Spinner spLocation,
                           List<Location> locations, String preferredLocationCode) {
+        this(spWarehouse, spLocation, locations, preferredLocationCode, false);
+    }
+
+    /**
+     * @param allowNone 库位下拉最前面加一项「不指定」。入库明细用 —— 空值表示
+     *                  「用商品的默认库位」,与 Web 端那个空选项同义。
+     */
+    public LocationPicker(Spinner spWarehouse, Spinner spLocation,
+                          List<Location> locations, String preferredLocationCode, boolean allowNone) {
+        this.allowNone = allowNone;
+        this.spWarehouse = spWarehouse;
         this.spLocation = spLocation;
         Context ctx = spWarehouse.getContext();
         String unassignedLabel = ctx.getString(R.string.location_warehouse_unassigned);
@@ -71,9 +89,14 @@ public final class LocationPicker {
             }
         }
         for (Map.Entry<Integer, List<Location>> e : byId.entrySet()) {
-            groups.put(nameOfId.get(e.getKey()), e.getValue());
+            String name = nameOfId.get(e.getKey());
+            groups.put(name, e.getValue());
+            idOfGroup.put(name, e.getKey());
         }
-        if (!unassigned.isEmpty()) groups.put(unassignedLabel, unassigned);
+        if (!unassigned.isEmpty()) {
+            groups.put(unassignedLabel, unassigned);
+            idOfGroup.put(unassignedLabel, null);   // 未分配组没有仓库 id
+        }
 
         final List<String> keys = new ArrayList<>(groups.keySet());
         ArrayAdapter<String> whAdapter = new ArrayAdapter<>(ctx,
@@ -88,6 +111,7 @@ public final class LocationPicker {
         spWarehouse.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 fillLocations(keys.isEmpty() ? null : keys.get(position));
+                if (onGroupChanged != null) onGroupChanged.run();
             }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
@@ -119,10 +143,14 @@ public final class LocationPicker {
     private void fillLocations(String groupKey) {
         Context ctx = spLocation.getContext();
         current = (groupKey == null || !groups.containsKey(groupKey))
-                ? new ArrayList<>() : groups.get(groupKey);
+                ? new ArrayList<>() : new ArrayList<>(groups.get(groupKey));
+        // 「不指定」放最前,item 为 null —— getSelectedLocation() 会返回 null,
+        // 调用方据此发空库位(后端回落到商品默认库位)
+        if (allowNone) current.add(0, null);
 
         List<String> labels = new ArrayList<>(current.size());
         for (Location l : current) {
+            if (l == null) { labels.add(ctx.getString(R.string.location_picker_none)); continue; }
             // 展示 code,有别名时补在括号里;真实值仍从 current 按位置取
             labels.add((l.name != null && !l.name.isEmpty() && !l.name.equals(l.code))
                     ? l.code + " (" + l.name + ")" : l.code);
@@ -136,7 +164,7 @@ public final class LocationPicker {
         if (!current.isEmpty()) spLocation.setSelection(0);
     }
 
-    /** 当前选中的库位;没有可选库位时返回 null */
+    /** 当前选中的库位;没有可选库位、或选中「不指定」时返回 null */
     public Location getSelectedLocation() {
         int pos = spLocation.getSelectedItemPosition();
         if (pos < 0 || pos >= current.size()) return null;
@@ -147,5 +175,49 @@ public final class LocationPicker {
     public String getSelectedCode() {
         Location l = getSelectedLocation();
         return l == null ? null : l.code;
+    }
+
+    /** 当前选中仓库的 id;「(未分配)」组或没有分组时返回 null */
+    public Integer getSelectedWarehouseId() {
+        List<String> keys = new ArrayList<>(groups.keySet());
+        int pos = spWarehouse.getSelectedItemPosition();
+        if (pos < 0 || pos >= keys.size()) return null;
+        return idOfGroup.get(keys.get(pos));
+    }
+
+    /**
+     * 当前选中仓库下的全部库位(副本)。
+     * 供"按仓库盘点"的**多选库位**用 —— 那里要的不是单个选中值,而是整组。
+     */
+    public List<Location> currentGroupLocations() {
+        List<Location> out = new ArrayList<>(current.size());
+        for (Location l : current) if (l != null) out.add(l);   // 剔除「不指定」占位
+        return out;
+    }
+
+    /** 仓库切换后的回调(用于刷新依赖"当前仓库"的 UI,如多选库位的计数) */
+    public void setOnGroupChangedListener(Runnable r) {
+        this.onGroupChanged = r;
+    }
+
+    /**
+     * 选中指定库位码(会自动切到它所属的仓库)。
+     * 编辑既有明细时用:把这一行原来的库位显示出来,免得"只改数量"顺手把库位改没了。
+     * 找不到(库位已删)就不动,保持当前选择 —— 不猜。
+     */
+    public void select(String code) {
+        if (code == null || code.isEmpty()) return;
+        List<String> keys = new ArrayList<>(groups.keySet());
+        for (int gi = 0; gi < keys.size(); gi++) {
+            List<Location> locs = groups.get(keys.get(gi));
+            for (int i = 0; i < locs.size(); i++) {
+                if (code.equalsIgnoreCase(locs.get(i).code)) {
+                    spWarehouse.setSelection(gi);
+                    fillLocations(keys.get(gi));       // setSelection 的回调未必同步,再填一次
+                    spLocation.setSelection(allowNone ? i + 1 : i);
+                    return;
+                }
+            }
+        }
     }
 }

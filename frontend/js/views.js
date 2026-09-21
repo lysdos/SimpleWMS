@@ -455,7 +455,7 @@ const Views = {
                 ? `<input type="number" min="1" class="input nw-shelf-life" placeholder="—" style="width:70px;">`
                 : '';
             const locCell = isIn
-                ? `<select class="select nw-loc" style="width:140px;"><option value="">${t('new_order.loc.ph')}</option>${locOpts}</select>`
+                ? `<select class="select nw-loc" style="width:170px;"><option value="">${t('new_order.loc.ph')}</option>${locOpts}</select>`
                 : '';
             const qtyCell      = `<input type="number" min="1" class="input nw-qty" placeholder="${t('new_order.ph.qty')}" style="width:70px;">`;
             const remarkCell   = `<input class="input nw-row-remark" placeholder="${t('new_order.ph.row_remark')}" style="width:110px;">`;
@@ -473,23 +473,24 @@ const Views = {
             </tr>`;
         };
 
-        // 列宽要和 .modal-xwide(1180px)配套:每列实际占用 = 下面单元格上写的
-        // inline 宽度 + 单元格左右内边距(各 14px)。合计超出弹窗可用宽度时,
-        // 「数量」会被推到表格横向滚动区外面,填数量得先左右拉表。
+        // 列宽要和 .modal-xwide(1240px)配套:每列实际占用 = 下面单元格上写的
+        // inline 宽度 + 单元格左右内边距(各 14px)。所以 th 的 width 必须 >= inline 宽度 + 28,
+        // 否则列被压缩,单元格内容会被裁掉(生产日期的日期值+日历图标就是这么被挡住的)。
+        // 合计超出弹窗可用宽度时,「数量」会被推到表格横向滚动区外面,填数量得先左右拉表。
         // 改这里或改 inline 宽度都要重新算一遍总宽。
         const ths = isIn
             ? `<th style="width:36px;">#</th>
-               <th style="width:190px;">${t('new_order.label.product')}<span class="req">*</span></th>
-               <th style="width:120px;">${t('new_order.label.supplier')}</th>
-               <th style="width:120px;">${t('new_order.label.production_date')}</th>
-               <th style="width:70px;">${t('new_order.label.shelf_life')}</th>
-               <th style="width:145px;">${t('new_order.label.loc')}</th>
-               <th style="width:70px;">${t('new_order.label.qty')}<span class="req">*</span></th>
-               <th style="min-width:110px;">${t('new_order.label.row_remark')}</th>
-               <th style="width:60px;">${t('common.actions')}</th>`
+               <th style="width:213px;">${t('new_order.label.product')}<span class="req">*</span></th>
+               <th style="width:143px;">${t('new_order.label.supplier')}</th>
+               <th style="width:145px;">${t('new_order.label.production_date')}</th>
+               <th style="width:98px;">${t('new_order.label.shelf_life')}</th>
+               <th style="width:198px;">${t('new_order.label.loc')}</th>
+               <th style="width:98px;">${t('new_order.label.qty')}<span class="req">*</span></th>
+               <th style="min-width:138px;">${t('new_order.label.row_remark')}</th>
+               <th style="width:64px;">${t('common.actions')}</th>`
             : `<th style="width:36px;">#</th>
                <th style="width:240px;">${t('new_order.label.product')}<span class="req">*</span></th>
-               <th style="width:90px;">${t('new_order.label.qty')}<span class="req">*</span></th>
+               <th style="width:98px;">${t('new_order.label.qty')}<span class="req">*</span></th>
                <th>${t('new_order.label.row_remark')}</th>
                <th style="width:66px;">${t('common.actions')}</th>`;
 
@@ -576,11 +577,20 @@ const Views = {
     },
 
     /**
-     * 拣货明细:把后端给的「库位码 → 件数」渲染成
+     * 库位文案。空库位码(老单元没记库位)说「未指定库位」——
+     * 全系统一个说法:前端分区抬头、CSV 的「库位」列、PDA 都对齐这一个词。
+     */
+    locText(code) {
+        if (!code) return escapeHtml(t('outbound_order.loc.unassigned'));
+        return Views.locLabel(code);
+    },
+
+    /**
+     * 拣货分布:把后端给的「库位码 → 件数」渲染成
      * "主仓库 / A-01-01 × 30 · 副仓库 / B-02-02 × 30"。
      *
      * 出库改成"自动跨库位找货"后,明细行上不再有单一库位 ——
-     * 货实际在哪儿、该去哪儿拿,只有锁定到的单元说得清。所以这行是给现场看的
+     * 货实际在哪儿、该去哪儿拿,只有锁定到的单元说得清。所以这是给现场看的
      * 拣货依据,不是装饰。
      *
      * 数据**取后端算好的 picks**,不再由前端拿单元自己分组:同一套数算两遍的话,
@@ -588,34 +598,59 @@ const Views = {
      *
      * @param picks 库位码 → 件数(见 OutboundOrderItem.picks)
      */
-    pickLines(picks) {
+    pickDist(picks) {
         if (!picks) return '';
-        const entries = Object.entries(picks);
-        if (entries.length === 0) return '';
-        const parts = entries
-            .map(([loc, qty]) => `${loc ? Views.locLabel(loc) : '—'} × ${qty}`)
+        return Object.entries(picks)
+            .map(([loc, qty]) => `${Views.locText(loc)} × ${qty}`)
             .join(' · ');
-        return `<div style="font-size:12px;color:var(--c-text-3);margin-bottom:4px;">
-            ${t('outbound_order.pick.title')}: ${parts}
-        </div>`;
+    },
+
+    /**
+     * 按**仓库**把码分组渲染。入参是「库位码 → 码列表」(见 OutboundOrderItem.codesByLocation)。
+     *
+     * 分组键必须是仓库,不能按库位码排序:主仓有 A-01-01/Z-99-99、副仓有 M-01-01 时,
+     * 按码排会把主仓劈成两段,正好还是"看不出哪个码在哪个仓"。
+     * 仓库名靠 state.locMap 反查(与 Views.locLabel 同一份数据),按仓库名排序输出稳定。
+     */
+    codesByWarehouse(codesByLocation) {
+        if (!codesByLocation) return '';
+        const locMap = state.locMap || {};
+        const groups = new Map();   // 仓库名 → [{loc, codes}]
+        Object.entries(codesByLocation).forEach(([loc, codes]) => {
+            const wh = loc ? (locMap[loc] || t('location.warehouse.none')) : t('outbound_order.loc.unassigned');
+            if (!groups.has(wh)) groups.set(wh, []);
+            groups.get(wh).push({ loc, codes: codes || [] });
+        });
+        return Array.from(groups.entries())
+            .sort((a, b) => a[0].localeCompare(b[0], 'zh'))
+            .map(([wh, locs]) => `
+                <div style="margin-bottom:6px;">
+                    <div style="font-size:12px;font-weight:600;color:var(--c-text-2);margin-bottom:2px;">${escapeHtml(wh)}</div>
+                    ${locs.map(x => `
+                        <div style="margin-bottom:2px;">
+                            <span style="font-size:11px;color:var(--c-text-3);margin-right:6px;">${Views.locText(x.loc)}</span>
+                            ${x.codes.map(c => `<span class="code-chip">${escapeHtml(c)}</span>`).join('')}
+                        </div>`).join('')}
+                </div>`).join('');
     },
 
     /* ================== 出库单详情 Modal ================== */
     outboundOrderModal(o) {
         const rows = (o.items || []).map((it, i) => {
-            // it.codes 是后端按行填好的码字符串列表(不是库存单元对象)
+            // it.codes 是后端按行填好的码字符串列表(不是库存单元对象);
+            // 按仓库分组显示要看 it.codesByLocation —— 与 codes 同源同序,键集相同
             const codes = it.codes || [];
             const codesText = codes.length === 0
                 ? `<span style="color:#9ca3af;font-size:12px;">${t('outbound_order.no_barcode')}</span>`
-                : '<div class="codes-list">' + codes.map(c => `<span class="code-chip">${escapeHtml(c)}</span>`).join('') + '</div>';
-            // 拣货明细:这批货实际从哪些库位各取几件(后端按真实锁定的单元算好的)
-            const pickText = Views.pickLines(it.picks);
+                : Views.codesByWarehouse(it.codesByLocation);
+            // 库位:手工指定过就印那个库位;自动单印真实拣货分布 —— "去哪儿拿货"看这一格
+            const pickText = Views.pickDist(it.picks);
             return `
             <tr>
                 <td class="num">${i + 1}</td>
                 <td><strong>${escapeHtml(it.sku)}</strong></td>
                 <td>${escapeHtml(it.productName)}</td>
-                <td>${it.location ? Views.locLabel(it.location) : t('outbound_order.loc.auto')}</td>
+                <td>${it.location ? Views.locLabel(it.location) : (pickText || t('outbound_order.loc.auto'))}</td>
                 <td class="num">${it.quantity}</td>
                 <td class="num">¥${formatMoney(it.unitPrice)}</td>
                 <td>${escapeHtml(it.rowRemark || '')}</td>
@@ -625,7 +660,6 @@ const Views = {
                     <div style="font-size:12px;color:var(--c-text-3);margin-bottom:4px;">
                         ${t('outbound_order.barcode.count', { n: codes.length })}
                     </div>
-                    ${pickText}
                     ${codesText}
                 </td>
             </tr>`;
@@ -708,9 +742,8 @@ const Views = {
                 const tBadge = isIn
                     ? `<span class="badge in">${t('orders.badge.in')}</span>`
                     : `<span class="badge out">${t('orders.badge.out')}</span>`;
-                const partner = isIn
-                    ? (o.externalNo ? escapeHtml(o.externalNo) : '—')
-                    : escapeHtml(o.externalNo || o.customer || '-');
+                // partner 由后端分开给(入库=行级供应商 / 出库=领用方),与「外部单号」列各归各
+                const partner = escapeHtml(o.partner || '-');
                 return `
                 <tr>
                     <td><input type="checkbox" class="od-cb" data-id="${o.id}" data-type="${isIn ? 'IN' : 'OUT'}" onchange="updateExportBtns()"></td>
@@ -764,7 +797,9 @@ const Views = {
                         <th style="width:60px;">${t('orders.col.id')}</th>
                         <th style="width:80px;">${t('orders.col.type')}</th>
                         <th>${t('orders.col.order_no')}</th>
-                        <th>${type==='OUT' ? t('orders.partner_customer') : t('orders.partner_supplier')}</th>
+                        <th>${type==='OUT' ? t('orders.partner_customer')
+                             : type==='IN' ? t('orders.partner_supplier')
+                             : t('orders.partner')}</th>
                         <th>${t('orders.col.external_no')}</th>
                         <th class="num">${t('orders.col.item_count')}</th>
                         <th class="num">${t('orders.col.total_qty')}</th>
@@ -1439,7 +1474,7 @@ const Views = {
     },
 
     newStockCheckForm() {
-        // 三种模式:ALL=全部在库 / SKU=按 SKU 模糊 / LOCATION=按库位(下拉选)
+        // 四种模式:ALL=全部在库 / SKU=按 SKU / LOCATION=按单个库位 / WAREHOUSE=按仓库(可选多个库位)
         return `
         <div class="form-row" style="gap:8px;margin-bottom:12px;">
             <label style="font-size:13px;color:var(--c-text-2);min-width:64px;">${t('stock_check.scope_label')}</label>
@@ -1455,10 +1490,21 @@ const Views = {
                 <input type="radio" name="nsc-scope" value="LOCATION">
                 <span style="font-size:13px;">${t('stock_check.scope.location')}</span>
             </label>
+            <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;">
+                <input type="radio" name="nsc-scope" value="WAREHOUSE">
+                <span style="font-size:13px;">${t('stock_check.scope.warehouse')}</span>
+            </label>
         </div>
         <div class="form-field" id="nsc-keyword-wrap" style="display:none;">
             <label id="nsc-keyword-label">${t('stock_check.scope.keyword')}</label>
             <input id="nsc-keyword" class="input" placeholder="">
+        </div>
+        <div class="form-field" id="nsc-warehouse-wrap" style="display:none;">
+            <label>${t('stock_check.scope.warehouse')}</label>
+            <select id="nsc-warehouse-select" class="select" style="width:100%;"></select>
+            <label style="margin-top:10px;display:block;font-size:13px;color:var(--c-text-2);">${t('stock_check.loc.multi_label')}</label>
+            <select id="nsc-location-multi" class="select" multiple size="6" style="width:100%;"></select>
+            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.loc.multi_hint')}</div>
         </div>
         <div class="form-field">
             <label>${t('stock_check.remark_label')}</label>
@@ -1476,13 +1522,21 @@ const Views = {
             if (counted === sys) return 'background:#ecfdf5;';
             return 'background:#fef2f2;';
         };
-        const itemsHtml = (c.items || []).map((it, idx) => `
+        // 盘盈行(账面 0、实盘 >0,即扫到了盘点范围外的单元)不与应盘明细混排:
+        // 它不是"应盘的对象",混在一起既看不出哪些是多出来的,也解释不了计数口径
+        // (口径见 StockCheckService.isSurplus)。
+        const isSurplus = it => (it.systemQty || 0) === 0 && it.countedQty != null && it.countedQty > 0;
+        const allItems = c.items || [];
+        const detailItems  = allItems.filter(it => !isSurplus(it));
+        const surplusItems = allItems.filter(isSurplus);
+
+        const rowHtml = (it, idx) => `
             <tr style="${scStyle(it.systemQty, it.countedQty)}">
                 <td class="num">${idx + 1}</td>
                 <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(it.code)}</span></td>
                 <td>${escapeHtml(it.sku)}</td>
                 <td>${escapeHtml(it.productName)}</td>
-                <td>${escapeHtml(it.locationCode)}</td>
+                <td>${Views.locLabel(it.locationCode)}</td>
                 <td class="num">${it.systemQty || 0}</td>
                 <td class="num">
                     ${isDraft
@@ -1498,26 +1552,9 @@ const Views = {
                 <td class="actions">
                     ${isDraft ? `<button id="sci-save-${it.id}" class="btn-link">${t('stock_check.btn.save')}</button>` : '-'}
                 </td>
-            </tr>`).join('');
+            </tr>`;
 
-        const summary = `
-            <div style="display:flex;gap:18px;margin:8px 0 16px;flex-wrap:wrap;font-size:13px;">
-                <span>${t('stock_check.detail.summary')}:<strong>${escapeHtml(c.checkNo)}</strong></span>
-                <span>${t('stock_check.detail.scope')}:<strong>${escapeHtml(scopeLabel(c.scope))}${c.scopeKeyword ? ' / ' + escapeHtml(c.scopeKeyword) : ''}</strong></span>
-                <span>${t('common.createdBy')}:<strong>${escapeHtml(c.createdBy)}</strong></span>
-                <span>${t('common.status')}:<strong>${t('doc.' + c.status)}</strong></span>
-                <span>${t('stock_check.detail.total')}:<strong>${c.totalCount} / ${c.countedCount} / ${c.diffCount}</strong></span>
-                <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
-            </div>`;
-
-        return `
-        <div>${summary}</div>
-        <div style="font-size:12px;color:var(--c-text-3);margin-bottom:8px;">
-            ${isDraft ? t('stock_check.detail.tip_draft') : t('stock_check.detail.tip_committed')}
-        </div>
-        <div class="table-wrap">
-            <table class="table">
-                <thead><tr>
+        const headHtml = `<tr>
                     <th style="width:40px;">#</th>
                     <th style="width:180px;">${t('stock_check.col.code')}</th>
                     <th>${t('stock_check.col.sku')}</th>
@@ -1528,10 +1565,42 @@ const Views = {
                     <th class="num">${t('stock_check.col.diff')}</th>
                     <th>${t('stock_check.col.row_remark')}</th>
                     <th>${t('common.actions')}</th>
-                </tr></thead>
+                </tr>`;
+
+        const itemsHtml = detailItems.map(rowHtml).join('');
+
+        const summary = `
+            <div style="display:flex;gap:18px;margin:8px 0 16px;flex-wrap:wrap;font-size:13px;">
+                <span>${t('stock_check.detail.summary')}:<strong>${escapeHtml(c.checkNo)}</strong></span>
+                <span>${t('stock_check.detail.scope')}:<strong>${escapeHtml(scopeLabel(c.scope))}${c.scopeKeyword ? ' / ' + escapeHtml(c.scopeKeyword) : ''}</strong></span>
+                <span>${t('common.createdBy')}:<strong>${escapeHtml(c.createdBy)}</strong></span>
+                <span>${t('common.status')}:<strong>${t('doc.' + c.status)}</strong></span>
+                <span>${t('stock_check.detail.total')}:<strong>${c.totalCount} / ${c.countedCount} / ${c.diffCount}</strong></span>
+                <span>${t('stock_check.detail.surplus')}:<strong>${surplusItems.length}</strong></span>
+                <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
+            </div>`;
+
+        return `
+        <div>${summary}</div>
+        <div style="font-size:12px;color:var(--c-text-3);margin-bottom:8px;">
+            ${isDraft ? t('stock_check.detail.tip_draft') : t('stock_check.detail.tip_committed')}
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>${headHtml}</thead>
                 <tbody>${itemsHtml || `<tr><td colspan="10" class="empty">${t('stock_check.detail.empty')}</td></tr>`}</tbody>
             </table>
         </div>
+        ${surplusItems.length ? `
+        <div style="font-weight:600;font-size:13px;margin:16px 0 8px;">
+            ${t('stock_check.detail.surplus')} (${surplusItems.length})
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>${headHtml}</thead>
+                <tbody>${surplusItems.map(rowHtml).join('')}</tbody>
+            </table>
+        </div>` : ''}
         <div class="form-row" style="position:sticky;bottom:0;margin:16px -20px 0;padding:10px 20px;justify-content:flex-end;background:#fff;box-shadow:0 -4px 10px -8px rgba(0,0,0,0.25);">
             <div class="export-menu-wrap">
                 <button class="btn btn-sm" id="sc-export-btn">⬇ ${t('common.export')} CSV ▴</button>
@@ -1686,6 +1755,7 @@ function scopeLabel(s) {
         case 'ALL': return t('stock_check.scope.all');
         case 'SKU': return t('stock_check.scope.sku');
         case 'LOCATION': return t('stock_check.scope.location');
+        case 'WAREHOUSE': return t('stock_check.scope.warehouse');
         default: return s;
     }
 }

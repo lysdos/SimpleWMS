@@ -8,9 +8,11 @@ public class StockCheck {
     public static final String STATUS_COMMITTED = "COMMITTED";
     public static final String STATUS_CANCELLED = "CANCELLED";
 
-    public static final String SCOPE_ALL      = "ALL";
-    public static final String SCOPE_SKU      = "SKU";
-    public static final String SCOPE_LOCATION = "LOCATION";
+    public static final String SCOPE_ALL       = "ALL";
+    public static final String SCOPE_SKU       = "SKU";
+    public static final String SCOPE_LOCATION  = "LOCATION";
+    /** 按仓库:盘该仓库下的库位;scopeKeyword 里可选地列出限定的库位码(逗号分隔),空=整个仓库 */
+    public static final String SCOPE_WAREHOUSE = "WAREHOUSE";
 
     private Integer id;
     private String checkNo;

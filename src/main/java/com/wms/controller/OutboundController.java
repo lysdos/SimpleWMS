@@ -1,12 +1,15 @@
 package com.wms.controller;
 
+import com.wms.dao.LocationDao;
 import com.wms.model.ApiResponse;
 import com.wms.model.ExpectedEpc;
+import com.wms.model.Location;
 import com.wms.model.InventoryLog;
 import com.wms.model.OutboundOrder;
 import com.wms.model.OutboundOrderItem;
 import com.wms.model.ScanResult;
 import com.wms.service.OutboundService;
+import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -28,10 +31,27 @@ import java.util.Map;
 public class OutboundController {
 
     private final OutboundService outboundService;
+    private final LocationDao locationDao;
 
     @Autowired
-    public OutboundController(OutboundService outboundService) {
+    public OutboundController(OutboundService outboundService, LocationDao locationDao) {
         this.outboundService = outboundService;
+        this.locationDao = locationDao;
+    }
+
+    /**
+     * 库位码 → 仓库名。CSV 是后端拼的,拿不到前端的 locMap,所以要自己查一次。
+     * 库存单元只存库位码快照,不带仓库名 —— 不带这个映射,导出的「库位」列就还是光秃秃一个码,
+     * 看不出货在哪个仓(前端 locLabel 同理)。
+     */
+    private Map<String, String> warehouseByCode() {
+        Map<String, String> map = new HashMap<>();
+        for (Location l : locationDao.findAll(null, null, null)) {
+            if (l.getCode() != null && l.getWarehouseName() != null && !l.getWarehouseName().isBlank()) {
+                map.put(l.getCode(), l.getWarehouseName());
+            }
+        }
+        return map;
     }
 
     /** 老接口:单货出库(兼容,内部走 DRAFT 路径) */
@@ -266,7 +286,7 @@ public class OutboundController {
         OutboundOrder o = outboundService.getOrder(id);
         if (o == null) throw new NotFoundException("出库单不存在, id=" + id);
 
-        byte[] body = buildCsv(o).getBytes(StandardCharsets.UTF_8);
+        byte[] body = buildCsv(o, warehouseByCode()).getBytes(StandardCharsets.UTF_8);
         String fname = URLEncoder.encode(
                 (o.getOrderNo() == null ? ("outbound_" + id) : o.getOrderNo()) + ".csv",
                 StandardCharsets.UTF_8).replace("+", "%20");
@@ -282,11 +302,12 @@ public class OutboundController {
         if (ids == null || ids.isEmpty()) throw new IllegalArgumentException("请选择要导出的订单");
         try {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            Map<String, String> wh = warehouseByCode();   // 整批查一次,不在循环里重复查
             try (ZipOutputStream zos = new ZipOutputStream(baos)) {
                 for (int id : ids) {
                     OutboundOrder o = outboundService.getOrder(id);
                     if (o == null) continue;
-                    String csvContent = buildCsv(o);
+                    String csvContent = buildCsv(o, wh);
                     String entryName = (o.getOrderNo() == null ? ("outbound_" + id) : o.getOrderNo()) + ".csv";
                     zos.putNextEntry(new ZipEntry(entryName));
                     zos.write(csvContent.getBytes(StandardCharsets.UTF_8));
@@ -304,7 +325,7 @@ public class OutboundController {
         }
     }
 
-    private String buildCsv(OutboundOrder o) {
+    private String buildCsv(OutboundOrder o, Map<String, String> warehouseByCode) {
         StringBuilder sb = new StringBuilder();
         sb.append('﻿');
         sb.append("出库单号,").append(csv(o.getOrderNo())).append('\n');
@@ -312,7 +333,7 @@ public class OutboundController {
         sb.append("外部单号,").append(csv(o.getExternalNo())).append('\n');
         sb.append("创建人,").append(csv(o.getCreatedBy())).append('\n');
         sb.append("整单备注,").append(csv(o.getRemark())).append('\n');
-        sb.append("创建时间,").append(csv(o.getCreatedAt() == null ? "" : o.getCreatedAt().toString())).append('\n');
+        sb.append("创建时间,").append(csv(Dates.fmt(o.getCreatedAt()))).append('\n');
         sb.append("总数量,").append(o.getTotalQuantity() == null ? 0 : o.getTotalQuantity()).append('\n');
         sb.append("明细数,").append(o.getItemCount() == null ? 0 : o.getItemCount()).append('\n');
         sb.append('\n');
@@ -323,7 +344,7 @@ public class OutboundController {
                 sb.append(idx++).append(',')
                   .append(csv(it.getSku())).append(',')
                   .append(csv(it.getProductName())).append(',')
-                  .append(csv(locationCell(it))).append(',')
+                  .append(csv(locationCell(it, warehouseByCode))).append(',')
                   .append(it.getQuantity() == null ? 0 : it.getQuantity()).append(',')
                   .append(it.getUnitPrice() == null ? "0.00" : it.getUnitPrice().toPlainString()).append(',')
                   .append(csv(it.getRowRemark())).append('\n');
@@ -337,19 +358,30 @@ public class OutboundController {
      * 留空表示「自动」—— 此时把真实拣货分布写出来,否则导出/打印出来
      * 现场不知道去哪儿拿货。
      */
-    private static String locationCell(OutboundOrderItem it) {
-        if (it.getLocation() != null && !it.getLocation().isBlank()) return it.getLocation();
+    private static String locationCell(OutboundOrderItem it, Map<String, String> warehouseByCode) {
+        if (it.getLocation() != null && !it.getLocation().isBlank()) {
+            return locLabel(it.getLocation(), warehouseByCode);
+        }
         Map<String, Integer> picks = it.getPicks();
         if (picks == null || picks.isEmpty()) return "自动";
         StringBuilder s = new StringBuilder("自动(");
         boolean first = true;
         for (Map.Entry<String, Integer> e : picks.entrySet()) {
             if (!first) s.append(" / ");
-            String loc = (e.getKey() == null || e.getKey().isBlank()) ? "未指定库位" : e.getKey();
-            s.append(loc).append('×').append(e.getValue());
+            s.append(locLabel(e.getKey(), warehouseByCode)).append('×').append(e.getValue());
             first = false;
         }
         return s.append(')').toString();
+    }
+
+    /**
+     * 库位显示:「主仓库 / A-01-01」;查不到仓库名就退回原码(库位已删/未分配仓库)。
+     * 空库位码统一说「未指定库位」—— 与前端出库详情的拣货分组抬头保持一致。
+     */
+    private static String locLabel(String code, Map<String, String> warehouseByCode) {
+        if (code == null || code.isBlank()) return "未指定库位";
+        String wh = warehouseByCode == null ? null : warehouseByCode.get(code);
+        return (wh == null || wh.isBlank()) ? code : wh + " / " + code;
     }
 
     private static String csv(Object v) {

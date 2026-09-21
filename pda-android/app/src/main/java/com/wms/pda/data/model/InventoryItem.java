@@ -11,9 +11,11 @@ public class InventoryItem {
     public String sku;
     public String productName;
     public String locationCode;  // 后端库位
+    public String warehouseName; // 库位所属仓库名(可空;查不到就只显示库位码)
     public Integer quantity;    // 原入库数量
     public Integer remaining;   // 当前剩余 = onHand
     public String status;        // IN_STOCK / OUT / SCRAPPED / TRANSFERRED
+    public String expiryDate;    // 到期日 yyyy-MM-dd(可空)
     public Integer inboundOrderId;
     public Integer outboundOrderId;
     public String createdBy;

@@ -83,6 +83,8 @@ public class Dto {
         public String createdAt;
         public List<String> codes;   // 每个库存单元的编码(逐件显示用)
         public java.util.Map<String, Integer> picks; // 库位码 → 件数(该行实际从各库位取几件)
+        // 库位码 → 该库位取到的码列表。与 picks 同源同序(keySet 恒等),按仓库分组显示靠它
+        public java.util.Map<String, List<String>> codesByLocation;
     }
 
     // ---- 盘点 ----
@@ -127,9 +129,11 @@ public class Dto {
         public String sku;
         public String productName;
         public String locationCode;
+        public String warehouseName;  // 库位所属仓库名(后端 join location→warehouse 带出,可空)
         public Integer quantity;
         public Integer remaining;
         public String status;         // IN_STOCK / OUT / SCRAPPED / TRANSFERRED
+        public String expiryDate;     // 到期日 yyyy-MM-dd(入库时按生产日期+保质期算出,可空)
         public Integer inboundOrderId;
         public Integer outboundOrderId;
         public String createdBy;

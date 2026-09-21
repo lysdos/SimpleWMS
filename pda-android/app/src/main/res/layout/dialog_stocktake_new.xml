@@ -1,131 +1,170 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- 外层 ScrollView:软键盘弹出时输入框要能被滚进可视区(见 StocktakeListActivity
+     里给窗口设的 SOFT_INPUT_ADJUST_RESIZE)。没有滚动容器的话按 SKU 输入时
+     键盘会把输入框盖住,边打字边看不见。 -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="@dimen/space_lg">
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/stocktake_scope"
-        style="@style/Text.Caption" />
-
-    <RadioGroup
-        android:id="@+id/rg_scope"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_xs"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:padding="@dimen/space_lg">
 
-        <RadioButton
-            android:id="@+id/rb_scope_all"
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/stocktake_scope"
+            style="@style/Text.Caption" />
+
+        <RadioGroup
+            android:id="@+id/rg_scope"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:minHeight="@dimen/touch_min"
-            android:checked="true"
-            android:text="@string/stocktake_scope_all"
-            android:textColor="@color/text_primary" />
+            android:layout_marginTop="@dimen/space_xs"
+            android:orientation="vertical">
 
-        <RadioButton
-            android:id="@+id/rb_scope_sku"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="@dimen/touch_min"
-            android:text="@string/stocktake_scope_sku"
-            android:textColor="@color/text_primary" />
+            <RadioButton
+                android:id="@+id/rb_scope_all"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_min"
+                android:checked="true"
+                android:text="@string/stocktake_scope_all"
+                android:textColor="@color/text_primary" />
 
-        <RadioButton
-            android:id="@+id/rb_scope_location"
-            android:layout_width="match_parent"
+            <RadioButton
+                android:id="@+id/rb_scope_sku"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_min"
+                android:text="@string/stocktake_scope_sku"
+                android:textColor="@color/text_primary" />
+
+            <RadioButton
+                android:id="@+id/rb_scope_location"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_min"
+                android:text="@string/stocktake_scope_location"
+                android:textColor="@color/text_primary" />
+
+            <RadioButton
+                android:id="@+id/rb_scope_warehouse"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_min"
+                android:text="@string/stocktake_scope_warehouse"
+                android:textColor="@color/text_primary" />
+        </RadioGroup>
+
+        <TextView
+            android:id="@+id/tv_keyword_label"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minHeight="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/stocktake_sku_label"
+            android:visibility="gone"
+            style="@style/Text.Caption" />
+
+        <EditText
+            android:id="@+id/et_keyword"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:hint="@string/stocktake_sku_hint"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="text"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tv_warehouse_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/stocktake_warehouse_label"
+            android:visibility="gone"
+            style="@style/Text.Caption" />
+
+        <Spinner
+            android:id="@+id/sp_warehouse"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/tv_location_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
             android:text="@string/stocktake_scope_location"
-            android:textColor="@color/text_primary" />
-    </RadioGroup>
+            android:visibility="gone"
+            style="@style/Text.Caption" />
 
-    <TextView
-        android:id="@+id/tv_keyword_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_sku_label"
-        android:visibility="gone"
-        style="@style/Text.Caption" />
+        <Spinner
+            android:id="@+id/sp_location"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:visibility="gone" />
 
-    <EditText
-        android:id="@+id/et_keyword"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:paddingStart="@dimen/space_md"
-        android:paddingEnd="@dimen/space_md"
-        android:hint="@string/stocktake_sku_hint"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
-        android:inputType="text"
-        android:visibility="gone" />
+        <TextView
+            android:id="@+id/tv_multi_loc_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/stocktake_multi_loc_label"
+            android:visibility="gone"
+            style="@style/Text.Caption" />
 
-    <TextView
-        android:id="@+id/tv_warehouse_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_warehouse_label"
-        android:visibility="gone"
-        style="@style/Text.Caption" />
+        <TextView
+            android:id="@+id/tv_multi_loc_value"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:gravity="center_vertical"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:text="@string/stocktake_multi_loc_all"
+            android:textColor="@color/text_primary"
+            android:visibility="gone" />
 
-    <Spinner
-        android:id="@+id/sp_warehouse"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:visibility="gone" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/stocktake_remark"
+            style="@style/Text.Caption" />
 
-    <TextView
-        android:id="@+id/tv_location_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_scope_location"
-        android:visibility="gone"
-        style="@style/Text.Caption" />
+        <EditText
+            android:id="@+id/et_remark"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input"
+            android:paddingStart="@dimen/space_md"
+            android:paddingEnd="@dimen/space_md"
+            android:hint="@string/stocktake_remark_hint"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_hint"
+            android:inputType="text" />
 
-    <Spinner
-        android:id="@+id/sp_location"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:visibility="gone" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_remark"
-        style="@style/Text.Caption" />
-
-    <EditText
-        android:id="@+id/et_remark"
-        android:layout_width="match_parent"
-        android:layout_height="@dimen/touch_min"
-        android:layout_marginTop="@dimen/space_xs"
-        android:background="@drawable/bg_input"
-        android:paddingStart="@dimen/space_md"
-        android:paddingEnd="@dimen/space_md"
-        android:hint="@string/stocktake_remark_hint"
-        android:textColor="@color/text_primary"
-        android:textColorHint="@color/text_hint"
-        android:inputType="text" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/space_md"
-        android:text="@string/stocktake_create_fmt"
-        android:lineSpacingExtra="2dp"
-        style="@style/Text.Caption" />
-</LinearLayout>
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
+            android:text="@string/stocktake_create_fmt"
+            android:lineSpacingExtra="2dp"
+            style="@style/Text.Caption" />
+    </LinearLayout>
+</ScrollView>

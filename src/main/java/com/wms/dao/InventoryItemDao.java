@@ -232,7 +232,7 @@ public class InventoryItemDao {
 
     /**
      * 列表查询(库存管理用)。
-     * @param sku     SKU 模糊匹配(可空)
+     * @param sku     模糊匹配(可空):同时命中 sku 与 24 位 code —— 现场手里拿的是货,先看到的是码
      * @param location 库位精确匹配(可空)
      * @param status  IN_STOCK / OUT / SCRAPPED / TRANSFERRED / 空(=全部)
      * @param expiryStatus EXPIRING=临期(距到期<=商品预警天数,默认30) / EXPIRED=已过期 / 空(=全部)
@@ -286,8 +286,12 @@ public class InventoryItemDao {
                                    String expiryStatus, String expiryFrom, String expiryTo,
                                    Integer warehouseId) {
         if (sku != null && !sku.isBlank()) {
-            sb.append(" AND i.sku LIKE ?");
-            args.add("%" + sku.trim() + "%");
+            // 同一个输入框既搜 SKU 也搜 24 位编码 —— 现场手里拿的是货,先看到的是码。
+            // findItems / countItems 共用这里,所以分页总数和导出会一起跟上。
+            sb.append(" AND (i.sku LIKE ? OR i.code LIKE ?)");
+            String kw = "%" + sku.trim() + "%";
+            args.add(kw);
+            args.add(kw);
         }
         if (location != null && !location.isBlank()) {
             sb.append(" AND i.location_code = ?");

@@ -48,10 +48,11 @@ class StocktakeAdapter extends RecyclerView.Adapter<StocktakeAdapter.VH> {
 
         String scope = o.scope == null ? "ALL" : o.scope;
         String scopeLabel;
-        if ("ALL".equals(scope))           scopeLabel = "全部在库单元";
-        else if ("SKU".equals(scope))      scopeLabel = "按SKU";
-        else if ("LOCATION".equals(scope)) scopeLabel = "按库位";
-        else                               scopeLabel = scope;
+        if ("ALL".equals(scope))            scopeLabel = "全部在库单元";
+        else if ("SKU".equals(scope))       scopeLabel = "按SKU";
+        else if ("LOCATION".equals(scope))  scopeLabel = "按库位";
+        else if ("WAREHOUSE".equals(scope)) scopeLabel = "按仓库";
+        else                                scopeLabel = scope;
         h.tvMode.setText("方式 · " + scopeLabel);
 
         String keyword = o.scopeKeyword == null || o.scopeKeyword.isEmpty() ? "—" : o.scopeKeyword;

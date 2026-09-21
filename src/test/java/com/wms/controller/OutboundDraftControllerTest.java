@@ -1,5 +1,6 @@
 package com.wms.controller;
 
+import com.wms.dao.LocationDao;
 import com.wms.dao.UserDao;
 import com.wms.model.OutboundOrder;
 import com.wms.model.OutboundOrderItem;
@@ -45,6 +46,8 @@ class OutboundDraftControllerTest {
     @MockBean private UserDao userDao;
     @MockBean private OutboundService outboundService;
     @MockBean private JwtService jwtService;
+    // 导出 CSV 时 OutboundController 会查一次「库位码 → 仓库名」(locationDao),缺了它起不来
+    @MockBean private LocationDao locationDao;
 
     private OutboundOrder sampleDraft() {
         OutboundOrder o = new OutboundOrder();

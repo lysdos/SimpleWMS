@@ -27,6 +27,17 @@ public class OutboundOrderItem {
      * 现场要知道去哪儿拿货只能看这个 —— 它按**真实锁定的库存单元**统计。
      */
     private Map<String, Integer> picks;
+    /**
+     * 拣货分布的另一半:库位码 → 该库位取到的 24 位码列表,不存表。
+     *
+     * 与 {@link #picks} **同源同序**(同一个循环里产出,都用 TreeMap 按库位码排序),
+     * 所以 `keySet()` 恒等:同一个库位,picks 给件数、本字段给码。
+     *
+     * 为什么必须有它:{@link #codes} 是纯字符串列表、不带库位,而一个商品可能同时躺在
+     * 主仓和副仓 —— 现场拿着几个码不知道哪个该放哪。两者**不能靠推算对应**:
+     * picks 记的是件数、codes 是一单元一码,老数据(remaining>1)一个码算多件,切不出块。
+     */
+    private Map<String, List<String>> codesByLocation;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -56,4 +67,6 @@ public class OutboundOrderItem {
     public void setCodes(List<String> codes) { this.codes = codes; }
     public Map<String, Integer> getPicks() { return picks; }
     public void setPicks(Map<String, Integer> picks) { this.picks = picks; }
+    public Map<String, List<String>> getCodesByLocation() { return codesByLocation; }
+    public void setCodesByLocation(Map<String, List<String>> codesByLocation) { this.codesByLocation = codesByLocation; }
 }

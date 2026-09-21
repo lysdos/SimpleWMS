@@ -89,6 +89,7 @@ final class Mappers {
                 l.uom = "件";
                 l.codes = it.codes;
                 l.picks = it.picks;
+                l.codesByLocation = it.codesByLocation;
                 m.lines.add(l);
             }
         }
@@ -138,9 +139,11 @@ final class Mappers {
         m.sku = it.sku;
         m.productName = it.productName;
         m.locationCode = it.locationCode;
+        m.warehouseName = it.warehouseName;
         m.quantity = it.quantity;
         m.remaining = it.remaining;
         m.status = it.status;
+        m.expiryDate = it.expiryDate;
         m.inboundOrderId = it.inboundOrderId;
         m.outboundOrderId = it.outboundOrderId;
         m.createdBy = it.createdBy;

@@ -572,10 +572,10 @@ select[multiple].input option, select[multiple].select option { padding: 4px 8px
 }
 /* 新增单据弹窗:入库明细有 9 列(比原来多了「库位」),880px 装不下,
    数量会被挤进表格的横向滚动区外面 —— 填数量要左右拉,没法用。
-   1180 是配合 views.js 里那一组列宽算出来的(每列还各占 28px 单元格内边距);
+   1240 是配合 views.js 里那一组列宽算出来的(每列还各占 28px 单元格内边距);
    列宽再改记得回来对一眼。窄屏时 max-width 生效,退回横向滚动。 */
 .modal.modal-xwide {
-    width: 1180px;
+    width: 1240px;
     max-width: 100%;
 }
 .order-print {

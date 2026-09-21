@@ -313,9 +313,19 @@ function openNewStockCheckModal() {
         const scope   = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
         const kwInput = document.getElementById('nsc-keyword');
         const sel     = document.getElementById('nsc-location-select');
+        const whSel   = document.getElementById('nsc-warehouse-select');
+        const locMulti= document.getElementById('nsc-location-multi');
         let keyword = '';
-        if (scope === 'SKU')      keyword = (kwInput.value || '').trim();
+        let warehouseId = null;
+        if (scope === 'SKU')           keyword = (kwInput.value || '').trim();
         else if (scope === 'LOCATION') keyword = sel ? sel.value : '';
+        else if (scope === 'WAREHOUSE') {
+            warehouseId = (whSel && whSel.value) ? Number(whSel.value) : null;
+            // 不勾库位 = 空关键字,后端按"整个仓库"处理
+            keyword = locMulti
+                ? Array.from(locMulti.selectedOptions).map(o => o.value).join(',')
+                : '';
+        }
         const remark  = document.getElementById('nsc-remark').value.trim();
 
         if (scope === 'SKU' && !keyword) {
@@ -326,8 +336,12 @@ function openNewStockCheckModal() {
             toast(t('stock_check.err.loc_empty'), 'error');
             return false;
         }
+        if (scope === 'WAREHOUSE' && !warehouseId) {
+            toast(t('stock_check.err.warehouse_empty'), 'error');
+            return false;
+        }
         try {
-            const c = await api.post('/api/stock-checks', { scope, keyword, remark });
+            const c = await api.post('/api/stock-checks', { scope, keyword, warehouseId, remark });
             toast(t('stock_check.toast.created', { n: c.checkNo, m: c.totalCount }), 'success');
             state.stockCheckPage = 1;
             await loadStockChecks();
@@ -335,10 +349,11 @@ function openNewStockCheckModal() {
         } catch (e) { toast(e.message, 'error'); return false; }
     });
 
-    // 模式 radio 联动:ALL 隐藏输入,SKU 显示输入框,LOCATION 显示库位下拉
+    // 模式 radio 联动:ALL 无输入 / SKU 文本框 / LOCATION 单个库位下拉 /
+    // WAREHOUSE 仓库下拉 + 库位多选(不勾 = 整个仓库)
     const radios   = document.querySelectorAll('input[name="nsc-scope"]');
     const wrap     = document.getElementById('nsc-keyword-wrap');
-    const lbl      = document.getElementById('nsc-keyword-label');
+    const whWrap   = document.getElementById('nsc-warehouse-wrap');
     const kwInput  = document.getElementById('nsc-keyword');
 
     function paintScopeUi() {
@@ -349,6 +364,7 @@ function openNewStockCheckModal() {
             el.style.borderColor = (v === cur) ? 'var(--c-primary)' : 'var(--divider)';
             el.style.background  = (v === cur) ? '#E8F0FF' : 'transparent';
         });
+        whWrap.style.display = (cur === 'WAREHOUSE') ? '' : 'none';
         if (cur === 'ALL') {
             wrap.style.display = 'none';
             kwInput.value = '';
@@ -373,6 +389,29 @@ function openNewStockCheckModal() {
                     </select>
                 `;
             }).catch(e => toast(e.message, 'error'));
+        } else if (cur === 'WAREHOUSE') {
+            wrap.style.display = 'none';
+            // 仓库下拉 + 库位多选(库位跟着所选仓库联动)。
+            // 这里单独拉一次 /api/locations 而不是用 state.locations —— 后者会被库位管理页
+            // 的筛选结果改写,勾选项会莫名缺一块(见 state.locMap 那段注释)。
+            ensureWarehouses()
+                .then(() => api.get('/api/locations'))
+                .then(locs => {
+                    const whSel    = document.getElementById('nsc-warehouse-select');
+                    const locMulti = document.getElementById('nsc-location-multi');
+                    const whs = (state.warehouses || []).filter(w => w.enabled !== false);
+                    whSel.innerHTML = whs.map(w =>
+                        `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
+                    const paintLocs = () => {
+                        const whId = whSel.value;
+                        const mine = (locs || []).filter(l =>
+                            l.enabled !== false && String(l.warehouseId || '') === String(whId));
+                        locMulti.innerHTML = mine.map(l =>
+                            `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' · ' + escapeHtml(l.name) : ''}</option>`).join('');
+                    };
+                    whSel.onchange = paintLocs;
+                    paintLocs();
+                }).catch(e => toast(e.message, 'error'));
         }
     }
     radios.forEach(r => r.addEventListener('change', paintScopeUi));
@@ -678,7 +717,7 @@ async function viewOrderDetail(id, typeHint) {
         // 不再用 orderNo 拼进 inline onclick;按 ID 直接拉详情
         // 单据响应里 items[].codes 后端已经按**明细行**填好了
         // (入库:InboundService.getOrderWithCodes 按 inbound_item_id 精确归属;
-        //  出库:OutboundService.getOrder 填 codes + 按库位汇总的 picks),
+        //  出库:OutboundService.getOrder 填 codes + 按库位汇总的 picks + 按库位分组的 codesByLocation),
         // 所以这里只拉一次单据就够,不再额外拉 /inventory/items/by-* 再按 SKU 自己分组 ——
         // 多一次请求,而且同商品拆多行时会分错(两行各显示该 SKU 的全部码)。
         const full = await api.get(`${base}/orders/${id}`);

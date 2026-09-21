@@ -54,6 +54,8 @@ public class OutboundOrder {
         public List<String> codes;   // 每个库存单元的编码(逐件显示用)
         /** 拣货分布:库位码 → 件数。行上 location 为空时,现场靠这个知道去哪儿拿货。 */
         public java.util.Map<String, Integer> picks;
+        /** 库位码 → 该库位取到的码列表(与 picks 同源同序)。逐件列表按仓库分组显示靠它。 */
+        public java.util.Map<String, List<String>> codesByLocation;
 
         public Line() {}
 

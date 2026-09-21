@@ -5,7 +5,9 @@ import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -28,7 +30,12 @@ public class InventoryFragment extends Fragment {
 
     private InventoryAdapter adapter;
     private EditText etSearch;
+    private Spinner spStatus, spExpiry;
     private MaterialButton btnStocktake;
+
+    // 下拉文案 → 发给后端的值(false 那个位置用 null 表示"不过滤")
+    private static final String[] STATUS_VALUES = {null, "IN_STOCK", "OUT", "RESERVED", "SCRAPPED", "TRANSFERRED", "PENDING"};
+    private static final String[] EXPIRY_VALUES = {null, "EXPIRING", "EXPIRED"};
 
     @Nullable
     @Override
@@ -43,9 +50,15 @@ public class InventoryFragment extends Fragment {
 
         RecyclerView list = v.findViewById(R.id.list);
         etSearch = v.findViewById(R.id.et_search);
+        spStatus = v.findViewById(R.id.sp_status);
+        spExpiry = v.findViewById(R.id.sp_expiry);
         MaterialButton btnSearch = v.findViewById(R.id.btn_search);
         MaterialButton btnRefresh = v.findViewById(R.id.btn_refresh);
         btnStocktake = v.findViewById(R.id.btn_stocktake);
+
+        // 文案与卡片上的状态胶囊保持一致(那里也是写死的中文)
+        bindOptions(spStatus, new String[]{"全部状态", "在库", "已出库", "已预留", "已报废", "已调拨", "待入库"});
+        bindOptions(spExpiry, new String[]{"全部效期", "临期", "已过期"});
 
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new InventoryAdapter(new InventoryAdapter.Callbacks() {
@@ -59,9 +72,32 @@ public class InventoryFragment extends Fragment {
         list.setAdapter(adapter);
 
         btnSearch.setOnClickListener(x -> reload());
-        btnRefresh.setOnClickListener(x -> { etSearch.setText(""); reload(); });
+        btnRefresh.setOnClickListener(x -> {
+            etSearch.setText("");
+            spStatus.setSelection(0);
+            spExpiry.setSelection(0);
+            reload();
+        });
+        // 筛选即时生效,不用再点搜索
+        spStatus.setOnItemSelectedListener(new SimpleItemSelected(() -> reload()));
+        spExpiry.setOnItemSelectedListener(new SimpleItemSelected(() -> reload()));
         btnStocktake.setOnClickListener(x ->
                 startActivity(new Intent(requireContext(), StocktakeListActivity.class)));
+    }
+
+    private void bindOptions(Spinner sp, String[] labels) {
+        ArrayAdapter<String> ad = new ArrayAdapter<>(requireContext(),
+                android.R.layout.simple_spinner_item, labels);
+        ad.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sp.setAdapter(ad);
+    }
+
+    /** 只关心"选中了"的监听器(首次填充也会触发一次,重复加载无害) */
+    private static final class SimpleItemSelected implements android.widget.AdapterView.OnItemSelectedListener {
+        private final Runnable onPicked;
+        SimpleItemSelected(Runnable onPicked) { this.onPicked = onPicked; }
+        @Override public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) { onPicked.run(); }
+        @Override public void onNothingSelected(android.widget.AdapterView<?> p) { }
     }
 
     @Override
@@ -72,7 +108,9 @@ public class InventoryFragment extends Fragment {
 
     private void reload() {
         String kw = etSearch == null ? "" : etSearch.getText().toString().trim();
-        RepositoryProvider.get().searchInventory(kw, new WmsCallback<List<InventoryItem>>() {
+        String status = valueOf(STATUS_VALUES, spStatus);
+        String expiry = valueOf(EXPIRY_VALUES, spExpiry);
+        RepositoryProvider.get().searchInventory(kw, status, expiry, new WmsCallback<List<InventoryItem>>() {
             @Override public void onSuccess(List<InventoryItem> data) {
                 if (!isAdded()) return;
                 adapter.submit(data);
@@ -82,5 +120,12 @@ public class InventoryFragment extends Fragment {
                 Toast.makeText(requireContext(), "加载失败: " + msg, Toast.LENGTH_SHORT).show();
             }
         });
+    }
+
+    /** 下拉当前选中项对应的后端取值;越界(还没填充)返回 null = 不过滤 */
+    private static String valueOf(String[] values, Spinner sp) {
+        if (sp == null) return null;
+        int pos = sp.getSelectedItemPosition();
+        return (pos >= 0 && pos < values.length) ? values[pos] : null;
     }
 }

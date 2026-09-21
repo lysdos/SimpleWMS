@@ -61,6 +61,27 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_md"
+            android:text="@string/inbound_pick_location"
+            style="@style/Text.Caption" />
+
+        <Spinner
+            android:id="@+id/sp_location_warehouse"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input" />
+
+        <Spinner
+            android:id="@+id/sp_location"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/touch_min"
+            android:layout_marginTop="@dimen/space_xs"
+            android:background="@drawable/bg_input" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_md"
             android:text="@string/inbound_row_remark"
             style="@style/Text.Caption" />
 

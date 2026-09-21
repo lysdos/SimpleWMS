@@ -222,6 +222,13 @@
 > **去哪儿取货看哪里**:明细行上不再有单一库位,真实取货位置要按**锁定到的库存单元**汇总(Web 出库单详情的「🛒 拣货」行、`export.csv` 的「库位」列会写成 `自动(A-01-01×30 / B-02-02×30)`)。历史单若行上带库位(手工指定过),仍按那个库位锁。
 
 **出库单明细的 `picks` 字段(2026-09-20 新增)**:`GET /orders/{id}` 的每个明细行带 `picks`,是「库位码 → 件数」的映射(如 `{"A-01-01":6,"B-01-01":2}`),按库位码升序。它由**该行真实锁定的库存单元**统计而来,是 `location` 为空时现场唯一能知道"去哪儿拿货"的依据(PDA 出库详情据此渲染「拣货: 主仓库/A-01-01 × 6 · 副仓库/B-01-01 × 2」)。注意它是**响应字段、不存表**。
+
+**出库单明细的 `codesByLocation` 字段(2026-09-21 新增)**:同一响应里的每个明细行还带 `codesByLocation`,是「库位码 → 该库位取到的 24 位码列表」的映射(如 `{"A-01-01":["...3301","...3302"],"B-01-01":["...3401"]}`)。
+> 补它是因为 `codes` 是**纯字符串列表、不带库位** —— 一个商品同时躺在主仓和副仓时,现场拿着几个码看不出哪个该放哪个仓(跨库位取货之后这是常态)。
+> 它与 `picks` **同源同序**(同一个循环产出、都用 `TreeMap`),所以 `codesByLocation.keySet()` 与 `picks.keySet()` **恒等**:同一个库位,`picks` 给件数、`codesByLocation` 给码。
+> 两者**不能靠推算对应**:`picks` 记的是件数、`codes` 是一单元一码,老数据(`remaining>1`)一个码算多件,切不出块。
+> 同样**不存表**;`codes` 保持原样没动(入库明细也在用它,且 PDA 靠它做扫码 ✓ 标记的身份比对)。
+> 空库位码(`""`)的抬头统一显示「未指定库位」(Web / CSV / PDA 一个说法)。
 > 已知限制:同一张单若存在两行**同商品**的明细,按商品查单元会让两行拿到同一批单元(`codes` 与 `picks` 都会重复)。出库批量建单本身按商品合并,正常不会出现;手工往草稿追加同商品行才会。
 
 **追加明细会并进同商品的行(2026-09-20 起)**:`POST /orders/{id}/items` 若该单已有同商品的行,就**数量相加**到那一行上,不再新插一行(`addItemToDraft`)。这样上面那条"同商品两行"的限制从**入口**上就不可达了 —— 批量建单(`/batch`)本来就按商品合并,这次把 PDA 的追加路径对齐了它。
@@ -235,7 +242,7 @@
 
 | 方法 | URL | 鉴权 | 备注 |
 |---|---|---|---|
-| GET | `/?sku&location&warehouseId&status&expiryStatus&expiryFrom&expiryTo&page&pageSize` | 已登录 | 过滤 + 分页;`warehouseId` 按仓库筛(经 `location.warehouse_id`),一个商品分散多仓时用它分别看数 |
+| GET | `/?sku&location&warehouseId&status&expiryStatus&expiryFrom&expiryTo&page&pageSize` | 已登录 | 过滤 + 分页;`sku` 是**模糊匹配,同时命中 `sku` 与 24 位 `code`**(2026-09-21 起 —— 同一个搜索框既能搜 SKU 也能搜实物码);`warehouseId` 按仓库筛(经 `location.warehouse_id`),一个商品分散多仓时用它分别看数 |
 | GET | `/{id}` | 已登录 | |
 | GET | `/by-inbound/{orderId}` | 已登录 | 入库单下所有单元 |
 | GET | `/by-outbound/{orderId}` | 已登录 | 出库单消耗的所有单元 |
@@ -268,7 +275,7 @@
 |---|---|---|---|---|---|
 | GET | `/?beginDate&endDate&status&page&pageSize` | 已登录 | — | `[{id, checkNo, scope, ...}]` | — |
 | GET | `/{id}` | 已登录 | — | `StockCheck + items[]` | 404 |
-| POST | `/` | **ADMIN** | `{scope:ALL/SKU/LOCATION, keyword?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
+| POST | `/` | **ADMIN** | `{scope:ALL/SKU/LOCATION/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
 | POST | `/{id}/items/{itemId}/count` | **ADMIN** | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
 | **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新(items[].countedQty+=1) | **404 码不在 / 409 状态非 IN_STOCK / 422 码不在本单** |
 | POST | `/{id}/commit` | **ADMIN** | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
@@ -276,6 +283,20 @@
 | GET | `/{id}/export.csv` | 已登录 | 差异报告(每行 system/counted/diff) | — |
 
 > **权限不对称**(已知):`/scan` 不需 ADMIN,`create/commit/cancel` 需要 ADMIN。PDA 操作员角色(OPERATOR 未来支持)可扫码但不能建/提交单。
+
+### 2.12 统一出入库单列表 — `/api/orders`(仅 Web 用)
+
+入库单和出库单 UNION ALL 成一张列表,供 Web「全部」类型下拉使用。
+
+| 方法 | URL | 鉴权 | 请求 | 响应 | 错误 |
+|---|---|---|---|---|---|
+| GET | `/?beginDate&endDate&keyword&createdBy&status&page&pageSize` | 已登录 | — | `[{id, orderNo, type(IN/OUT), externalNo, partner, remark, createdBy, createdAt, itemCount, totalQuantity, status}]` | — |
+
+**`partner` 与 `externalNo` 是两个独立字段(2026-09-21 修正)**:列表上「供应商 / 领用方」那一列取 `partner`,「外部单号」那一列取 `externalNo`。
+
+> 之前出库分支把 `customer` 别名成了 `external_no`,前端又拿同一个值去填两列 —— 于是「外部单号」和「领用方」永远同值(入库行同理:两列都显示 `external_no`)。
+> 现在:出库行 `partner = customer`;入库行 `partner` = 该单**行级** `inbound_order_item.supplier` 去重拼接(空格加斜杠分隔),没有则 `null`。
+> 注意 `inbound_order.supplier`(单头)是一列**从未被写入过**的死列,不要拿它当数据源 —— 真相在行级。
 
 ## 3. 错误响应示例
 

@@ -25,6 +25,7 @@ import com.wms.pda.scan.ScanResult;
 import com.wms.pda.scan.ScanType;
 import com.wms.pda.scan.ScannerCallback;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -309,6 +310,65 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 });
     }
 
+    /** 盘盈行:账面 0、实盘 >0(扫到了盘点范围之外的单元)。口径与后端 StockCheckService.isSurplus 一致。 */
+    private static boolean isSurplusLine(StocktakeOrder.Line l) {
+        int sys = l.systemQty == null ? 0 : l.systemQty;
+        return sys == 0 && l.countedQty != null && l.countedQty > 0;
+    }
+
+    /** 构建一行盘点明细(明细区与盘盈区共用)。docLocked = 单据已结束,行不可删。 */
+    private View buildLineRow(LayoutInflater li, StocktakeOrder.Line l, boolean docLocked) {
+        View row = li.inflate(R.layout.item_stocktake_row, llLines, false);
+        TextView tvSku = row.findViewById(R.id.tv_sku);
+        TextView tvSub = row.findViewById(R.id.tv_sub);
+        TextView tvBook = row.findViewById(R.id.tv_book);
+        TextView etActual = row.findViewById(R.id.et_actual);
+        TextView tvDiff = row.findViewById(R.id.tv_diff);
+        TextView tvPill = row.findViewById(R.id.tv_pill);
+
+        TextView btnDel = row.findViewById(R.id.btn_row_del);
+        if (btnDel != null) {
+            boolean locked = docLocked || l.id == null;
+            btnDel.setVisibility(locked ? View.GONE : View.VISIBLE);
+            if (!locked) btnDel.setOnClickListener(v -> confirmDeleteLine(l));
+        }
+
+        tvSku.setText(l.sku == null ? "?" : l.sku);
+        tvSub.setText((l.productName == null ? "" : l.productName)
+                + " · 码 " + (l.code == null ? "—" : l.code)
+                + " · " + (l.locationCode == null ? "—" : l.locationCode));
+        tvBook.setText(l.systemQty == null ? "—" : String.valueOf(l.systemQty));
+        etActual.setText(l.countedQty == null ? "" : String.valueOf(l.countedQty));
+        etActual.setEnabled(false);
+
+        int sys = l.systemQty == null ? 0 : l.systemQty;
+        int cnt = l.countedQty == null ? -1 : l.countedQty;
+        if (cnt < 0) {
+            tvDiff.setText("—");
+            tvDiff.setTextColor(0xFF9AA3B2);
+            tvPill.setText(R.string.stocktake_status_uncounted);
+            tvPill.setBackgroundResource(R.drawable.bg_pill_draft);
+        } else {
+            int d = cnt - sys;
+            String sign = d > 0 ? "+" : "";
+            tvDiff.setText(sign + d);
+            if (d == 0) {
+                tvDiff.setTextColor(0xFF27AE60);
+                tvPill.setText(R.string.stocktake_status_consistent);
+                tvPill.setBackgroundResource(R.drawable.bg_pill_success);
+            } else if (d > 0) {
+                tvDiff.setTextColor(0xFF27AE60);
+                tvPill.setText(R.string.stocktake_status_over);
+                tvPill.setBackgroundResource(R.drawable.bg_pill_success);
+            } else {
+                tvDiff.setTextColor(0xFFE74C3C);
+                tvPill.setText(R.string.stocktake_status_short);
+                tvPill.setBackgroundResource(R.drawable.bg_pill_warning);
+            }
+        }
+        return row;
+    }
+
     private void doRender(StocktakeOrder o) {
         TextView tvId = findViewById(R.id.tv_id);
         TextView tvStatus = findViewById(R.id.tv_status);
@@ -324,72 +384,48 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         String scopeLabel = "ALL".equals(o.scope) ? "全部在库单元"
                 : "SKU".equals(o.scope) ? "按SKU"
                 : "LOCATION".equals(o.scope) ? "按库位"
+                : "WAREHOUSE".equals(o.scope) ? "按仓库"
                 : (o.scope == null ? "—" : o.scope);
         tvMode.setText("盘点方式: " + scopeLabel);
         tvOperator.setText("创建人: " + (o.createdBy == null ? "—" : o.createdBy));
-        tvCreated.setText(getString(R.string.created_at_fmt, o.createdAt == null ? "—" : o.createdAt));
+        // 后端给的是 ISO(yyyy-MM-ddTHH:mm:ss),详情页保留到秒,只把 T 换成空格
+        tvCreated.setText(getString(R.string.created_at_fmt,
+                o.createdAt == null ? "—" : o.createdAt.replace("T", " ")));
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
 
-        if (o.lines == null || o.lines.isEmpty()) {
+        // 盘盈行(账面 0、实盘 >0,即扫到盘点范围外的单元)单独成区,不混在应盘明细里 ——
+        // 混在一起看不出哪些是多出来的,已盘计数也没法解释(口径见 StockCheckService.isSurplus)。
+        List<StocktakeOrder.Line> detailLines = new ArrayList<>();
+        List<StocktakeOrder.Line> surplusLines = new ArrayList<>();
+        if (o.lines != null) {
+            for (StocktakeOrder.Line l : o.lines) {
+                if (isSurplusLine(l)) surplusLines.add(l); else detailLines.add(l);
+            }
+        }
+
+        if (detailLines.isEmpty() && surplusLines.isEmpty()) {
             TextView empty = new TextView(this);
             empty.setText("盘点单无明细");
             empty.setTextColor(0xFF9AA3B2);
             empty.setPadding(24, 24, 24, 24);
             llLines.addView(empty);
         } else {
-            for (StocktakeOrder.Line l : o.lines) {
-                View row = li.inflate(R.layout.item_stocktake_row, llLines, false);
-                TextView tvSku = row.findViewById(R.id.tv_sku);
-                TextView tvSub = row.findViewById(R.id.tv_sub);
-                TextView tvBook = row.findViewById(R.id.tv_book);
-                TextView etActual = row.findViewById(R.id.et_actual);
-                TextView tvDiff = row.findViewById(R.id.tv_diff);
-                TextView tvPill = row.findViewById(R.id.tv_pill);
-
-                TextView btnDel = row.findViewById(R.id.btn_row_del);
-                if (btnDel != null) {
-                    boolean locked = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED
-                            || l.id == null;
-                    btnDel.setVisibility(locked ? View.GONE : View.VISIBLE);
-                    if (!locked) btnDel.setOnClickListener(v -> confirmDeleteLine(l));
+            boolean docLocked = o.status == Enums.DocStatus.DONE || o.status == Enums.DocStatus.CANCELLED;
+            for (StocktakeOrder.Line l : detailLines) {
+                llLines.addView(buildLineRow(li, l, docLocked));
+            }
+            if (!surplusLines.isEmpty()) {
+                TextView h = new TextView(this);
+                h.setText(getString(R.string.stocktake_surplus_header, surplusLines.size()));
+                h.setTextSize(13);
+                h.setTextColor(0xFF9AA3B2);
+                h.setPadding(24, 20, 24, 4);
+                llLines.addView(h);
+                for (StocktakeOrder.Line l : surplusLines) {
+                    llLines.addView(buildLineRow(li, l, docLocked));
                 }
-
-                tvSku.setText(l.sku == null ? "?" : l.sku);
-                tvSub.setText((l.productName == null ? "" : l.productName)
-                        + " · 码 " + (l.code == null ? "—" : l.code)
-                        + " · " + (l.locationCode == null ? "—" : l.locationCode));
-                tvBook.setText(l.systemQty == null ? "—" : String.valueOf(l.systemQty));
-                etActual.setText(l.countedQty == null ? "" : String.valueOf(l.countedQty));
-                etActual.setEnabled(false);
-
-                int sys = l.systemQty == null ? 0 : l.systemQty;
-                int cnt = l.countedQty == null ? -1 : l.countedQty;
-                if (cnt < 0) {
-                    tvDiff.setText("—");
-                    tvDiff.setTextColor(0xFF9AA3B2);
-                    tvPill.setText(R.string.stocktake_status_uncounted);
-                    tvPill.setBackgroundResource(R.drawable.bg_pill_draft);
-                } else {
-                    int d = cnt - sys;
-                    String sign = d > 0 ? "+" : "";
-                    tvDiff.setText(sign + d);
-                    if (d == 0) {
-                        tvDiff.setTextColor(0xFF27AE60);
-                        tvPill.setText(R.string.stocktake_status_consistent);
-                        tvPill.setBackgroundResource(R.drawable.bg_pill_success);
-                    } else if (d > 0) {
-                        tvDiff.setTextColor(0xFF27AE60);
-                        tvPill.setText(R.string.stocktake_status_over);
-                        tvPill.setBackgroundResource(R.drawable.bg_pill_success);
-                    } else {
-                        tvDiff.setTextColor(0xFFE74C3C);
-                        tvPill.setText(R.string.stocktake_status_short);
-                        tvPill.setBackgroundResource(R.drawable.bg_pill_warning);
-                    }
-                }
-                llLines.addView(row);
             }
         }
 

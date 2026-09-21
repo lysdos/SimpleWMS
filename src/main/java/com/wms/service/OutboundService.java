@@ -405,15 +405,20 @@ public class OutboundService {
                 List<String> codes = new java.util.ArrayList<>();
                 // 库位码 → 件数。TreeMap 让库位码有序,界面/打印输出稳定。
                 Map<String, Integer> picks = new TreeMap<>();
+                // 库位码 → 该库位的码列表。与 picks 同源同序(同一个循环、同样是 TreeMap),
+                // 所以两者 keySet 恒等 —— 界面按库位看看哪些码在哪个仓就靠这个。
+                Map<String, List<String>> codesByLocation = new TreeMap<>();
                 for (InventoryItem u : units) {
                     codes.add(u.getCode());
                     String loc = u.getLocationCode() == null ? "" : u.getLocationCode();
+                    codesByLocation.computeIfAbsent(loc, k -> new java.util.ArrayList<>()).add(u.getCode());
                     // 整件单元 remaining=1,每行 1 件;老数据(remaining>1)整批锁,按 remaining 算
                     int qty = u.getRemaining() == null ? 1 : Math.max(1, u.getRemaining());
                     picks.merge(loc, qty, Integer::sum);
                 }
                 item.setCodes(codes);
                 item.setPicks(picks);
+                item.setCodesByLocation(codesByLocation);
             }
             o.setItems(items);
             // 回填已扫码确认的库存单元编码(条码日志存完整 code,UHF 日志存 epc 需反查)

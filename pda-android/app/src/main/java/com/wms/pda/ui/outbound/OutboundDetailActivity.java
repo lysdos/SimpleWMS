@@ -1,5 +1,6 @@
 package com.wms.pda.ui.outbound;
 
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -33,6 +34,7 @@ import com.wms.pda.util.BeepUtil;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -487,11 +489,43 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 });
     }
 
-    /** 库位显示:带上级仓库(「主仓库/A-01-01」);查不到仓库就只显示库位码 */
+    /**
+     * 库位显示:带上级仓库(「主仓库/A-01-01」);查不到仓库就只显示库位码。
+     * 空库位码统一说「未指定库位」—— 与 Web 出库详情、CSV 的「库位」列一个说法。
+     */
     private String locLabel(String code) {
-        if (code == null || code.isEmpty()) return "—";
+        if (code == null || code.isEmpty()) return getString(R.string.outbound_loc_unassigned);
         String wh = warehouseByLoc.get(code);
         return (wh == null || wh.isEmpty()) ? code : wh + "/" + code;
+    }
+
+    /**
+     * 把「库位码 → 码列表」按仓库重新归组:仓库名 → (库位码 → 码列表)。
+     *
+     * 为什么要这一层:同一个商品可能主仓放 2 件、副仓放 1 件,只按库位码排序输出的话,
+     * 主仓的两个库位会被副仓的库位劈开,还是看不出"哪个仓的码在一起"。
+     * 仓库名靠 warehouseByLoc 反查(拉不到就归到"未分配仓库",不拦着显示)。
+     */
+    private Map<String, Map<String, List<String>>> groupCodesByWarehouse(
+            Map<String, List<String>> codesByLocation) {
+        Map<String, Map<String, List<String>>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> e : codesByLocation.entrySet()) {
+            String loc = e.getKey();
+            String wh;
+            if (loc == null || loc.isEmpty()) {
+                wh = getString(R.string.outbound_loc_unassigned);
+            } else {
+                String name = warehouseByLoc.get(loc);
+                wh = (name == null || name.isEmpty()) ? getString(R.string.outbound_loc_no_warehouse) : name;
+            }
+            Map<String, List<String>> locs = out.get(wh);
+            if (locs == null) {
+                locs = new LinkedHashMap<>();
+                out.put(wh, locs);
+            }
+            locs.put(loc, e.getValue() == null ? new ArrayList<>() : e.getValue());
+        }
+        return out;
     }
 
     private void doRender(OutboundOrder o) {
@@ -578,15 +612,43 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 LinearLayout container = new LinearLayout(this);
                 container.setOrientation(LinearLayout.VERTICAL);
                 container.setPadding(48, 8, 24, 8);
-                if (l.codes != null && !l.codes.isEmpty()) {
-                    for (String code : l.codes) {
-                        TextView tvCode = new TextView(this);
-                        boolean scanned = scannedCodes.contains(code);
-                        tvCode.setText((scanned ? "✓ " : "  ") + code);
-                        tvCode.setTextColor(scanned ? colorScanned : colorUnscanned);
-                        tvCode.setTextSize(12);
-                        tvCode.setPadding(0, 4, 0, 4);
-                        container.addView(tvCode);
+                // 码按**仓库**分组(一个商品可能主仓 2 件、副仓 1 件,平铺在一起看不出
+                // 哪个码该放哪个仓)。分组只改渲染,✓ 比对仍按原始码 —— 别在这里动手脚,
+                // 否则 canonicalCode 那套规范化会对不上、标记漏打。
+                Map<String, List<String>> codesByLoc = l.codesByLocation;
+                if ((codesByLoc == null || codesByLoc.isEmpty()) && l.codes != null && !l.codes.isEmpty()) {
+                    // 后端还没升级(没有 codesByLocation)时的兜底:退回不分组
+                    codesByLoc = new LinkedHashMap<>();
+                    codesByLoc.put(null, l.codes);
+                }
+                if (codesByLoc != null && !codesByLoc.isEmpty()) {
+                    for (Map.Entry<String, Map<String, List<String>>> wh : groupCodesByWarehouse(codesByLoc).entrySet()) {
+                        TextView tvWh = new TextView(this);
+                        tvWh.setText(wh.getKey());
+                        tvWh.setTextSize(12);
+                        tvWh.setTypeface(null, Typeface.BOLD);
+                        tvWh.setTextColor(0xFF6B7280);
+                        tvWh.setPadding(0, 8, 0, 2);
+                        container.addView(tvWh);
+                        for (Map.Entry<String, List<String>> le : wh.getValue().entrySet()) {
+                            if (le.getKey() != null && !le.getKey().isEmpty()) {
+                                TextView tvLoc = new TextView(this);
+                                tvLoc.setText(le.getKey());
+                                tvLoc.setTextSize(11);
+                                tvLoc.setTextColor(0xFF9AA3B2);
+                                tvLoc.setPadding(0, 2, 0, 0);
+                                container.addView(tvLoc);
+                            }
+                            for (String code : le.getValue()) {
+                                TextView tvCode = new TextView(this);
+                                boolean scanned = scannedCodes.contains(code);
+                                tvCode.setText((scanned ? "✓ " : "  ") + code);
+                                tvCode.setTextColor(scanned ? colorScanned : colorUnscanned);
+                                tvCode.setTextSize(12);
+                                tvCode.setPadding(0, 4, 0, 4);
+                                container.addView(tvCode);
+                            }
+                        }
                     }
                 }
                 llLines.addView(row);
