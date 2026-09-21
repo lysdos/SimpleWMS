@@ -208,9 +208,16 @@ public class InboundOrderDao {
             args.add(endDate + " 23:59:59");
         }
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (order_no LIKE ? OR external_no LIKE ? OR remark LIKE ?)");
+            // 供应商在**行级** inbound_order_item.supplier(inbound_order.supplier 是死列,从没被
+            // 写过),所以要 EXISTS 打明细 —— 否则「按供应商搜」永远搜不到,而本方法的 javadoc
+            // 与前端搜索框占位文案都承诺支持这个字段。
+            // ⚠️ 同一个条件在 findOrders 与 countOrders 里各有一份,改一处必须同改另一处,
+            //    否则列表条数与分页总数会不一致。
+            sb.append(" AND (order_no LIKE ? OR external_no LIKE ? OR remark LIKE ?"
+                    + " OR EXISTS (SELECT 1 FROM inbound_order_item ii"
+                    + "             WHERE ii.order_id = inbound_order.id AND ii.supplier LIKE ?))");
             String like = "%" + keyword.trim() + "%";
-            args.add(like); args.add(like); args.add(like);
+            args.add(like); args.add(like); args.add(like); args.add(like);
         }
         if (createdBy != null && !createdBy.isBlank()) {
             sb.append(" AND created_by = ?");
@@ -240,9 +247,16 @@ public class InboundOrderDao {
             args.add(endDate + " 23:59:59");
         }
         if (keyword != null && !keyword.isBlank()) {
-            sb.append(" AND (order_no LIKE ? OR external_no LIKE ? OR remark LIKE ?)");
+            // 供应商在**行级** inbound_order_item.supplier(inbound_order.supplier 是死列,从没被
+            // 写过),所以要 EXISTS 打明细 —— 否则「按供应商搜」永远搜不到,而本方法的 javadoc
+            // 与前端搜索框占位文案都承诺支持这个字段。
+            // ⚠️ 同一个条件在 findOrders 与 countOrders 里各有一份,改一处必须同改另一处,
+            //    否则列表条数与分页总数会不一致。
+            sb.append(" AND (order_no LIKE ? OR external_no LIKE ? OR remark LIKE ?"
+                    + " OR EXISTS (SELECT 1 FROM inbound_order_item ii"
+                    + "             WHERE ii.order_id = inbound_order.id AND ii.supplier LIKE ?))");
             String like = "%" + keyword.trim() + "%";
-            args.add(like); args.add(like); args.add(like);
+            args.add(like); args.add(like); args.add(like); args.add(like);
         }
         if (createdBy != null && !createdBy.isBlank()) {
             sb.append(" AND created_by = ?");

@@ -85,7 +85,7 @@ pda-android/
 | `HomeActivity` | Login → | 4 个入口 + RFID/扫码器状态 | `ScanManager.ensureReady` 主动探测;失败 Toast 真实原因 |
 | `InboundScanActivity` | Home → 入库登记 | 选/建草稿单 → 选商品+数量+库位+备注 → 逐行 POST /items → 提交 → 显示 24 位码列表 + 打印/CSV | `setContentView` 在登记页 / 码打印页之间切换 |
 | `OutboundScanActivity` | Home → 出库扫码 | 选/建出库单 → 全屏 PreviewView 实时扫码 → `POST /scan` → 列表从响应 items 重建 → 提交/取消 | onResume 绑摄像头;onPause/onDestroy 解绑 |
-| `StockCheckActivity` | Home → 库存盘点 | 选/建盘点单 → 全屏PreviewView扫码 → `POST /scan` 累加 countedQty → 提交显示差异数 | scope 选 ALL/SKU/LOCATION |
+| `StockCheckActivity` | Home → 库存盘点 | 选/建盘点单 → 全屏PreviewView扫码 → `POST /scan` 累加 countedQty → 提交显示差异数 | scope 选 ALL/SKU/WAREHOUSE(按库位已移除) |
 | `LookupActivity` | Home → 扫码查询 | 通过 24 位码查 `InventoryItem` | (待 P2 完整实现) |
 
 ## 4. 扫码抽象层

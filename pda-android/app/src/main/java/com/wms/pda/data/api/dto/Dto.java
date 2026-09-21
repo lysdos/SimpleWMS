@@ -134,6 +134,7 @@ public class Dto {
         public Integer remaining;
         public String status;         // IN_STOCK / OUT / SCRAPPED / TRANSFERRED
         public String expiryDate;     // 到期日 yyyy-MM-dd(入库时按生产日期+保质期算出,可空)
+        public Integer expiryWarnDays; // 该商品的临期预警天数(后端联 product 带出,可空=按 30 天)
         public Integer inboundOrderId;
         public Integer outboundOrderId;
         public String createdBy;

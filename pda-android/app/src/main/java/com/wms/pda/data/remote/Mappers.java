@@ -144,6 +144,7 @@ final class Mappers {
         m.remaining = it.remaining;
         m.status = it.status;
         m.expiryDate = it.expiryDate;
+        m.expiryWarnDays = it.expiryWarnDays;
         m.inboundOrderId = it.inboundOrderId;
         m.outboundOrderId = it.outboundOrderId;
         m.createdBy = it.createdBy;

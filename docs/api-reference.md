@@ -195,7 +195,7 @@
 **查询**:
 | 方法 | URL | 参数 |
 |---|---|---|
-| GET | `/orders?beginDate&endDate&keyword&operator&status&page&pageSize` | 不传 `status`(或传 `ALL`) = 不过滤、返回全部;PDA 显式传 `DRAFT`,Web 显式传 `ALL` |
+| GET | `/orders?beginDate&endDate&keyword&createdBy&status&page&pageSize` | 不传 `status`(或传 `ALL`) = 不过滤、返回全部;PDA 显式传 `DRAFT`,Web 显式传 `ALL`。`keyword` 模糊匹配 **单号 / 外部单号 / 备注 / 行级供应商**(供应商在 `inbound_order_item.supplier` 上,用 EXISTS 打明细,2026-09-21 起支持) |
 | GET | `/orders/{id}` | 含 items + 每行 codes(commit 后有) |
 | GET | `/orders/{id}/export.csv` | UTF-8 BOM + 双引号转义,Excel/Numbers 兼容 |
 
@@ -275,7 +275,7 @@
 |---|---|---|---|---|---|
 | GET | `/?beginDate&endDate&status&page&pageSize` | 已登录 | — | `[{id, checkNo, scope, ...}]` | — |
 | GET | `/{id}` | 已登录 | — | `StockCheck + items[]` | 404 |
-| POST | `/` | **ADMIN** | `{scope:ALL/SKU/LOCATION/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
+| POST | `/` | **ADMIN** | `{scope:ALL/SKU/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
 | POST | `/{id}/items/{itemId}/count` | **ADMIN** | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
 | **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新(items[].countedQty+=1) | **404 码不在 / 409 状态非 IN_STOCK / 422 码不在本单** |
 | POST | `/{id}/commit` | **ADMIN** | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
@@ -284,6 +284,8 @@
 
 > **权限不对称**(已知):`/scan` 不需 ADMIN,`create/commit/cancel` 需要 ADMIN。PDA 操作员角色(OPERATOR 未来支持)可扫码但不能建/提交单。
 
+> **`scope=LOCATION` 已不能创建(2026-09-21)**:它与「按仓库 + 多选库位」重叠(按仓库只勾一个库位即等价),创建入口已从 Web 与 PDA 移除。**枚举值与读取标签保留** —— 历史单(若生产库有)仍能正确显示「按库位」,不会退化成裸文本。库内实测 `scope='LOCATION'` 为 0 行。
+
 ### 2.12 统一出入库单列表 — `/api/orders`(仅 Web 用)
 
 入库单和出库单 UNION ALL 成一张列表,供 Web「全部」类型下拉使用。
@@ -291,6 +293,8 @@
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误 |
 |---|---|---|---|---|---|
 | GET | `/?beginDate&endDate&keyword&createdBy&status&page&pageSize` | 已登录 | — | `[{id, orderNo, type(IN/OUT), externalNo, partner, remark, createdBy, createdAt, itemCount, totalQuantity, status}]` | — |
+
+> **`keyword` 匹配哪些字段(2026-09-21 起)**:两个分支各自匹配 —— 入库 `单号 / 外部单号 / 备注 / 行级供应商`(供应商用 `EXISTS` 打 `inbound_order_item`,因为单头的 `inbound_order.supplier` 是死列),出库 `单号 / 外部单号 / 备注 / customer`。所以搜索框那句「单号 / 供应商 / 客户 / 外部单号 / 备注」现在与实现一致了(此前供应商与客户都搜不到)。
 
 **`partner` 与 `externalNo` 是两个独立字段(2026-09-21 修正)**:列表上「供应商 / 领用方」那一列取 `partner`,「外部单号」那一列取 `externalNo`。
 

@@ -23,11 +23,13 @@ import com.google.android.material.tabs.TabLayout;
 import com.wms.pda.R;
 import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.Location;
+import com.wms.pda.data.model.Product;
 import com.wms.pda.data.model.StocktakeOrder;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 import com.wms.pda.ui.common.LocationPicker;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -97,25 +99,82 @@ public class StocktakeListActivity extends AppCompatActivity {
         });
     }
 
+    /** 商品多选弹窗(与库位多选同一套:setMultiChoiceItems + 回写计数) */
+    private void showSkuPicker(List<Product> products, Set<String> picked, Runnable onDone) {
+        // 勾选是边点边写进 picked 的,所以「取消」必须还原,否则取消等于确认
+        Set<String> before = new LinkedHashSet<>(picked);
+        String[] labels = new String[products.size()];
+        boolean[] checked = new boolean[products.size()];
+        for (int i = 0; i < products.size(); i++) {
+            Product p = products.get(i);
+            labels[i] = (p.sku == null ? "?" : p.sku) + " · " + (p.name == null ? "" : p.name);
+            checked[i] = p.sku != null && picked.contains(p.sku);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.stocktake_sku_multi_title)
+                .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> {
+                    String sku = products.get(which).sku;
+                    if (sku == null) return;
+                    if (isChecked) picked.add(sku); else picked.remove(sku);
+                })
+                .setPositiveButton(R.string.action_confirm, (d, w) -> onDone.run())
+                .setNegativeButton(R.string.action_cancel, (d, w) -> {
+                    picked.clear();
+                    picked.addAll(before);
+                })
+                .show();
+    }
+
     private void showCreateDialog() {
         View root = LayoutInflater.from(this).inflate(R.layout.dialog_stocktake_new, null, false);
         RadioGroup rgScope = root.findViewById(R.id.rg_scope);
-        RadioButton rbAll = root.findViewById(R.id.rb_scope_all);
         RadioButton rbSku = root.findViewById(R.id.rb_scope_sku);
-        RadioButton rbLoc = root.findViewById(R.id.rb_scope_location);
         RadioButton rbWh = root.findViewById(R.id.rb_scope_warehouse);
-        TextView tvKeywordLabel = root.findViewById(R.id.tv_keyword_label);
-        EditText etKeyword = root.findViewById(R.id.et_keyword);
-        Spinner spLocation = root.findViewById(R.id.sp_location);
+        TextView tvSkuLabel = root.findViewById(R.id.tv_sku_label);
+        TextView tvSkuValue = root.findViewById(R.id.tv_sku_value);
         Spinner spWarehouse = root.findViewById(R.id.sp_warehouse);
         TextView tvWarehouseLabel = root.findViewById(R.id.tv_warehouse_label);
-        TextView tvLocationLabel = root.findViewById(R.id.tv_location_label);
         TextView tvMultiLabel = root.findViewById(R.id.tv_multi_loc_label);
         TextView tvMultiValue = root.findViewById(R.id.tv_multi_loc_value);
         EditText etRemark = root.findViewById(R.id.et_remark);
 
-        // 库位两级选择(仓库 → 库位),见 LocationPicker;数据到达后才能建,故用数组持有
+        // 仓库分组(第二级库位下拉传 null:按仓库盘点只要仓库 + 该仓的库位清单,
+        // 用下面的多选弹窗自己选)。数据到达后才能建,故用数组持有。
         final LocationPicker[] picker = {null};
+
+        // 按 SKU 的**商品多选**:Android 的 Spinner 不支持多选,用 setMultiChoiceItems
+        // (与库位多选同一套)。商品列表第一次点开才拉,不在进弹窗时就请求。
+        final List<Product> products = new ArrayList<>();
+        final Set<String> pickedSkus = new LinkedHashSet<>();
+        final boolean[] skuLoaded = {false};
+        final Runnable paintSkuValue = () -> tvSkuValue.setText(pickedSkus.isEmpty()
+                ? getString(R.string.stocktake_sku_none)
+                : getString(R.string.stocktake_sku_multi_fmt, pickedSkus.size()));
+        tvSkuValue.setOnClickListener(v -> {
+            if (!skuLoaded[0]) {
+                RepositoryProvider.get().listProducts(new WmsCallback<List<Product>>() {
+                    @Override public void onSuccess(List<Product> list) {
+                        products.clear();
+                        if (list != null) products.addAll(list);
+                        skuLoaded[0] = true;
+                        if (products.isEmpty()) {
+                            Toast.makeText(StocktakeListActivity.this, R.string.msg_no_products, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        showSkuPicker(products, pickedSkus, paintSkuValue);
+                    }
+                    @Override public void onError(int code, String msg) {
+                        Toast.makeText(StocktakeListActivity.this, "加载商品失败: " + msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
+                return;
+            }
+            if (products.isEmpty()) {
+                Toast.makeText(this, R.string.msg_no_products, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showSkuPicker(products, pickedSkus, paintSkuValue);
+        });
 
         // 按仓库模式的多选库位:按**仓库**分别记住勾选(切仓库不串),空集 = 整个仓库。
         // 键用仓库 id,「(未分配)」组是 null —— 那个组的库位没有仓库,按仓库盘点用不了。
@@ -131,7 +190,7 @@ public class StocktakeListActivity extends AppCompatActivity {
 
         RepositoryProvider.get().listLocations(new WmsCallback<List<Location>>() {
             @Override public void onSuccess(List<Location> data) {
-                picker[0] = new LocationPicker(spWarehouse, spLocation, data, null);
+                picker[0] = new LocationPicker(spWarehouse, null, data, null);
                 picker[0].setOnGroupChangedListener(() -> paintMultiLoc.run());
             }
             @Override public void onError(int code, String msg) { /* 库位加载失败时留空,提交时校验提示 */ }
@@ -141,7 +200,7 @@ public class StocktakeListActivity extends AppCompatActivity {
             if (picker[0] == null) return;
             List<Location> locs = picker[0].currentGroupLocations();
             if (locs.isEmpty()) {
-                Toast.makeText(this, R.string.stocktake_err_loc_empty, Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.stocktake_err_wh_no_loc, Toast.LENGTH_SHORT).show();
                 return;
             }
             Integer whId = picker[0].getSelectedWarehouseId();
@@ -151,6 +210,8 @@ public class StocktakeListActivity extends AppCompatActivity {
             }
             Set<String> picked = pickedByWh.get(whId);
             if (picked == null) { picked = new LinkedHashSet<>(); pickedByWh.put(whId, picked); }
+            // 勾选是边点边写进 picked 的,所以「取消」必须还原,否则取消等于确认
+            final Set<String> before = new LinkedHashSet<>(picked);
 
             String[] codes = new String[locs.size()];
             String[] labels = new String[locs.size()];
@@ -169,22 +230,22 @@ public class StocktakeListActivity extends AppCompatActivity {
                         if (isChecked) target.add(codes[which]); else target.remove(codes[which]);
                     })
                     .setPositiveButton(R.string.action_confirm, (d, w) -> paintMultiLoc.run())
-                    .setNegativeButton(R.string.action_cancel, null)
+                    .setNegativeButton(R.string.action_cancel, (d, w) -> {
+                        target.clear();
+                        target.addAll(before);
+                    })
                     .show();
         });
 
-        // 盘点方式联动:ALL 无输入 / SKU 文本框 / LOCATION 仓库+单库位 / WAREHOUSE 仓库+多选库位
+        // 盘点方式联动:ALL 无输入 / SKU 选商品 / WAREHOUSE 仓库 + 多选库位
+        // (「按库位」已去掉 —— 按仓库只勾一个库位就等价于它)
         Runnable syncVisibility = () -> {
             boolean sku = rbSku.isChecked();
-            boolean loc = rbLoc.isChecked();
             boolean wh  = rbWh.isChecked();
-            tvKeywordLabel.setVisibility(sku ? View.VISIBLE : View.GONE);
-            etKeyword.setVisibility(sku ? View.VISIBLE : View.GONE);
-            // 两种模式都要先选仓库
-            tvWarehouseLabel.setVisibility((loc || wh) ? View.VISIBLE : View.GONE);
-            spWarehouse.setVisibility((loc || wh) ? View.VISIBLE : View.GONE);
-            tvLocationLabel.setVisibility(loc ? View.VISIBLE : View.GONE);
-            spLocation.setVisibility(loc ? View.VISIBLE : View.GONE);
+            tvSkuLabel.setVisibility(sku ? View.VISIBLE : View.GONE);
+            tvSkuValue.setVisibility(sku ? View.VISIBLE : View.GONE);
+            tvWarehouseLabel.setVisibility(wh ? View.VISIBLE : View.GONE);
+            spWarehouse.setVisibility(wh ? View.VISIBLE : View.GONE);
             tvMultiLabel.setVisibility(wh ? View.VISIBLE : View.GONE);
             tvMultiValue.setVisibility(wh ? View.VISIBLE : View.GONE);
             if (wh) paintMultiLoc.run();
@@ -206,18 +267,10 @@ public class StocktakeListActivity extends AppCompatActivity {
                 Integer warehouseId = null;
                 if (rbSku.isChecked()) {
                     scope = "SKU";
-                    keyword = etKeyword.getText().toString().trim();
+                    // 多选 -> 后端收的仍是逗号分隔串(接口与限额都没变)
+                    keyword = String.join(",", pickedSkus);
                     if (keyword.isEmpty()) {
                         Toast.makeText(this, R.string.stocktake_err_sku_empty, Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                } else if (rbLoc.isChecked()) {
-                    scope = "LOCATION";
-                    // 发给后端的是裸库位码(两级下拉的选中值)
-                    String sel = picker[0] == null ? null : picker[0].getSelectedCode();
-                    keyword = sel == null ? "" : sel;
-                    if (keyword.isEmpty()) {
-                        Toast.makeText(this, R.string.stocktake_err_loc_empty, Toast.LENGTH_SHORT).show();
                         return;
                     }
                 } else if (rbWh.isChecked()) {

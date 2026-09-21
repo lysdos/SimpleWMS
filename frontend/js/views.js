@@ -1435,11 +1435,14 @@ const Views = {
             </div>
         </div>
         <div class="card">
+            <!-- 日期框必须给固定宽:.toolbar 是 flex+wrap,.input 默认 width:100%,
+                 而 flex 换行按"假设主轴尺寸"算(不扣 shrink) -> 每个日期框会独占一整行,
+                 label 被顶上去,四个元素占四行。 -->
             <div class="toolbar">
                 <label style="font-size:13px;color:var(--c-text-3);">${t('orders.begin_label')}</label>
-                <input id="sc-begin" type="date" class="input input-sm" value="${escapeHtml(filter.beginDate||'')}">
+                <input id="sc-begin" type="date" class="input input-sm" style="width:140px;" value="${escapeHtml(filter.beginDate||'')}">
                 <label style="font-size:13px;color:var(--c-text-3);">${t('orders.end_label')}</label>
-                <input id="sc-end" type="date" class="input input-sm" value="${escapeHtml(filter.endDate||'')}">
+                <input id="sc-end" type="date" class="input input-sm" style="width:140px;" value="${escapeHtml(filter.endDate||'')}">
                 <select id="sc-status" class="select" style="width:120px;">
                     <option value=""          ${filter.status===''?'selected':''}>${t('common.all_status')}</option>
                     <option value="DRAFT"     ${filter.status==='DRAFT'?'selected':''}>${t('doc.DRAFT')}</option>
@@ -1487,17 +1490,18 @@ const Views = {
                 <span style="font-size:13px;">${t('stock_check.scope.sku')}</span>
             </label>
             <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;">
-                <input type="radio" name="nsc-scope" value="LOCATION">
-                <span style="font-size:13px;">${t('stock_check.scope.location')}</span>
-            </label>
-            <label class="nsc-scope-opt" style="flex:1;display:flex;align-items:center;gap:6px;padding:10px 12px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;">
                 <input type="radio" name="nsc-scope" value="WAREHOUSE">
                 <span style="font-size:13px;">${t('stock_check.scope.warehouse')}</span>
             </label>
         </div>
-        <div class="form-field" id="nsc-keyword-wrap" style="display:none;">
-            <label id="nsc-keyword-label">${t('stock_check.scope.keyword')}</label>
-            <input id="nsc-keyword" class="input" placeholder="">
+        <!-- 按 SKU:过滤框 + 多选列表(选项由 app.js 拉一次商品填进来)。
+             不再有「按库位」—— 它与「按仓库」重叠(按仓库可多选库位,
+             只选一个就等价于旧的按库位),见 app.js 的 paintScopeUi。 -->
+        <div class="form-field" id="nsc-sku-wrap" style="display:none;">
+            <label>${t('stock_check.scope.sku')}</label>
+            <input id="nsc-sku-filter" class="input" placeholder="${t('stock_check.sku.filter_placeholder')}">
+            <select id="nsc-sku-multi" class="select" multiple size="6" style="width:100%;margin-top:6px;"></select>
+            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.sku.multi_hint')}</div>
         </div>
         <div class="form-field" id="nsc-warehouse-wrap" style="display:none;">
             <label>${t('stock_check.scope.warehouse')}</label>
@@ -1689,17 +1693,22 @@ const Views = {
             </div>
         </div>
         <div class="card">
-            <div class="toolbar">
-                <input id="inv-kw" class="input input-sm" placeholder="${t('inventory.kw_placeholder')}" value="${escapeHtml(state.inventoryKw||'')}" style="width:200px;">
-                <select id="inv-wh" class="select" style="width:150px;">
+            <!-- 这一行的宽度预算是硬的:.view 上限 1280 - 两侧 padding 48 - card 44 = 1186px。
+                 原来 7 个固定宽控件合计 1223px,gap 再加 110px -> 超 147px,于是在
+                 「查询/重置」之间断行、重置被甩到第二行。现在:关键词框改弹性吸收余量,
+                 其余收窄、并把这一行的 gap 从 10 收到 8(只影响本行,不动全局 .toolbar)。
+                 实测 .view >= 1166 时整行不换行;再窄只会把「导出 CSV」挤下去。 -->
+            <div class="toolbar" style="gap:8px;">
+                <input id="inv-kw" class="input input-sm" placeholder="${t('inventory.kw_placeholder')}" value="${escapeHtml(state.inventoryKw||'')}" style="flex:1;min-width:90px;max-width:260px;">
+                <select id="inv-wh" class="select" style="width:100px;">
                     <option value="">${t('location.warehouse.all')}</option>
                     ${whOpts}
                 </select>
-                <select id="inv-loc" class="select" style="width:160px;">
+                <select id="inv-loc" class="select" style="width:130px;">
                     <option value="">${t('inventory.loc_all')}</option>
                     ${locOpts}
                 </select>
-                <select id="inv-status" class="select" style="width:120px;">
+                <select id="inv-status" class="select" style="width:100px;">
                     <option value=""            ${state.inventoryStatus===''?'selected':''}>${t('common.all')}</option>
                     <option value="IN_STOCK"    ${state.inventoryStatus==='IN_STOCK'?'selected':''}>${t('inventory.status.IN_STOCK')}</option>
                     <option value="PENDING"     ${state.inventoryStatus==='PENDING'?'selected':''}>${t('inventory.status.PENDING')}</option>
@@ -1708,14 +1717,14 @@ const Views = {
                     <option value="SCRAPPED"    ${state.inventoryStatus==='SCRAPPED'?'selected':''}>${t('inventory.status.SCRAPPED')}</option>
                     <option value="TRANSFERRED" ${state.inventoryStatus==='TRANSFERRED'?'selected':''}>${t('inventory.status.TRANSFERRED')}</option>
                 </select>
-                <select id="inv-expiry" class="select" style="width:120px;">
+                <select id="inv-expiry" class="select" style="width:100px;">
                     <option value=""          ${!state.inventoryExpiryStatus?'selected':''}>${t('inventory.expiry.all')}</option>
                     <option value="EXPIRING"  ${state.inventoryExpiryStatus==='EXPIRING'?'selected':''}>${t('inventory.expiry.expiring')}</option>
                     <option value="EXPIRED"   ${state.inventoryExpiryStatus==='EXPIRED'?'selected':''}>${t('inventory.expiry.expired')}</option>
                 </select>
-                <input type="date" id="inv-expiry-from" class="input input-sm" style="width:140px;" value="${escapeHtml(state.inventoryExpiryFrom||'')}" title="${t('inventory.expiry.from')}">
+                <input type="date" id="inv-expiry-from" class="input input-sm" style="width:130px;" value="${escapeHtml(state.inventoryExpiryFrom||'')}" title="${t('inventory.expiry.from')}">
                 <span style="color:var(--c-text-3);">~</span>
-                <input type="date" id="inv-expiry-to" class="input input-sm" style="width:140px;" value="${escapeHtml(state.inventoryExpiryTo||'')}" title="${t('inventory.expiry.to')}">
+                <input type="date" id="inv-expiry-to" class="input input-sm" style="width:130px;" value="${escapeHtml(state.inventoryExpiryTo||'')}" title="${t('inventory.expiry.to')}">
                 <button class="btn btn-sm btn-primary" onclick="searchInventory()">${t('common.query')}</button>
                 <button class="btn btn-sm" onclick="resetInventoryFilter()">${t('common.reset')}</button>
                 <span style="flex:1;"></span>

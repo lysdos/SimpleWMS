@@ -141,12 +141,16 @@ public final class LocationPicker {
     }
 
     private void fillLocations(String groupKey) {
-        Context ctx = spLocation.getContext();
+        Context ctx = spWarehouse.getContext();
         current = (groupKey == null || !groups.containsKey(groupKey))
                 ? new ArrayList<>() : new ArrayList<>(groups.get(groupKey));
         // 「不指定」放最前,item 为 null —— getSelectedLocation() 会返回 null,
         // 调用方据此发空库位(后端回落到商品默认库位)
         if (allowNone) current.add(0, null);
+
+        // 第二级下拉可以为 null:「按仓库」盘点只要仓库 + 该仓的库位清单
+        // (用 currentGroupLocations() 自己弹多选),不需要单个库位下拉。
+        if (spLocation == null) return;
 
         List<String> labels = new ArrayList<>(current.size());
         for (Location l : current) {
@@ -166,6 +170,7 @@ public final class LocationPicker {
 
     /** 当前选中的库位;没有可选库位、或选中「不指定」时返回 null */
     public Location getSelectedLocation() {
+        if (spLocation == null) return null;
         int pos = spLocation.getSelectedItemPosition();
         if (pos < 0 || pos >= current.size()) return null;
         return current.get(pos);
@@ -206,7 +211,7 @@ public final class LocationPicker {
      * 找不到(库位已删)就不动,保持当前选择 —— 不猜。
      */
     public void select(String code) {
-        if (code == null || code.isEmpty()) return;
+        if (code == null || code.isEmpty() || spLocation == null) return;
         List<String> keys = new ArrayList<>(groups.keySet());
         for (int gi = 0; gi < keys.size(); gi++) {
             List<Location> locs = groups.get(keys.get(gi));

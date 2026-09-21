@@ -306,7 +306,7 @@ CREATE TABLE IF NOT EXISTS inventory_log (
 CREATE TABLE IF NOT EXISTS stock_check (
     id              INT NOT NULL AUTO_INCREMENT COMMENT '主键',
     check_no        VARCHAR(64) NOT NULL COMMENT '盘点单号(唯一,格式 CK-yyyyMMddHHmmss-序号)',
-    scope           VARCHAR(16) NOT NULL DEFAULT 'ALL' COMMENT '盘点范围:ALL=全部在库 / SKU=按SKU / LOCATION=按单个库位 / WAREHOUSE=按仓库(可限定该仓下的若干库位)',
+    scope           VARCHAR(16) NOT NULL DEFAULT 'ALL' COMMENT '盘点范围:ALL=全部在库 / SKU=按SKU / LOCATION=按单个库位(创建入口已移除,仅为读取历史单保留) / WAREHOUSE=按仓库(可限定该仓下的若干库位)',
     scope_keyword   VARCHAR(512) DEFAULT NULL COMMENT '范围关键字(scope=SKU 时为多 SKU;LOCATION 时为库位编码;WAREHOUSE 时为**人读的范围描述**,如"主仓库 / A-01-01 / B-01-01",未限定库位则只是仓库名 —— 该模式不解析此列,只用于展示。输入上限 500 字符)',
     remark          VARCHAR(255) DEFAULT NULL COMMENT '备注',
     created_by      VARCHAR(64) NOT NULL COMMENT '创建人',

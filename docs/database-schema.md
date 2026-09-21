@@ -220,7 +220,7 @@ UNIQUE(product_id, supplier_id)
 |---|---|---|
 | id | INT | PK |
 | check_no | VARCHAR(64) | NOT NULL UNIQUE |
-| scope | VARCHAR(16) | `ALL` / `SKU` / `LOCATION` / `WAREHOUSE` |
+| scope | VARCHAR(16) | `ALL` / `SKU` / `LOCATION` / `WAREHOUSE`;`LOCATION`（按单个库位）**创建入口已移除**（与「按仓库 + 多选库位」重叠），仅为读取历史数据保留 |
 | scope_keyword | VARCHAR(512) | SKU 模式=多个 SKU;LOCATION=库位编码;WAREHOUSE=**人读的范围描述**(如 `主仓库 / A-01-01 / B-01-01`,未限定库位则只是仓库名,不解析) |
 | remark | VARCHAR(255) | |
 | created_by | VARCHAR(64) | 创建人 |

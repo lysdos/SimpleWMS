@@ -310,16 +310,18 @@ function gotoStockCheckPage(p) {
 
 function openNewStockCheckModal() {
     showModal(t('stock_check.modal.title.new'), Views.newStockCheckForm(), async () => {
-        const scope   = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
-        const kwInput = document.getElementById('nsc-keyword');
-        const sel     = document.getElementById('nsc-location-select');
-        const whSel   = document.getElementById('nsc-warehouse-select');
-        const locMulti= document.getElementById('nsc-location-multi');
+        const scope    = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
+        const skuMulti = document.getElementById('nsc-sku-multi');
+        const whSel    = document.getElementById('nsc-warehouse-select');
+        const locMulti = document.getElementById('nsc-location-multi');
         let keyword = '';
         let warehouseId = null;
-        if (scope === 'SKU')           keyword = (kwInput.value || '').trim();
-        else if (scope === 'LOCATION') keyword = sel ? sel.value : '';
-        else if (scope === 'WAREHOUSE') {
+        if (scope === 'SKU') {
+            // 多选下拉 -> 后端收的仍是逗号分隔串(接口没变,限额也没变)
+            keyword = skuMulti
+                ? Array.from(skuMulti.selectedOptions).map(o => o.value).join(',')
+                : '';
+        } else if (scope === 'WAREHOUSE') {
             warehouseId = (whSel && whSel.value) ? Number(whSel.value) : null;
             // 不勾库位 = 空关键字,后端按"整个仓库"处理
             keyword = locMulti
@@ -330,10 +332,6 @@ function openNewStockCheckModal() {
 
         if (scope === 'SKU' && !keyword) {
             toast(t('stock_check.err.sku_empty'), 'error');
-            return false;
-        }
-        if (scope === 'LOCATION' && !keyword) {
-            toast(t('stock_check.err.loc_empty'), 'error');
             return false;
         }
         if (scope === 'WAREHOUSE' && !warehouseId) {
@@ -349,12 +347,44 @@ function openNewStockCheckModal() {
         } catch (e) { toast(e.message, 'error'); return false; }
     });
 
-    // 模式 radio 联动:ALL 无输入 / SKU 文本框 / LOCATION 单个库位下拉 /
-    // WAREHOUSE 仓库下拉 + 库位多选(不勾 = 整个仓库)
+    // 模式 radio 联动:ALL 无输入 / SKU 过滤框+多选下拉 / WAREHOUSE 仓库下拉+库位多选(不勾 = 整个仓库)
     const radios   = document.querySelectorAll('input[name="nsc-scope"]');
-    const wrap     = document.getElementById('nsc-keyword-wrap');
+    const skuWrap  = document.getElementById('nsc-sku-wrap');
     const whWrap   = document.getElementById('nsc-warehouse-wrap');
-    const kwInput  = document.getElementById('nsc-keyword');
+    let skuCache   = null;   // 商品列表只在弹窗存活期间拉一次
+    let skuLoading = false;
+
+    /** 过滤:只切选项的显隐,不重渲染 —— 重渲染会把已勾选的项丢掉 */
+    function paintSkuFilter() {
+        const multi = document.getElementById('nsc-sku-multi');
+        const box   = document.getElementById('nsc-sku-filter');
+        if (!multi) return;
+        const kw = (box && box.value ? box.value : '').trim().toLowerCase();
+        Array.from(multi.options).forEach(o => {
+            const hit = !kw || o.text.toLowerCase().includes(kw);
+            o.hidden = !hit;
+            o.style.display = hit ? '' : 'none';   // 保险:有的浏览器只看 style
+        });
+    }
+
+    function fillSkuOptions() {
+        const multi = document.getElementById('nsc-sku-multi');
+        if (!multi) return;
+        multi.innerHTML = (skuCache || []).map(p =>
+            `<option value="${escapeHtml(p.sku)}">${escapeHtml(p.sku)} · ${escapeHtml(p.name || '')}</option>`).join('');
+        const box = document.getElementById('nsc-sku-filter');
+        if (box) box.oninput = paintSkuFilter;
+    }
+
+    function ensureSkuList() {
+        // 只填一次:选项不依赖别的状态,而**重填会清掉用户已勾选的 SKU**
+        // (切到「按仓库」再切回来就会走这里)。在飞的那次也别重复发请求。
+        if (skuCache || skuLoading) return;
+        skuLoading = true;
+        api.get('/api/products')
+           .then(list => { skuCache = list || []; skuLoading = false; fillSkuOptions(); })
+           .catch(e => { skuLoading = false; toast(e.message, 'error'); });
+    }
 
     function paintScopeUi() {
         const cur = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
@@ -364,33 +394,11 @@ function openNewStockCheckModal() {
             el.style.borderColor = (v === cur) ? 'var(--c-primary)' : 'var(--divider)';
             el.style.background  = (v === cur) ? '#E8F0FF' : 'transparent';
         });
-        whWrap.style.display = (cur === 'WAREHOUSE') ? '' : 'none';
-        if (cur === 'ALL') {
-            wrap.style.display = 'none';
-            kwInput.value = '';
-        } else if (cur === 'SKU') {
-            wrap.style.display = '';
-            // 文字输入框
-            wrap.innerHTML = `
-                <label id="nsc-keyword-label">${t('stock_check.scope.sku')}</label>
-                <input id="nsc-keyword" class="input" placeholder="${t('stock_check.kw.sku')}">
-            `;
-        } else if (cur === 'LOCATION') {
-            wrap.style.display = '';
-            // 库位下拉(按所属仓库分组)
-            api.get('/api/locations').then(locs => {
-                const opts = Views.locationOptgroups(locs, l =>
-                    `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)} · ${escapeHtml(l.name)}</option>`);
-                wrap.innerHTML = `
-                    <label id="nsc-keyword-label">${t('stock_check.scope.location')}</label>
-                    <select id="nsc-location-select" class="select" style="width:100%;">
-                        <option value="">-- ${t('stock_check.kw.location')} --</option>
-                        ${opts}
-                    </select>
-                `;
-            }).catch(e => toast(e.message, 'error'));
+        whWrap.style.display  = (cur === 'WAREHOUSE') ? '' : 'none';
+        skuWrap.style.display = (cur === 'SKU') ? '' : 'none';
+        if (cur === 'SKU') {
+            ensureSkuList();
         } else if (cur === 'WAREHOUSE') {
-            wrap.style.display = 'none';
             // 仓库下拉 + 库位多选(库位跟着所选仓库联动)。
             // 这里单独拉一次 /api/locations 而不是用 state.locations —— 后者会被库位管理页
             // 的筛选结果改写,勾选项会莫名缺一块(见 state.locMap 那段注释)。
@@ -496,6 +504,12 @@ async function openStockCheckDetail(id) {
         }
         const commitBtn = document.getElementById('sc-commit-btn');
         if (commitBtn) commitBtn.onclick = async () => {
+            // 提交前确认:未盘行会按 0 计入盘亏且不可逆。PDA 那边一直有这个确认,Web 之前没有。
+            // 每行「保存」后会重拉整张单(见本函数末尾的 sci-save 处理),所以这里的 c 是最新的。
+            const remain = Math.max(0, (c.totalCount || 0) - (c.countedCount || 0));
+            if (!confirm(remain > 0
+                    ? t('stock_check.confirm.submit_unfinished', { n: remain })
+                    : t('stock_check.confirm.submit_all'))) return;
             try {
                 const updated = await api.post(`/api/stock-checks/${c.id}/commit`);
                 toast(t('stock_check.btn.committed_diff', { n: updated.diffCount }), 'success');

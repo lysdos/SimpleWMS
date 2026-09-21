@@ -44,14 +44,6 @@
                 android:textColor="@color/text_primary" />
 
             <RadioButton
-                android:id="@+id/rb_scope_location"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="@dimen/touch_min"
-                android:text="@string/stocktake_scope_location"
-                android:textColor="@color/text_primary" />
-
-            <RadioButton
                 android:id="@+id/rb_scope_warehouse"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -61,7 +53,7 @@
         </RadioGroup>
 
         <TextView
-            android:id="@+id/tv_keyword_label"
+            android:id="@+id/tv_sku_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_md"
@@ -69,18 +61,18 @@
             android:visibility="gone"
             style="@style/Text.Caption" />
 
-        <EditText
-            android:id="@+id/et_keyword"
+        <!-- 点它弹多选(Android 的 Spinner 不支持多选,与库位多选一样用 setMultiChoiceItems) -->
+        <TextView
+            android:id="@+id/tv_sku_value"
             android:layout_width="match_parent"
             android:layout_height="@dimen/touch_min"
             android:layout_marginTop="@dimen/space_xs"
             android:background="@drawable/bg_input"
+            android:gravity="center_vertical"
             android:paddingStart="@dimen/space_md"
             android:paddingEnd="@dimen/space_md"
-            android:hint="@string/stocktake_sku_hint"
+            android:text="@string/stocktake_sku_none"
             android:textColor="@color/text_primary"
-            android:textColorHint="@color/text_hint"
-            android:inputType="text"
             android:visibility="gone" />
 
         <TextView
@@ -94,23 +86,6 @@
 
         <Spinner
             android:id="@+id/sp_warehouse"
-            android:layout_width="match_parent"
-            android:layout_height="@dimen/touch_min"
-            android:layout_marginTop="@dimen/space_xs"
-            android:background="@drawable/bg_input"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/tv_location_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/space_md"
-            android:text="@string/stocktake_scope_location"
-            android:visibility="gone"
-            style="@style/Text.Caption" />
-
-        <Spinner
-            android:id="@+id/sp_location"
             android:layout_width="match_parent"
             android:layout_height="@dimen/touch_min"
             android:layout_marginTop="@dimen/space_xs"

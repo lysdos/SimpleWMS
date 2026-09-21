@@ -110,6 +110,8 @@
     <string name="inventory_location">库位</string>
     <string name="inventory_expiry_fmt">效期: %1$s</string>
     <string name="inventory_expiry_none">效期: —</string>
+    <string name="inventory_expiry_expiring_fmt">效期: %1$s · 临期 %2$d天</string>
+    <string name="inventory_expiry_expired_fmt">效期: %1$s · 已过期</string>
     <string name="transfer_title">库存调拨</string>
     <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
@@ -127,7 +129,6 @@
     <string name="stocktake_scope">盘点方式</string>
     <string name="stocktake_scope_all">全部在库单元</string>
     <string name="stocktake_scope_sku">按 SKU</string>
-    <string name="stocktake_scope_location">按库位</string>
     <string name="stocktake_scope_warehouse">按仓库</string>
     <string name="stocktake_warehouse_label">仓库</string>
     <string name="stocktake_multi_loc_label">限定库位(可多选)</string>
@@ -135,11 +136,13 @@
     <string name="stocktake_multi_loc_title">选择库位(可多选)</string>
     <string name="stocktake_multi_loc_fmt">已选 %1$d 个库位</string>
     <string name="stocktake_sku_label">SKU</string>
-    <string name="stocktake_sku_hint">输入 SKU,多个用逗号分隔(最多 50 个)</string>
+    <string name="stocktake_sku_none">点此选择商品(可多选)</string>
+    <string name="stocktake_sku_multi_title">选择商品(可多选)</string>
+    <string name="stocktake_sku_multi_fmt">已选 %1$d 个 SKU</string>
     <string name="stocktake_remark">备注</string>
     <string name="stocktake_remark_hint">例如:月末大盘点</string>
-    <string name="stocktake_err_sku_empty">请输入 SKU 关键字</string>
-    <string name="stocktake_err_loc_empty">请选择库位</string>
+    <string name="stocktake_err_sku_empty">请选择至少一个商品</string>
+    <string name="stocktake_err_wh_no_loc">该仓库下没有可用库位</string>
     <string name="stocktake_err_warehouse_empty">请选择仓库(未分配仓库的库位不能按仓库盘点)</string>
     <string name="stocktake_actual_qty">实盘数量</string>
     <string name="stocktake_book_qty">账面数量</string>
@@ -160,7 +163,7 @@
     <string name="action_stop">停止</string>
     <string name="stocktake_row_delete">删除</string>
     <string name="stocktake_row_delete_confirm">删除该盘点行(%1$s)?删除后可重新扫码记盘盈。</string>
-    <string name="stocktake_submit_confirm_all">确认提交盘点结果?提交后将生成差异报告(不调整库存),未盘行按 0 计入盘亏。</string>
+    <string name="stocktake_submit_confirm_all">确认提交盘点结果?提交后本单定格为只读(不调整库存),差异可继续导出 CSV。</string>
     <string name="stocktake_line_fmt">%1$s · %2$s · %3$s</string>
 
     <!-- 详情页通用 -->

@@ -156,7 +156,7 @@ PDA 端 (StockCheckActivity)               Backend
     │                                        │
     │ 1. 选/建盘点单                          │
     │ POST /api/stock-checks                  │
-    │ {scope:ALL/SKU/LOCATION, keyword}      │
+    │ {scope:ALL/SKU/WAREHOUSE, keyword}      │
     │ ───────────────────────────────────>  │
     │   后端:                                    │
     │   - 快照当前所有 IN_STOCK 单元到        │

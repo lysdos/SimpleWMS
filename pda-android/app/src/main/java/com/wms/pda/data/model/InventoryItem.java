@@ -16,6 +16,7 @@ public class InventoryItem {
     public Integer remaining;   // 当前剩余 = onHand
     public String status;        // IN_STOCK / OUT / SCRAPPED / TRANSFERRED
     public String expiryDate;    // 到期日 yyyy-MM-dd(可空)
+    public Integer expiryWarnDays; // 临期预警天数(可空=按 30 天)
     public Integer inboundOrderId;
     public Integer outboundOrderId;
     public String createdBy;

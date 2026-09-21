@@ -169,6 +169,9 @@ public class StockCheckController {
         sb.append("差异数,").append(c.getDiffCount()).append('\n');
         // 盘盈/盘亏件数:从明细现算(不落库、不加列)。口径:盘盈 = 实盘-账面 之和;
         // 盘亏 = 账面-实盘 之和,未盘行按实盘 0 计入 —— 与 filter=short 的口径一致。
+        //
+        // ⚠️ 上面三行(明细总数/已盘数/差异数)是**行数**,这两行是**件数**:老数据一个单元
+        //    remaining>1 时一个 code 算多件,两者会不等,别混着读。标签上不加单位,保持简洁。
         int overQty = 0, shortQty = 0;
         for (StockCheckItem it : over) {
             overQty += (it.getCountedQty() == null ? 0 : it.getCountedQty())
@@ -181,8 +184,8 @@ public class StockCheckController {
                           - (it.getCountedQty() == null ? 0 : it.getCountedQty());
             }
         }
-        sb.append("盘盈数(件),").append(overQty).append('\n');
-        sb.append("盘亏数(件),").append(shortQty).append('\n');
+        sb.append("盘盈数,").append(overQty).append('\n');
+        sb.append("盘亏数,").append(shortQty).append('\n');
         sb.append("导出范围,").append(csv(onlyOver ? "仅盘盈" : onlyShort ? "仅盘亏" : "全部")).append("\n\n");
 
         if (onlyOver) {
