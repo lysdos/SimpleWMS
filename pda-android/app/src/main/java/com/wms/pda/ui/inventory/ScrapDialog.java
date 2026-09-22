@@ -36,11 +36,13 @@ final class ScrapDialog {
                     RepositoryProvider.get().scrap(item.id, reason,
                             new WmsCallback<Void>() {
                                 @Override public void onSuccess(Void v) {
-                                    Toast.makeText(ctx, "已报废 " + (item.sku == null ? "" : item.sku), Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ctx, ctx.getString(R.string.scrap_done_fmt,
+                                            item.sku == null ? "" : item.sku), Toast.LENGTH_SHORT).show();
                                     if (onDone != null) onDone.run();
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(ctx, "报废失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ctx, ctx.getString(R.string.msg_scrap_failed, msg),
+                                            Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })

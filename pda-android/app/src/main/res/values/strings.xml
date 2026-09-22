@@ -170,11 +170,16 @@
     <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
     <string name="transfer_qty">调拨数量</string>
+    <string name="transfer_no_other_location">没有其他可用库位,请先在 PC 端维护库位</string>
+    <!-- 弹窗里的信息行:SKU · 码 + 换行 + 这一行。%1$s 是当前库位码,空值由调用方换成 — -->
+    <string name="transfer_current_location_fmt">\n当前库位: %1$s</string>
+    <string name="transfer_done_fmt">已调拨到 %1$s</string>
     <!-- 两级库位选择:未分配仓库的库位归入这一组。必须保留,否则这些库位在 PDA 上选不到 -->
     <string name="location_warehouse_unassigned">(未分配)</string>
     <string name="scrap_title">库存报废</string>
     <string name="scrap_reason_label">报废原因(可选)</string>
     <string name="scrap_reason_hint">例如:过期 / 损坏 / 测试报废 ...</string>
+    <string name="scrap_done_fmt">已报废 %1$s</string>
 
     <!-- 盘点 -->
     <string name="stocktake_title">库存盘点</string>
@@ -313,6 +318,22 @@
     <string name="scan_progress_fmt">已扫描 %1$d / %2$d 件</string>
     <string name="codes_count_fmt">24 位码: %1$d 个</string>
     <string name="codes_more_fmt">…(+%1$d)</string>
+
+    <!--
+      弹窗与各页面写死的提示语。原先散在各 Java 里,其中「保存失败」在入库明细、出库明细、
+      编辑入库单头、编辑出库单头四处各写了一遍,现在共用一句。
+    -->
+    <string name="msg_save_failed">保存失败: %1$s</string>
+    <string name="msg_added">已添加</string>
+    <string name="msg_add_failed">添加失败: %1$s</string>
+    <string name="msg_load_locations_failed">加载库位失败: %1$s</string>
+    <string name="msg_transfer_failed">调拨失败: %1$s</string>
+    <string name="msg_scrap_failed">报废失败: %1$s</string>
+
+    <!-- 入参校验提示(入库/出库明细弹窗共用同一套) -->
+    <string name="err_product_missing_id">该商品缺少 ID,请刷新重试</string>
+    <string name="err_qty_invalid">请输入有效数量</string>
+    <string name="err_qty_positive">数量必须大于 0</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">已退出登录</string>

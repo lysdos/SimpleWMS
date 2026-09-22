@@ -226,13 +226,13 @@ final class AddInboundItemDialog {
                 return;
             }
             if (productId == null) {
-                Toast.makeText(ctx, "该商品缺少 ID,请刷新重试", Toast.LENGTH_SHORT).show();
+                Toast.makeText(ctx, R.string.err_product_missing_id, Toast.LENGTH_SHORT).show();
                 return;
             }
             int qty;
             try { qty = Integer.parseInt(etQty.getText().toString().trim()); }
-            catch (Exception ex) { Toast.makeText(ctx, "请输入有效数量", Toast.LENGTH_SHORT).show(); return; }
-            if (qty <= 0) { Toast.makeText(ctx, "数量必须大于 0", Toast.LENGTH_SHORT).show(); return; }
+            catch (Exception ex) { Toast.makeText(ctx, R.string.err_qty_invalid, Toast.LENGTH_SHORT).show(); return; }
+            if (qty <= 0) { Toast.makeText(ctx, R.string.err_qty_positive, Toast.LENGTH_SHORT).show(); return; }
 
             int sIdx = spSupplier.getSelectedItemPosition();
             String supplier = (sIdx > 0 && sIdx < supplierLabels.size()) ? supplierLabels.get(sIdx) : null;
@@ -247,12 +247,12 @@ final class AddInboundItemDialog {
             String orderId = String.valueOf(orderDbId);
             WmsCallback<InboundOrder> cb = new WmsCallback<InboundOrder>() {
                 @Override public void onSuccess(InboundOrder o) {
-                    Toast.makeText(ctx, "已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ctx, R.string.msg_saved, Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
                     if (onDone != null) onDone.run();
                 }
                 @Override public void onError(int code, String msg) {
-                    Toast.makeText(ctx, "保存失败: " + msg, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ctx, ctx.getString(R.string.msg_save_failed, msg), Toast.LENGTH_SHORT).show();
                 }
             };
 

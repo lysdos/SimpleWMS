@@ -165,10 +165,16 @@
     <string name="transfer_target_label">Target location</string>
     <string name="transfer_target_warehouse">Target warehouse</string>
     <string name="transfer_qty">Quantity</string>
+    <string name="transfer_no_other_location">No other location available — set up locations on the PC first</string>
+    <!-- Info line in the dialog: "SKU · code" then a newline then this line. %1$s is the current
+         location code; the caller substitutes — (em dash) when it is empty. -->
+    <string name="transfer_current_location_fmt">\nCurrent location: %1$s</string>
+    <string name="transfer_done_fmt">Transferred to %1$s</string>
     <string name="location_warehouse_unassigned">(unassigned)</string>
     <string name="scrap_title">Scrap stock</string>
     <string name="scrap_reason_label">Reason (optional)</string>
     <string name="scrap_reason_hint">e.g. expired / damaged / test scrap</string>
+    <string name="scrap_done_fmt">Scrapped %1$s</string>
 
     <!-- 盘点 -->
     <string name="stocktake_title">Stock check</string>
@@ -290,6 +296,22 @@
     <string name="scan_progress_fmt">Scanned %1$d / %2$d</string>
     <string name="codes_count_fmt">24-digit codes: %1$d</string>
     <string name="codes_more_fmt">…(+%1$d)</string>
+
+    <!--
+      Toasts hardcoded in the dialogs and list/new pages. "Save failed" was written out four
+      times (inbound line, outbound line, edit inbound header, edit outbound header) — one key now.
+    -->
+    <string name="msg_save_failed">Save failed: %1$s</string>
+    <string name="msg_added">Added</string>
+    <string name="msg_add_failed">Add failed: %1$s</string>
+    <string name="msg_load_locations_failed">Failed to load locations: %1$s</string>
+    <string name="msg_transfer_failed">Transfer failed: %1$s</string>
+    <string name="msg_scrap_failed">Scrap failed: %1$s</string>
+
+    <!-- Field validation, shared by the inbound/outbound line dialogs -->
+    <string name="err_product_missing_id">This product has no ID — refresh and retry</string>
+    <string name="err_qty_invalid">Enter a valid quantity</string>
+    <string name="err_qty_positive">Quantity must be greater than 0</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">Logged out</string>
