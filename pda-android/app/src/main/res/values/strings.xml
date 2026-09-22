@@ -34,7 +34,13 @@
     <string name="login_server">服务器</string>
     <string name="login_server_hint">点击右上角设置服务器</string>
     <string name="login_button">登录</string>
+    <!-- 输入框的示例/可选提示(原先写死在各个布局里) -->
+    <string name="ph_external_no_in">如:PO-2026-001</string>
+    <string name="ph_external_no_out">如:OUT-2026-001</string>
+    <string name="ph_customer_dept">如:生产线 A / 工程部</string>
+    <string name="ph_optional">可选</string>
     <string name="login_remember">记住账号</string>
+    <string name="login_username_hint">操作员账号</string>
 
     <!-- 设置 -->
     <string name="settings_title">服务器设置</string>
@@ -173,6 +179,18 @@
     <string name="stocktake_scope_all">全部在库单元</string>
     <string name="stocktake_scope_sku">按 SKU</string>
     <string name="stocktake_scope_warehouse">按仓库</string>
+    <!-- 创建入口已移除,只用于**读历史单**(与 web 端口径一致,别删) -->
+    <string name="stocktake_scope_location">按库位</string>
+    <!-- 列表卡片与详情页上的那几行。原先是 Java 里把中文和值拼起来(如 "方式 · " + 值),
+         只翻值会变成"方式 · All in-stock units",所以整行做成带占位符的资源。 -->
+    <string name="stocktake_mode_fmt">方式 · %1$s</string>
+    <string name="stocktake_range_fmt">范围 · %1$s</string>
+    <string name="stocktake_detail_mode_fmt">盘点方式: %1$s</string>
+    <string name="stocktake_detail_range_fmt">盘点范围: %1$s</string>
+    <string name="created_by_fmt">创建人: %1$s</string>
+    <string name="stocktake_card_rows_ok">%1$d 行 · 无差异</string>
+    <string name="stocktake_card_rows_diff">%1$d 行 · 差异 %2$d</string>
+    <string name="stocktake_card_rows_scanned">%1$d 行 · 已扫 %2$d 行</string>
     <string name="stocktake_warehouse_label">仓库</string>
     <string name="stocktake_multi_loc_label">限定库位(可多选)</string>
     <string name="stocktake_multi_loc_all">全部库位(点此选择)</string>

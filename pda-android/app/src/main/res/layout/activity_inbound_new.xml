@@ -39,7 +39,7 @@
                 android:background="@drawable/bg_input"
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
-                android:hint="如:PO-2026-001"
+                android:hint="@string/ph_external_no_in"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_hint"
                 android:inputType="text" />
@@ -58,7 +58,7 @@
                 android:background="@drawable/bg_input"
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
-                android:hint="可选"
+                android:hint="@string/ph_optional"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_hint"
                 android:inputType="text" />

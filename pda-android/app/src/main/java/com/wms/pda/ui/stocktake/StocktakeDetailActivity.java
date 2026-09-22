@@ -381,15 +381,16 @@ public class StocktakeDetailActivity extends AppCompatActivity {
 
         tvId.setText(o.id);
         StatusPill.apply(tvStatus, o.status);
+        // 范围/方式共用 StocktakeLabels 那一处映射(原先这里和列表卡片各抄一份中文)
         String kw = (o.scopeKeyword == null || o.scopeKeyword.isEmpty()) ? "—" : o.scopeKeyword;
-        tvScope.setText("盘点范围: " + kw);
-        String scopeLabel = "ALL".equals(o.scope) ? "全部在库单元"
-                : "SKU".equals(o.scope) ? "按SKU"
-                : "LOCATION".equals(o.scope) ? "按库位"
-                : "WAREHOUSE".equals(o.scope) ? "按仓库"
-                : (o.scope == null ? "—" : o.scope);
-        tvMode.setText("盘点方式: " + scopeLabel);
-        tvOperator.setText("创建人: " + (o.createdBy == null ? "—" : o.createdBy));
+        tvScope.setText(getString(R.string.stocktake_detail_range_fmt, kw));
+        int scopeRes = StocktakeLabels.scopeRes(o.scope);
+        String scopeLabel = scopeRes == 0
+                ? (o.scope == null ? "—" : o.scope)
+                : getString(scopeRes);
+        tvMode.setText(getString(R.string.stocktake_detail_mode_fmt, scopeLabel));
+        tvOperator.setText(getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
         // 后端给的是 ISO(yyyy-MM-ddTHH:mm:ss),详情页保留到秒,只把 T 换成空格
         tvCreated.setText(getString(R.string.created_at_fmt,
                 o.createdAt == null ? "—" : o.createdAt.replace("T", " ")));

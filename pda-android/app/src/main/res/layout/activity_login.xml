@@ -145,7 +145,7 @@
                 android:background="@drawable/bg_input"
                 android:paddingStart="@dimen/space_md"
                 android:paddingEnd="@dimen/space_md"
-                android:hint="操作员账号"
+                android:hint="@string/login_username_hint"
                 android:textColor="@color/text_primary"
                 android:textColorHint="@color/text_hint"
                 android:textSize="@dimen/text_body"

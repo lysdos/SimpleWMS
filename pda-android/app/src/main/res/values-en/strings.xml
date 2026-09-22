@@ -42,6 +42,11 @@
     <string name="login_server_hint">Tap the gear at top right to set the server</string>
     <string name="login_button">Log in</string>
     <string name="login_remember">Remember account</string>
+    <string name="login_username_hint">Operator account</string>
+    <string name="ph_external_no_in">e.g. PO-2026-001</string>
+    <string name="ph_external_no_out">e.g. OUT-2026-001</string>
+    <string name="ph_customer_dept">e.g. Line A / Engineering</string>
+    <string name="ph_optional">Optional</string>
 
     <!-- 设置 -->
     <string name="settings_title">Server Settings</string>
@@ -168,6 +173,15 @@
     <string name="stocktake_scope_all">All in-stock units</string>
     <string name="stocktake_scope_sku">By SKU</string>
     <string name="stocktake_scope_warehouse">By warehouse</string>
+    <string name="stocktake_scope_location">By location</string>
+    <string name="stocktake_mode_fmt">Scope · %1$s</string>
+    <string name="stocktake_range_fmt">Range · %1$s</string>
+    <string name="stocktake_detail_mode_fmt">Scope: %1$s</string>
+    <string name="stocktake_detail_range_fmt">Range: %1$s</string>
+    <string name="created_by_fmt">Created by: %1$s</string>
+    <string name="stocktake_card_rows_ok">%1$d lines · no variance</string>
+    <string name="stocktake_card_rows_diff">%1$d lines · %2$d variances</string>
+    <string name="stocktake_card_rows_scanned">%1$d lines · %2$d scanned</string>
     <string name="stocktake_warehouse_label">Warehouse</string>
     <string name="stocktake_multi_loc_label">Limit to locations (multi-select)</string>
     <string name="stocktake_multi_loc_all">All locations (tap to choose)</string>

@@ -1,5 +1,6 @@
 package com.wms.pda.ui.stocktake;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -46,30 +47,27 @@ class StocktakeAdapter extends RecyclerView.Adapter<StocktakeAdapter.VH> {
         h.tvId.setText(o.id);
         StatusPill.apply(h.tvStatus, o.status);
 
+        // 这几行原先都是 Java 里把中文和值拼起来("方式 · " + 值),只翻值会变成
+        // "方式 · All in-stock units" —— 所以整行做成带占位符的资源,一起走。
+        Context ctx = h.tvMode.getContext();
         String scope = o.scope == null ? "ALL" : o.scope;
-        String scopeLabel;
-        if ("ALL".equals(scope))            scopeLabel = "全部在库单元";
-        else if ("SKU".equals(scope))       scopeLabel = "按SKU";
-        else if ("LOCATION".equals(scope))  scopeLabel = "按库位";
-        else if ("WAREHOUSE".equals(scope)) scopeLabel = "按仓库";
-        else                                scopeLabel = scope;
-        h.tvMode.setText("方式 · " + scopeLabel);
+        int scopeRes = StocktakeLabels.scopeRes(scope);
+        String scopeLabel = scopeRes == 0 ? scope : ctx.getString(scopeRes);
+        h.tvMode.setText(ctx.getString(R.string.stocktake_mode_fmt, scopeLabel));
 
         String keyword = o.scopeKeyword == null || o.scopeKeyword.isEmpty() ? "—" : o.scopeKeyword;
-        h.tvScope.setText("范围 · " + keyword);
+        h.tvScope.setText(ctx.getString(R.string.stocktake_range_fmt, keyword));
 
-        h.tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
+        h.tvOperator.setText(ctx.getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
 
         int total = o.totalCount == null ? 0 : o.totalCount;
         int counted = o.countedCount == null ? 0 : o.countedCount;
         int diff = o.diffCount == null ? 0 : o.diffCount;
-        String progress;
-        if (o.status == Enums.DocStatus.DONE) {
-            progress = total + " 行 · " + (diff == 0 ? "无差异" : "差异 " + diff);
-        } else {
-            progress = total + " 行 · 已扫 " + counted + " 行";
-        }
-        h.tvProgress.setText(progress);
+        h.tvProgress.setText(o.status == Enums.DocStatus.DONE
+                ? (diff == 0 ? ctx.getString(R.string.stocktake_card_rows_ok, total)
+                             : ctx.getString(R.string.stocktake_card_rows_diff, total, diff))
+                : ctx.getString(R.string.stocktake_card_rows_scanned, total, counted));
 
         h.tvTime.setText(o.createdAt == null ? "" :
                 (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt));
