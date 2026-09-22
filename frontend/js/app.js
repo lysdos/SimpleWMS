@@ -246,9 +246,15 @@ async function loadLocations() {
     if (state.locationKw) qs.set('keyword', state.locationKw);
     if (state.locationStatus) qs.set('status', state.locationStatus);
     if (state.locationWarehouseId) qs.set('warehouseId', state.locationWarehouseId);
-    state.locations = await api.get('/api/locations' + (qs.toString() ? '?' + qs.toString() : ''));
+    // 这份结果**只用于本屏渲染,不写回 state.locations**。
+    // state.locations 是各弹窗「库位下拉」的数据源,必须是**全量**;写回去的话,在库位管理页
+    // 筛过之后,商品/出入库单的库位下拉就只剩筛出来的那几个 —— 更糟的是商品自己那个**启用中**
+    // 的库位会因为"不在这份清单里"被渲染成「(已停用或已删除)」。
+    // 筛选条件本身就存在 state.locationKw / locationStatus / locationWarehouseId 里,
+    // 所以不需要再缓存一份筛选结果。
+    const data = await api.get('/api/locations' + (qs.toString() ? '?' + qs.toString() : ''));
     document.getElementById('view').innerHTML =
-        Views.locations(state.locations, state.locationStatus, state.warehouses, state.locationWarehouseId);
+        Views.locations(data, state.locationStatus, state.warehouses, state.locationWarehouseId);
 }
 
 async function loadInventory() {
@@ -321,11 +327,32 @@ function checkedValues(listId) {
 }
 
 /**
- * 装配一个多选列表:顶部「已选 N 个」+ 到上限后禁用其余未勾选的行。
+ * 过滤:只切行的显隐,不重填 —— 重填会把已勾选的项丢掉。
+ * 一行都不剩时打开「没匹配」那行(列表本身为空走的是 .ms-empty,与这里无关)。
+ */
+function paintFilter(listId, boxId) {
+    const list = document.getElementById(listId);
+    const box  = document.getElementById(boxId);
+    if (!list) return;
+    const kw = (box && box.value ? box.value : '').trim().toLowerCase();
+    const rows = Array.from(list.querySelectorAll('.ms-item'));
+    let shown = 0;
+    rows.forEach(el => {
+        const hit = !kw || el.textContent.toLowerCase().includes(kw);
+        el.style.display = hit ? '' : 'none';
+        if (hit) shown++;
+    });
+    const nomatch = list.querySelector('.ms-nomatch');
+    if (nomatch) nomatch.hidden = !(rows.length > 0 && shown === 0);
+}
+
+/**
+ * 装配一个多选列表:可选过滤框 + 顶部「已选 N 个」+ 到上限后禁用其余未勾选的行。
  * change 用事件委托绑在容器上,所以之后重填 innerHTML(异步到达 / 切仓库)不必重新绑定。
  * 返回 sync:重填内容后调一次,把计数与禁用位重算。
  * opts.countFn(必给)因为「已选 N 个」后面跟的名词各处不同;
- * opts.max 项数上限;opts.maxChars 勾选值拼成逗号串后的字符上限 —— 都为 0 表示不限。
+ * opts.max 项数上限;opts.maxChars 勾选值拼成逗号串后的字符上限 —— 都为 0 表示不限;
+ * opts.filterBoxId 给了就挂上过滤监听并先刷一遍(重填内容后要自己再调 paintFilter)。
  */
 function bindCheckList(listId, opts) {
     opts = opts || {};
@@ -352,6 +379,11 @@ function bindCheckList(listId, opts) {
     };
     if (list) list.addEventListener('change', sync);
     sync();
+    if (opts.filterBoxId) {
+        const box = document.getElementById(opts.filterBoxId);
+        if (box) box.addEventListener('input', () => paintFilter(listId, opts.filterBoxId));
+        paintFilter(listId, opts.filterBoxId);
+    }
     return sync;
 }
 
@@ -401,39 +433,25 @@ function openNewStockCheckModal() {
     const MAX_PICK = 50;
     const MAX_KEYWORD_CHARS = 500;
     const syncSku = bindCheckList('nsc-sku-list', {
-        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS,
+        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS, filterBoxId: 'nsc-sku-filter',
         countFn: n => t('stock_check.sku.selected_fmt', { n })
     });
     const syncLoc = bindCheckList('nsc-loc-list', {
-        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS,
+        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS, filterBoxId: 'nsc-loc-filter',
         countFn: n => t('stock_check.loc.selected_fmt', { n })
     });
-    // 过滤框只按输入过滤(不重新拉数据):选项数据在 fillSkuOptions 里填一次,
-    // 这里挂一次监听即可 —— 重填 innerHTML 不会影响这个监听。
-    const skuFilterBox = document.getElementById('nsc-sku-filter');
-    if (skuFilterBox) skuFilterBox.addEventListener('input', paintSkuFilter);
-
-    /** 过滤:只切行的显隐,不重填 —— 重填会把已勾选的项丢掉 */
-    function paintSkuFilter() {
-        const list = document.getElementById('nsc-sku-list');
-        const box  = document.getElementById('nsc-sku-filter');
-        if (!list) return;
-        const kw = (box && box.value ? box.value : '').trim().toLowerCase();
-        list.querySelectorAll('.ms-item').forEach(el => {
-            el.style.display = (!kw || el.textContent.toLowerCase().includes(kw)) ? '' : 'none';
-        });
-    }
 
     function fillSkuOptions() {
         const list = document.getElementById('nsc-sku-list');
         if (!list) return;
         list.innerHTML = Views.multiCheckListItems(
             (skuCache || []).map(p => ({ value: p.sku, label: p.sku + ' · ' + (p.name || '') })),
-            { empty: t('new_order.placeholder.no_product') });
+            { empty: t('new_order.placeholder.no_product'),
+              nomatch: t('stock_check.sku.filter_nomatch') });
         syncSku();
         // 重填会把行上的 display 清掉,而用户可能在商品返回**之前**就已经打了过滤词
         // (过滤框是立刻可见的,列表却是异步填的)—— 不重放一次,过滤框有字但全列都显示。
-        paintSkuFilter();
+        paintFilter('nsc-sku-list', 'nsc-sku-filter');
     }
 
     function ensureSkuList() {
@@ -458,7 +476,7 @@ function openNewStockCheckModal() {
         skuWrap.style.display = (cur === 'SKU') ? '' : 'none';
         if (cur === 'SKU') {
             ensureSkuList();
-            paintSkuFilter();   // 切回来时按当前过滤词刷一遍(行在隐藏容器里也该保持隐藏)
+            paintFilter('nsc-sku-list', 'nsc-sku-filter');   // 切回来时按当前过滤词刷一遍
         } else if (cur === 'WAREHOUSE') {
             // 仓库下拉 + 库位多选(库位跟着所选仓库联动)。
             // 这里单独拉一次 /api/locations 而不是用 state.locations —— 后者会被库位管理页
@@ -481,8 +499,15 @@ function openNewStockCheckModal() {
                                 value: l.code,
                                 label: l.code + (l.name && l.name !== l.code ? ' · ' + l.name : '')
                             })),
-                            { empty: t('product.form.empty_loc') });
+                            { empty: t('location.picker.empty'),
+                              nomatch: t('stock_check.loc.filter_nomatch') });
                         syncLoc();
+                        // 库位列表是**跟着仓库整体换掉**的,上一个仓库的过滤词对新列表没有意义,
+                        // 留着还会把新列表整片滤空(看着像"这个仓库没有库位")—— 随列表一起重置。
+                        // 必须先清空、再重放:反过来的话会用旧词滤一遍新列表,把行全藏起来。
+                        const lb = document.getElementById('nsc-loc-filter');
+                        if (lb) lb.value = '';
+                        paintFilter('nsc-loc-list', 'nsc-loc-filter');
                     };
                     whSel.onchange = paintLocs;
                     paintLocs();
@@ -900,7 +925,10 @@ async function newProduct() {
             await loadProducts();
         } catch (e) { toast(e.message, 'error'); return false; }
     });
-    bindCheckList('pf-supplier-list', { countFn: n => t('product.form.suppliers_selected_fmt', { n }) });
+    bindCheckList('pf-supplier-list', {
+        filterBoxId: 'pf-supplier-filter',
+        countFn: n => t('product.form.suppliers_selected_fmt', { n })
+    });
 }
 
 async function viewProduct(id) {
@@ -925,7 +953,10 @@ async function editProduct(id) {
                 await loadProducts();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
-        bindCheckList('pf-supplier-list', { countFn: n => t('product.form.suppliers_selected_fmt', { n }) });
+        bindCheckList('pf-supplier-list', {
+            filterBoxId: 'pf-supplier-filter',
+            countFn: n => t('product.form.suppliers_selected_fmt', { n })
+        });
     } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1129,9 +1160,11 @@ async function editLocation(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delLocation(id) {
-    const l = (state.locations || []).find(x => x.id === id);
-    const label = l ? l.code : ('#' + id);
+function delLocation(id, code) {
+    // 库位码由调用方从行里带进来(与出入库单的提交/取消按钮同一套做法)。
+    // 不再从 state.locations 里反查:那份现在只在**下拉要被打开时**才加载,
+    // 光进库位管理页它可能是空的,反查会退化成「#12」。
+    const label = code || ('#' + id);
     confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}\n\n${t('location.del_tip')}`, async () => {
         try {
             await api.del('/api/locations/' + id);

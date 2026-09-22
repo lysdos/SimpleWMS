@@ -145,8 +145,9 @@ const I18N = (() => {
         'product.form.warn_days':  { 'zh-CN': '临期预警天数(可选,默认30)', 'en-US': 'Expiry Warn Days (optional, default 30)' },
         'product.form.suppliers':{ 'zh-CN': '供应商',                      'en-US': 'Suppliers' },
         'product.form.suppliers_selected_fmt':{ 'zh-CN': '已选 {n} 个供应商', 'en-US': '{n} suppliers selected' },
+        'product.form.suppliers_filter_placeholder':{ 'zh-CN': '输入以过滤供应商…', 'en-US': 'Type to filter suppliers…' },
+        'product.form.suppliers_filter_nomatch':{ 'zh-CN': '没有匹配的供应商', 'en-US': 'No matching suppliers' },
         'product.form.default_supplier':{ 'zh-CN': '默认供应商',            'en-US': 'Default Supplier' },
-        'product.form.empty_loc':{ 'zh-CN': '暂无库位,请先到「基础管理 → 库位管理」添加', 'en-US': 'No locations. Go to Basic Data → Locations first' },
         'product.form.empty_supplier':{ 'zh-CN': '暂无可选供应商,请先到「基础管理 → 供应商管理」添加', 'en-US': 'No suppliers. Go to Basic Data → Suppliers first' },
         'product.error.sku_required':{ 'zh-CN': 'SKU 不能为空',            'en-US': 'SKU is required' },
         'product.error.name_required':{ 'zh-CN': '名称不能为空',            'en-US': 'Name is required' },
@@ -375,6 +376,10 @@ const I18N = (() => {
         'location.del_tip':    { 'zh-CN': '注意:商品的库位字段仍会保留文本,但下拉里不再出现。', 'en-US': 'Note: existing products keep the text, but the dropdown will no longer show it.' },
         'location.disabled_marker':{ 'zh-CN': '(已停用或已删除)',           'en-US': '(disabled or deleted)' },
         'location.empty_marker':{ 'zh-CN': '(不选)',                        'en-US': '(none)' },
+        /* 库位**选择器**为空时的话。商品表单的下拉与盘点弹窗的库位列表共用 —— 所以放
+           location.* 而不是任一个页面的命名空间(它俩谁都不该独占这个键)。
+           注意别跟 location.empty 混:那是库位管理页空表格的「点击右上角新增」。 */
+        'location.picker.empty':{ 'zh-CN': '暂无库位,请先到「基础管理 → 库位管理」添加', 'en-US': 'No locations. Go to Basic Data → Locations first' },
         'location.error.code_required':{ 'zh-CN': '库位编码不能为空',       'en-US': 'Code is required' },
 
         /* ---------- 仓库管理(库位的上层分组) ---------- */
@@ -472,8 +477,13 @@ const I18N = (() => {
         'stock_check.loc.multi_label':{ 'zh-CN': '限定库位',               'en-US': 'Limit to locations' },
         'stock_check.loc.multi_hint':{ 'zh-CN': '不选则盘点整个仓库',      'en-US': 'Leave empty to count the whole warehouse' },
         'stock_check.loc.selected_fmt':{ 'zh-CN': '已选 {n} 个库位',        'en-US': '{n} locations selected' },
+        'stock_check.loc.filter_placeholder':{ 'zh-CN': '输入以过滤库位…',    'en-US': 'Type to filter locations…' },
+        'stock_check.loc.filter_nomatch':{ 'zh-CN': '没有匹配的库位',          'en-US': 'No matching locations' },
         'stock_check.sku.filter_placeholder':{ 'zh-CN': '输入以过滤商品…',    'en-US': 'Type to filter products…' },
-        'stock_check.sku.multi_hint':{ 'zh-CN': '最多 50 个',               'en-US': 'Max 50' },
+        'stock_check.sku.filter_nomatch':{ 'zh-CN': '没有匹配的商品',          'en-US': 'No matching products' },
+        /* SKU 与库位两个列表共用:上限本来就是后端 parseList 里同一个 MAX_ITEMS,
+           写成两条各自漂,没有意义(改文案时记得跟 app.js 的 MAX_PICK 一起看)。 */
+        'stock_check.limit_hint':{ 'zh-CN': '最多 50 个',                   'en-US': 'Max 50' },
         'stock_check.sku.selected_fmt':{ 'zh-CN': '已选 {n} 个 SKU',        'en-US': '{n} SKU selected' },
         'stock_check.remark_label':{ 'zh-CN': '备注',                      'en-US': 'Remark' },
         'stock_check.remark_placeholder':{ 'zh-CN': '例如:月末大盘点',       'en-US': 'e.g. month-end count' },

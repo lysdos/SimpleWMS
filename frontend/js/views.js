@@ -964,10 +964,15 @@ const Views = {
             const nm = (l.name && l.name !== l.code) ? ' / ' + escapeHtml(l.name) : '';
             return `<option value="${escapeHtml(l.code)}"${sel}>${escapeHtml(l.code)}${nm}</option>`;
         };
+        // 一个可选的库位都没有时,别只放一条「(不选)」—— 库位是必填,那是个走不通的死胡同;
+        // 这时只放一条禁用提示,指路到基础管理。(编辑一个仍指向已停用库位的商品时 extraLoc 非空,
+        // 走下面正常分支,当前值会作为「(已停用或已删除)」保留下来。)
         const locSelectOptions =
-            `<option value="" ${currentLocCode?'':'selected'}>${t('location.empty_marker')}</option>`
-            + Views.locationOptgroups(enabledLocs, locLabel)
-            + extraLoc.map(locLabel).join('');
+            (enabledLocs.length === 0 && extraLoc.length === 0)
+                ? `<option value="" disabled selected>${t('location.picker.empty')}</option>`
+                : `<option value="" ${currentLocCode?'':'selected'}>${t('location.empty_marker')}</option>`
+                  + Views.locationOptgroups(enabledLocs, locLabel)
+                  + extraLoc.map(locLabel).join('');
 
         return `
         <div class="form-row">
@@ -992,7 +997,7 @@ const Views = {
             <div class="form-field">
                 <label>${t('product.form.loc')}<span class="req">*</span></label>
                 <select id="pf-loc" class="select">
-                    ${locSelectOptions || `<option value="" disabled>${t('product.form.empty_loc')}</option>`}
+                    ${locSelectOptions}
                 </select>
             </div>
         </div>
@@ -1023,8 +1028,15 @@ const Views = {
         <div class="form-row">
             <div class="form-field" style="flex:2;">
                 <label>${t('product.form.suppliers')}</label>
-                <div class="ms-head"><span class="ms-count" id="pf-supplier-list-count"></span></div>
-                <div class="ms-list" id="pf-supplier-list">${Views.multiCheckListItems(supplierItems, { selected, empty: t('product.form.empty_supplier') })}</div>
+                <div class="ms-head">
+                    <input id="pf-supplier-filter" class="input" placeholder="${t('product.form.suppliers_filter_placeholder')}">
+                    <span class="ms-count" id="pf-supplier-list-count"></span>
+                </div>
+                <div class="ms-list" id="pf-supplier-list">${Views.multiCheckListItems(supplierItems, {
+                    selected,
+                    empty: t('product.form.empty_supplier'),
+                    nomatch: t('product.form.suppliers_filter_nomatch')
+                })}</div>
             </div>
             <div class="form-field">
                 <label>${t('product.form.default_supplier')}</label>
@@ -1171,7 +1183,7 @@ const Views = {
                     <td class="actions">
                         <button class="btn-link" onclick="viewLocation(${l.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editLocation(${l.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delLocation(${l.id})">${t('common.delete')}</button>
+                        <button class="btn-link danger" onclick="delLocation(${l.id}, '${escapeHtml(l.code)}')">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         const whOpts = (warehouses || [])
@@ -1397,6 +1409,10 @@ const Views = {
      * 换成 <label> 包 checkbox 后点整行即切换。
      * items:[{value, label}];opts.selected 里的值按字符串比对;
      * 只产出行,外壳(.ms-head / .ms-list)由各调用点的模板给出。
+     *
+     * 另附一行**默认隐藏**的「没匹配」提示:过滤把行全藏起来时由 app.js 的
+     * paintFilter 打开。它跟 .ms-empty 是两回事 —— .ms-empty 是列表**本身为空**
+     * (如还没维护商品),只有那一行所以这里不再多渲染一行提示。
      */
     multiCheckListItems(items, opts) {
         opts = opts || {};
@@ -1408,7 +1424,8 @@ const Views = {
             return `<label class="ms-item"><input type="checkbox" value="${escapeHtml(v)}"`
                  + (picked.has(v) ? ' checked' : '')
                  + `><span>${escapeHtml(it.label)}</span></label>`;
-        }).join('');
+        }).join('')
+        + `<div class="ms-nomatch" hidden>${escapeHtml(opts.nomatch || '')}</div>`;
     },
 
     /* ================== 库存盘点 ================== */
@@ -1521,15 +1538,18 @@ const Views = {
                 <span class="ms-count" id="nsc-sku-list-count"></span>
             </div>
             <div class="ms-list" id="nsc-sku-list"></div>
-            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.sku.multi_hint')}</div>
+            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.limit_hint')}</div>
         </div>
         <div class="form-field" id="nsc-warehouse-wrap" style="display:none;">
             <label>${t('stock_check.scope.warehouse')}</label>
             <select id="nsc-warehouse-select" class="select" style="width:100%;"></select>
             <label style="margin-top:10px;display:block;font-size:13px;color:var(--c-text-2);">${t('stock_check.loc.multi_label')}</label>
-            <div class="ms-head"><span class="ms-count" id="nsc-loc-list-count"></span></div>
+            <div class="ms-head">
+                <input id="nsc-loc-filter" class="input" placeholder="${t('stock_check.loc.filter_placeholder')}">
+                <span class="ms-count" id="nsc-loc-list-count"></span>
+            </div>
             <div class="ms-list" id="nsc-loc-list"></div>
-            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.loc.multi_hint')}</div>
+            <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.loc.multi_hint')} · ${t('stock_check.limit_hint')}</div>
         </div>
         <div class="form-field">
             <label>${t('stock_check.remark_label')}</label>

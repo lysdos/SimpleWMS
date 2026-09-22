@@ -339,7 +339,8 @@ a:hover { color: var(--c-brand-hover); }
 /* 到上限后被禁用的行(未选中的那些) */
 .ms-item.is-off { color: var(--c-text-3); cursor: not-allowed; }
 .ms-item.is-off:hover { background: transparent; }
-.ms-empty { padding: 10px 12px; font-size: 13px; color: var(--c-text-3); }
+/* 列表本身为空 / 过滤后一行不剩 —— 两种「空」长得一样,但成因不同(见 Views.multiCheckListItems) */
+.ms-empty, .ms-nomatch { padding: 10px 12px; font-size: 13px; color: var(--c-text-3); }
 
 /* ============================================================
    按钮
