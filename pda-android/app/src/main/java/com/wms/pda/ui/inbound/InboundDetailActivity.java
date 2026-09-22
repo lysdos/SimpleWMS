@@ -137,8 +137,8 @@ public class InboundDetailActivity extends AppCompatActivity {
         TextView tvSummary = findViewById(R.id.tv_summary);
         int itemCount = o.itemCount == null ? 0 : o.itemCount;
         int totalQty  = o.totalQuantity == null ? 0 : o.totalQuantity;
-        tvSummary.setText(itemCount + " 行 · " + totalQty + " 件 · 创建于 " +
-                (o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
+        tvSummary.setText(getString(R.string.lines_summary_created_fmt, itemCount, totalQty,
+                o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
 
         llLines.removeAllViews();
         LayoutInflater li = LayoutInflater.from(this);
@@ -157,19 +157,29 @@ public class InboundDetailActivity extends AppCompatActivity {
                 TextView tvQty     = row.findViewById(R.id.tv_qty);
 
                 tvSkuName.setText((l.sku == null ? "?" : l.sku) + "  " + (l.name == null ? "" : l.name));
-                tvQty.setText("× " + l.qty + " " + (l.uom == null ? "" : l.uom));
+                tvQty.setText(getString(R.string.qty_fmt, l.qty, l.uom == null ? "" : l.uom));
 
                 StringBuilder info = new StringBuilder();
-                if (l.location != null && !l.location.isEmpty()) info.append("库位: ").append(l.location).append("  ");
-                if (l.supplier != null && !l.supplier.isEmpty()) info.append("供应商: ").append(l.supplier).append("  ");
-                if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
-                if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
+                if (l.location != null && !l.location.isEmpty()) {
+                    info.append(getString(R.string.location_prefix_fmt, l.location)).append("  ");
+                }
+                if (l.supplier != null && !l.supplier.isEmpty()) {
+                    info.append(getString(R.string.supplier_prefix_fmt, l.supplier)).append("  ");
+                }
+                if (l.unitPrice != null && !l.unitPrice.isEmpty()) {
+                    info.append(getString(R.string.unit_price_prefix_fmt, l.unitPrice)).append("  ");
+                }
+                if (l.rowRemark != null && !l.rowRemark.isEmpty()) {
+                    info.append(getString(R.string.remark_prefix_fmt, l.rowRemark));
+                }
                 if (l.codes != null && !l.codes.isEmpty()) {
-                    info.append("\n24 位码: ").append(l.codes.size()).append(" 个");
+                    info.append("\n").append(getString(R.string.codes_count_fmt, l.codes.size()));
                     // 仅展示前 3 个,过长折叠
                     int shown = Math.min(3, l.codes.size());
                     for (int i = 0; i < shown; i++) info.append("\n  • ").append(l.codes.get(i));
-                    if (l.codes.size() > 3) info.append("\n  • …(+").append(l.codes.size() - 3).append(")");
+                    if (l.codes.size() > 3) {
+                        info.append("\n  • ").append(getString(R.string.codes_more_fmt, l.codes.size() - 3));
+                    }
                 }
                 tvInfo.setText(info.toString());
 

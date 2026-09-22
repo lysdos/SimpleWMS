@@ -216,7 +216,7 @@
     <string name="stocktake_row_delete">Delete</string>
     <string name="stocktake_row_delete_confirm">Delete this count line (%1$s)? You can scan it again to record a surplus.</string>
     <string name="stocktake_submit_confirm_all">Commit the count? The check becomes read-only (stock is not adjusted); the variance can still be exported as CSV.</string>
-    <string name="stocktake_line_fmt">%1$s · %2$s · %3$s</string>
+    <string name="stocktake_line_fmt">%1$s · code %2$s · %3$s</string>
 
     <!-- 详情页通用 -->
     <string name="btn_complete_inbound">Complete inbound</string>
@@ -272,6 +272,16 @@
     <string name="stocktake_already_counted">Already counted</string>
     <string name="stocktake_marked_surplus_fmt">Recorded as surplus: %1$s</string>
     <string name="stocktake_no_lines">No lines in this stock check</string>
+
+    <string name="lines_summary_created_fmt">%1$d lines · %2$d units · created %3$s</string>
+    <string name="location_prefix_fmt">Location: %1$s</string>
+    <string name="location_auto">Auto</string>
+    <string name="picks_prefix_fmt">Picks: %1$s</string>
+    <string name="unit_price_prefix_fmt">Unit price: ¥%1$s</string>
+    <string name="no_lines">No lines</string>
+    <string name="scan_progress_fmt">Scanned %1$d / %2$d</string>
+    <string name="codes_count_fmt">24-digit codes: %1$d</string>
+    <string name="codes_more_fmt">…(+%1$d)</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">Logged out</string>

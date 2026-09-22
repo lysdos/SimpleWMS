@@ -227,7 +227,7 @@
     <string name="stocktake_row_delete">删除</string>
     <string name="stocktake_row_delete_confirm">删除该盘点行(%1$s)?删除后可重新扫码记盘盈。</string>
     <string name="stocktake_submit_confirm_all">确认提交盘点结果?提交后本单定格为只读(不调整库存),差异可继续导出 CSV。</string>
-    <string name="stocktake_line_fmt">%1$s · %2$s · %3$s</string>
+    <string name="stocktake_line_fmt">%1$s · 码 %2$s · %3$s</string>
 
     <!-- 详情页通用 -->
     <string name="btn_complete_inbound">完成入库</string>
@@ -290,6 +290,21 @@
     <string name="stocktake_already_counted">该码已盘过</string>
     <string name="stocktake_marked_surplus_fmt">已记为盘盈: %1$s</string>
     <string name="stocktake_no_lines">盘点单无明细</string>
+
+    <!--
+      明细行的**行内拼装**。原先都是 Java 里把中文和值拼起来("库位: " + 值、"× " + qty),
+      只翻值会半中半英,所以整段做成带占位符的资源。
+      分隔符(" · " / " × " / 两个空格 / 项目符号)是标点,不进资源。
+    -->
+    <string name="lines_summary_created_fmt">%1$d 行 · %2$d 件 · 创建于 %3$s</string>
+    <string name="location_prefix_fmt">库位: %1$s</string>
+    <string name="location_auto">自动</string>
+    <string name="picks_prefix_fmt">拣货: %1$s</string>
+    <string name="unit_price_prefix_fmt">单价: ¥%1$s</string>
+    <string name="no_lines">暂无明细</string>
+    <string name="scan_progress_fmt">已扫描 %1$d / %2$d 件</string>
+    <string name="codes_count_fmt">24 位码: %1$d 个</string>
+    <string name="codes_more_fmt">…(+%1$d)</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">已退出登录</string>
