@@ -47,7 +47,12 @@
     <string name="settings_address">服务地址</string>
     <string name="settings_address_hint">如 http://192.168.11.160:9080</string>
     <string name="settings_test">测试连接</string>
-    <string name="settings_test_success">连接成功</string>
+    <string name="settings_test_success">连接成功，WMS 后端</string>
+    <string name="settings_test_fail_fmt">连接失败: %1$s</string>
+    <string name="settings_testing">连接中...</string>
+    <string name="settings_not_wms">已连接，但不是 WMS 后端</string>
+    <string name="settings_reset_done">已恢复默认</string>
+    <string name="settings_address_required">地址不能为空</string>
     <string name="settings_test_fail">连接失败</string>
     <string name="settings_reset">恢复默认</string>
     <!-- 语言名按惯例用各自的语言显示,不随界面语言变 —— 所以标 translatable="false" -->
@@ -104,7 +109,7 @@
     <string name="supplier_none">不指定</string>
     <string name="action_edit">编辑</string>
     <string name="action_delete">删除</string>
-    <string name="msg_load_products_failed">加载商品失败</string>
+    <string name="msg_load_products_failed">加载商品失败: %1$s</string>
     <string name="msg_no_products">请先在 PC 端维护商品</string>
     <string name="confirm_delete_line">确认删除该明细行?将连带清理其占位库存。</string>
     <string name="inbound_edit_header_title">编辑入库单</string>
@@ -236,7 +241,8 @@
     <string name="section_lines_inbound">入库明细</string>
     <string name="section_lines_outbound">出库明细</string>
     <string name="section_lines_stocktake">盘点明细</string>
-    <string name="lines_summary_fmt">共 %1$d 行 · 已扫 %2$d 件</string>
+    <!-- 列表卡片上的一行汇总(与详情页的 lines_summary_created_fmt 不同:没有「创建于」) -->
+    <string name="lines_summary_fmt">%1$d 行 · %2$d 件</string>
     <string name="lines_summary_stocktake_fmt">点击实盘数量框可编辑</string>
     <string name="remark_empty">无备注</string>
     <string name="remark_prefix_fmt">备注: %1$s</string>
@@ -274,6 +280,7 @@
     <string name="msg_scan_failed">扫码失败: %1$s</string>
     <string name="msg_scan_exception">扫码异常: %1$s</string>
     <string name="msg_deleted">已删除</string>
+    <string name="msg_create_failed">创建失败: %1$s</string>
     <string name="scan_rfid_timeout">RFID 扫码超时,未读到标签</string>
     <string name="scan_barcode_timeout">条码扫码超时,未读到码</string>
     <string name="scan_already_scanned_fmt">该码已扫过: %1$s</string>
@@ -302,6 +309,7 @@
     <string name="picks_prefix_fmt">拣货: %1$s</string>
     <string name="unit_price_prefix_fmt">单价: ¥%1$s</string>
     <string name="no_lines">暂无明细</string>
+    <string name="stocktake_created_fmt">已创建盘点单 %1$s</string>
     <string name="scan_progress_fmt">已扫描 %1$d / %2$d 件</string>
     <string name="codes_count_fmt">24 位码: %1$d 个</string>
     <string name="codes_more_fmt">…(+%1$d)</string>

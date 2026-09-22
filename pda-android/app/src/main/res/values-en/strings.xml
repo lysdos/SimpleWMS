@@ -53,7 +53,12 @@
     <string name="settings_address">Server address</string>
     <string name="settings_address_hint">e.g. http://192.168.11.160:9080</string>
     <string name="settings_test">Test connection</string>
-    <string name="settings_test_success">Connected</string>
+    <string name="settings_test_success">Connected — WMS backend</string>
+    <string name="settings_test_fail_fmt">Connection failed: %1$s</string>
+    <string name="settings_testing">Testing…</string>
+    <string name="settings_not_wms">Connected, but not the WMS backend</string>
+    <string name="settings_reset_done">Defaults restored</string>
+    <string name="settings_address_required">Address is required</string>
     <string name="settings_test_fail">Connection failed</string>
     <string name="settings_reset">Restore default</string>
     <string name="settings_language">Language</string>
@@ -105,7 +110,7 @@
     <string name="supplier_none">Not specified</string>
     <string name="action_edit">Edit</string>
     <string name="action_delete">Delete</string>
-    <string name="msg_load_products_failed">Failed to load products</string>
+    <string name="msg_load_products_failed">Failed to load products: %1$s</string>
     <string name="msg_no_products">Please set up products on the PC first</string>
     <string name="confirm_delete_line">Delete this line? Its placeholder stock is removed as well.</string>
     <string name="inbound_edit_header_title">Edit inbound order</string>
@@ -225,7 +230,8 @@
     <string name="section_lines_inbound">Inbound lines</string>
     <string name="section_lines_outbound">Outbound lines</string>
     <string name="section_lines_stocktake">Count lines</string>
-    <string name="lines_summary_fmt">%1$d lines · %2$d scanned</string>
+    <!-- 列表卡片上的一行汇总(与详情页的 lines_summary_created_fmt 不同:没有 created) -->
+    <string name="lines_summary_fmt">%1$d lines · %2$d units</string>
     <string name="lines_summary_stocktake_fmt">Tap the counted field to edit</string>
     <string name="remark_empty">No remark</string>
     <string name="remark_prefix_fmt">Remark: %1$s</string>
@@ -257,6 +263,7 @@
     <string name="msg_scan_failed">Scan failed: %1$s</string>
     <string name="msg_scan_exception">Scan error: %1$s</string>
     <string name="msg_deleted">Deleted</string>
+    <string name="msg_create_failed">Create failed: %1$s</string>
     <string name="scan_rfid_timeout">RFID scan timed out, no tag read</string>
     <string name="scan_barcode_timeout">Barcode scan timed out, no code read</string>
     <string name="scan_already_scanned_fmt">Already scanned: %1$s</string>
@@ -279,6 +286,7 @@
     <string name="picks_prefix_fmt">Picks: %1$s</string>
     <string name="unit_price_prefix_fmt">Unit price: ¥%1$s</string>
     <string name="no_lines">No lines</string>
+    <string name="stocktake_created_fmt">Stock check %1$s created</string>
     <string name="scan_progress_fmt">Scanned %1$d / %2$d</string>
     <string name="codes_count_fmt">24-digit codes: %1$d</string>
     <string name="codes_more_fmt">…(+%1$d)</string>

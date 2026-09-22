@@ -65,7 +65,7 @@ final class AddInboundItemDialog {
             }
             @Override public void onError(int code, String msg) {
                 productFailed[0] = true;
-                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed) + ": " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed, msg), Toast.LENGTH_SHORT).show();
                 settle.run();
             }
         });

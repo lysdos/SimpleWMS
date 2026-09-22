@@ -1,5 +1,6 @@
 package com.wms.pda.ui.inbound;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -53,14 +54,16 @@ class InboundAdapter extends RecyclerView.Adapter<InboundAdapter.VH> {
         h.tvId.setText(o.id);
         StatusPill.apply(h.tvStatus, o.status);
 
-        h.tvExternalNo.setText(o.externalNo == null || o.externalNo.isEmpty()
-                ? "外部单号: —" : "外部单号: " + o.externalNo);
-        h.tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
+        Context ctx = h.tvId.getContext();
+        h.tvExternalNo.setText(ctx.getString(R.string.external_no_prefix_fmt,
+                o.externalNo == null || o.externalNo.isEmpty() ? "—" : o.externalNo));
+        h.tvOperator.setText(ctx.getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
 
         // 后端 itemCount / totalQuantity 是真实数据;lines 可能为 null(列表接口不带 items)
         int itemCount = o.itemCount == null ? 0 : o.itemCount;
         int totalQty = o.totalQuantity == null ? 0 : o.totalQuantity;
-        h.tvSummary.setText(itemCount + " 行 · " + totalQty + " 件");
+        h.tvSummary.setText(ctx.getString(R.string.lines_summary_fmt, itemCount, totalQty));
 
         h.tvTime.setText(o.createdAt == null ? "" :
                 (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt));

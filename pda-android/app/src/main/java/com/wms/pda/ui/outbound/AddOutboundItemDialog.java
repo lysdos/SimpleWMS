@@ -32,7 +32,7 @@ final class AddOutboundItemDialog {
                 showLoaded(ctx, orderDbId, list == null ? new ArrayList<>() : list, onDone);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed) + ": " + msg,
+                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed, msg),
                         Toast.LENGTH_SHORT).show();
             }
         });
