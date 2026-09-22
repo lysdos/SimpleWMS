@@ -56,9 +56,20 @@ public class InventoryFragment extends Fragment {
         MaterialButton btnRefresh = v.findViewById(R.id.btn_refresh);
         btnStocktake = v.findViewById(R.id.btn_stocktake);
 
-        // 文案与卡片上的状态胶囊保持一致(那里也是写死的中文)
-        bindOptions(spStatus, new String[]{"全部状态", "在库", "已出库", "已预留", "已报废", "已调拨", "待入库"});
-        bindOptions(spExpiry, new String[]{"全部效期", "临期", "已过期"});
+        // 文案与卡片上的状态胶囊**共用同一套资源**(原来两边各写一份中文,切英文会出现一个英文一个中文)。
+        // 顺序必须与下面的 STATUS_VALUES / EXPIRY_VALUES 一一对齐。
+        bindOptions(spStatus, new String[]{
+                getString(R.string.inventory_status_all),
+                getString(R.string.inventory_status_in_stock),
+                getString(R.string.inventory_status_out),
+                getString(R.string.inventory_status_reserved),
+                getString(R.string.inventory_status_scrapped),
+                getString(R.string.inventory_status_transferred),
+                getString(R.string.inventory_status_pending)});
+        bindOptions(spExpiry, new String[]{
+                getString(R.string.inventory_expiry_all),
+                getString(R.string.inventory_expiry_expiring),
+                getString(R.string.inventory_expiry_expired)});
 
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         adapter = new InventoryAdapter(new InventoryAdapter.Callbacks() {

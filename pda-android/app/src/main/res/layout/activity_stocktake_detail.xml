@@ -117,7 +117,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="@string/stocktake_scan_rfid"
+                        android:text="@string/scan_rfid"
                         app:icon="@drawable/ic_scan" />
 
                     <com.google.android.material.button.MaterialButton
@@ -143,7 +143,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="@string/stocktake_scan_barcode"
+                        android:text="@string/scan_barcode"
                         app:icon="@drawable/ic_scan" />
 
                     <com.google.android.material.button.MaterialButton

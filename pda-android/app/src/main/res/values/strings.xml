@@ -17,6 +17,14 @@
     <string name="action_logout">退出登录</string>
     <string name="action_search">搜索</string>
     <string name="action_back">返回</string>
+    <string name="action_clear">清空</string>
+
+    <!-- 单据状态(出入库单 / 盘点单)。文案原先是 Enums.DocStatus 枚举里带的 label ——
+         模型层不该持有界面文案,改由状态胶囊 StatusPill 按这里的资源翻。 -->
+    <string name="doc_draft">草稿</string>
+    <string name="doc_pending">待执行</string>
+    <string name="doc_done">已完成</string>
+    <string name="doc_cancelled">已取消</string>
 
     <!-- 登录 -->
     <string name="login_title">SimpleWMS PDA</string>
@@ -112,6 +120,12 @@
     <string name="outbound_pick_qty">出库数量</string>
     <string name="outbound_header_customer_hint">客户/领用部门(可选)</string>
     <string name="confirm_cancel_outbound">确认取消该出库单?草稿明细将被清理,已锁定库存将释放,操作不可恢复。</string>
+    <!-- 清空本单扫码记录(调 reset-scans)。原先是「清空扫码」按钮 + 确认框整套都写死在 Java/布局里 -->
+    <string name="outbound_clear_scans">清空扫码</string>
+    <string name="outbound_scan_log">扫码记录</string>
+    <string name="outbound_clear_scans_confirm">确定清空本单全部扫码记录吗?清空后可重新扫码。</string>
+    <string name="outbound_clear_scans_done">已清空 %1$d 条扫码记录</string>
+    <string name="outbound_clear_scans_fail">清空失败: %1$s</string>
 
     <!-- 库存 -->
     <string name="inventory_title">库存管理</string>
@@ -125,6 +139,22 @@
     <string name="inventory_expiry_none">效期: —</string>
     <string name="inventory_expiry_expiring_fmt">效期: %1$s · 临期 %2$d天</string>
     <string name="inventory_expiry_expired_fmt">效期: %1$s · 已过期</string>
+    <!--
+      库存单元状态文案。**两处共用**:卡片上的状态胶囊(InventoryAdapter)与搜索栏的状态下拉
+      (InventoryFragment)。以前两边各写一份中文,所以必须一起改,否则同一屏上会一个英文一个中文。
+      下拉那边的顺序必须与 InventoryFragment.STATUS_VALUES 对齐。
+    -->
+    <string name="inventory_status_all">全部状态</string>
+    <string name="inventory_status_in_stock">在库</string>
+    <string name="inventory_status_out">已出库</string>
+    <string name="inventory_status_reserved">已预留</string>
+    <string name="inventory_status_scrapped">已报废</string>
+    <string name="inventory_status_transferred">已调拨</string>
+    <string name="inventory_status_pending">待入库</string>
+    <!-- 效期下拉。顺序与 InventoryFragment.EXPIRY_VALUES 对齐 -->
+    <string name="inventory_expiry_all">全部效期</string>
+    <string name="inventory_expiry_expiring">临期</string>
+    <string name="inventory_expiry_expired">已过期</string>
     <string name="transfer_title">库存调拨</string>
     <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
@@ -171,8 +201,10 @@
     <string name="stocktake_tab_todo">待执行</string>
     <string name="stocktake_tab_done">已完成</string>
     <string name="stocktake_submit_confirm_unfinished">还有 %1$d 行未盘,未盘行将按 0 计入盘亏。仍要提交吗?</string>
-    <string name="stocktake_scan_rfid">RFID 扫码</string>
-    <string name="stocktake_scan_barcode">条码扫码</string>
+    <!-- 扫码按钮:盘点详情页与出库详情页共用,所以键名不带 stocktake_(原先出库那页
+         没引资源、自己抄了一份中文,切英文后不生效) -->
+    <string name="scan_rfid">RFID 扫码</string>
+    <string name="scan_barcode">条码扫码</string>
     <string name="action_stop">停止</string>
     <string name="stocktake_row_delete">删除</string>
     <string name="stocktake_row_delete_confirm">删除该盘点行(%1$s)?删除后可重新扫码记盘盈。</string>

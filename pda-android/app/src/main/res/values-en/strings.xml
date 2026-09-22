@@ -25,6 +25,13 @@
     <string name="action_logout">Log out</string>
     <string name="action_search">Search</string>
     <string name="action_back">Back</string>
+    <string name="action_clear">Clear</string>
+
+    <!-- 单据状态(出入库单 / 盘点单) -->
+    <string name="doc_draft">Draft</string>
+    <string name="doc_pending">Pending</string>
+    <string name="doc_done">Done</string>
+    <string name="doc_cancelled">Cancelled</string>
 
     <!-- 登录 -->
     <string name="login_title">SimpleWMS PDA</string>
@@ -115,6 +122,11 @@
     <string name="outbound_pick_qty">Quantity</string>
     <string name="outbound_header_customer_hint">Customer / Department (optional)</string>
     <string name="confirm_cancel_outbound">Cancel this outbound order? Draft lines are removed and reserved stock is released. This cannot be undone.</string>
+    <string name="outbound_clear_scans">Clear scans</string>
+    <string name="outbound_scan_log">Scan records</string>
+    <string name="outbound_clear_scans_confirm">Clear all scan records of this order? You can scan again afterwards.</string>
+    <string name="outbound_clear_scans_done">Cleared %1$d scan records</string>
+    <string name="outbound_clear_scans_fail">Clear failed: %1$s</string>
 
     <!-- 库存 -->
     <string name="inventory_title">Inventory</string>
@@ -128,6 +140,17 @@
     <string name="inventory_expiry_none">Expiry: —</string>
     <string name="inventory_expiry_expiring_fmt">Expiry: %1$s · %2$d d left</string>
     <string name="inventory_expiry_expired_fmt">Expiry: %1$s · expired</string>
+    <!-- 库存单元状态:卡片胶囊与状态下拉共用(顺序须与 InventoryFragment.STATUS_VALUES 对齐) -->
+    <string name="inventory_status_all">All statuses</string>
+    <string name="inventory_status_in_stock">In stock</string>
+    <string name="inventory_status_out">Shipped</string>
+    <string name="inventory_status_reserved">Reserved</string>
+    <string name="inventory_status_scrapped">Scrapped</string>
+    <string name="inventory_status_transferred">Transferred</string>
+    <string name="inventory_status_pending">Pending inbound</string>
+    <string name="inventory_expiry_all">All expiry</string>
+    <string name="inventory_expiry_expiring">Expiring soon</string>
+    <string name="inventory_expiry_expired">Expired</string>
     <string name="transfer_title">Transfer stock</string>
     <string name="transfer_target_label">Target location</string>
     <string name="transfer_target_warehouse">Target warehouse</string>
@@ -173,8 +196,8 @@
     <string name="stocktake_tab_todo">To do</string>
     <string name="stocktake_tab_done">Done</string>
     <string name="stocktake_submit_confirm_unfinished">%1$d lines are still uncounted; they count as 0 (short). Submit anyway?</string>
-    <string name="stocktake_scan_rfid">RFID scan</string>
-    <string name="stocktake_scan_barcode">Barcode scan</string>
+    <string name="scan_rfid">RFID scan</string>
+    <string name="scan_barcode">Barcode scan</string>
     <string name="action_stop">Stop</string>
     <string name="stocktake_row_delete">Delete</string>
     <string name="stocktake_row_delete_confirm">Delete this count line (%1$s)? You can scan it again to record a surplus.</string>

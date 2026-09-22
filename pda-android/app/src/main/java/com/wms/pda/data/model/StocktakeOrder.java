@@ -40,13 +40,15 @@ public class StocktakeOrder {
         this.lines = lines;
     }
 
-    /** ALL 全部在库单元 / SKU 按SKU / LOCATION 按库位(与 web 端口径一致) */
+    /**
+     * ALL 全部在库单元 / SKU 按SKU / LOCATION 按库位(与 web 端口径一致)。
+     * 这里**不带界面文案** —— 原先每个值挂着一个中文 label,但没有任何地方读它(死字段),
+     * 已删。真正的范围文案由盘点列表/详情页各自按资源翻(那两处目前还是硬编码中文,待下一批)。
+     */
     public enum Mode {
-        ALL("全部在库单元"),
-        SKU("按SKU"),
-        LOCATION("按库位");
-        public final String label;
-        Mode(String label) { this.label = label; }
+        ALL,
+        SKU,
+        LOCATION
     }
 
     public static class Line {

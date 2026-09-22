@@ -61,27 +61,29 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
         h.tvQty.setText(String.valueOf(qty));
 
         String status = i.status == null ? "IN_STOCK" : i.status;
+        // 文案与搜索栏的状态下拉共用同一套资源(见 InventoryFragment 顶部那排 R.string.inventory_status_*)
         if ("IN_STOCK".equals(status)) {
-            h.tvStatus.setText("在库");
+            h.tvStatus.setText(R.string.inventory_status_in_stock);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_success);
         } else if ("OUT".equals(status)) {
-            h.tvStatus.setText("已出库");
+            h.tvStatus.setText(R.string.inventory_status_out);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         } else if ("SCRAPPED".equals(status)) {
-            h.tvStatus.setText("已报废");
+            h.tvStatus.setText(R.string.inventory_status_scrapped);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_warning);
         } else if ("TRANSFERRED".equals(status)) {
-            h.tvStatus.setText("已调拨");
+            h.tvStatus.setText(R.string.inventory_status_transferred);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         } else if ("PENDING".equals(status)) {
             // 入库草稿单生成的占位单元,入库单提交后才变为在库
-            h.tvStatus.setText("待入库");
+            h.tvStatus.setText(R.string.inventory_status_pending);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_warning);
         } else if ("RESERVED".equals(status)) {
             // 已被某张出库草稿单预留(锁定),出库单提交后变为已出库
-            h.tvStatus.setText("已预留");
+            h.tvStatus.setText(R.string.inventory_status_reserved);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         } else {
+            // 认不出的状态:原样显示,别把信息吞掉
             h.tvStatus.setText(status);
             h.tvStatus.setBackgroundResource(R.drawable.bg_pill_draft);
         }

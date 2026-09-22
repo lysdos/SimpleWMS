@@ -372,25 +372,27 @@ public class OutboundDetailActivity extends AppCompatActivity {
     private void confirmClearScans() {
         if (scanLocked) return;
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("清空扫码")
-                .setMessage("确定清空本单全部扫码记录吗?清空后可重新扫码。")
-                .setPositiveButton("清空", (d, w) ->
+                .setTitle(R.string.outbound_clear_scans)
+                .setMessage(R.string.outbound_clear_scans_confirm)
+                .setPositiveButton(R.string.action_clear, (d, w) ->
                         RepositoryProvider.get().resetOutboundScans(String.valueOf(dbId),
                                 new WmsCallback<Integer>() {
                                     @Override public void onSuccess(Integer deleted) {
                                         scannedCodes.clear();
                                         triedCodes.clear();
                                         Toast.makeText(OutboundDetailActivity.this,
-                                                "已清空 " + (deleted == null ? 0 : deleted) + " 条扫码记录",
+                                                getString(R.string.outbound_clear_scans_done,
+                                                        deleted == null ? 0 : deleted),
                                                 Toast.LENGTH_SHORT).show();
                                         render();
                                     }
                                     @Override public void onError(int code, String msg) {
                                         Toast.makeText(OutboundDetailActivity.this,
-                                                "清空失败: " + msg, Toast.LENGTH_SHORT).show();
+                                                getString(R.string.outbound_clear_scans_fail, msg),
+                                                Toast.LENGTH_SHORT).show();
                                     }
                                 }))
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.action_cancel, null)
                 .show();
     }
 

@@ -160,7 +160,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="RFID 扫码"
+                        android:text="@string/scan_rfid"
                         app:icon="@drawable/ic_scan" />
 
                     <com.google.android.material.button.MaterialButton
@@ -168,7 +168,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="停止"
+                        android:text="@string/action_stop"
                         android:textColor="@color/on_primary"
                         android:visibility="gone"
                         app:backgroundTint="@color/primary" />
@@ -186,7 +186,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="条码扫码"
+                        android:text="@string/scan_barcode"
                         app:icon="@drawable/ic_scan" />
 
                     <com.google.android.material.button.MaterialButton
@@ -194,7 +194,7 @@
                         android:layout_width="0dp"
                         android:layout_height="56dp"
                         android:layout_weight="1"
-                        android:text="停止"
+                        android:text="@string/action_stop"
                         android:textColor="@color/on_primary"
                         android:visibility="gone"
                         app:backgroundTint="@color/primary" />
@@ -225,7 +225,7 @@
                     android:insetBottom="0dp"
                     android:paddingStart="14dp"
                     android:paddingEnd="14dp"
-                    android:text="清空扫码"
+                    android:text="@string/outbound_clear_scans"
                     android:textColor="@color/primary"
                     app:iconTint="@color/primary" />
             </LinearLayout>
@@ -262,7 +262,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/space_lg"
-                android:text="扫码记录"
+                android:text="@string/outbound_scan_log"
                 style="@style/Text.Subtitle"
                 android:visibility="gone" />
 

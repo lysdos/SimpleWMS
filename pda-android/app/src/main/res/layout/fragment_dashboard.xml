@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_page">
@@ -15,15 +16,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             style="@style/Text.Title"
-            tools:text="您好, 张三"
-            xmlns:tools="http://schemas.android.com/tools" />
+            tools:text="您好, 张三" />
 
         <TextView
             android:id="@+id/tv_overview_date"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/space_xs"
-            android:text="系统概览"
+            tools:text="系统概览"
             style="@style/Text.Caption" />
 
         <!-- KPI 第一行:商品种类 + 库存总件数 -->
