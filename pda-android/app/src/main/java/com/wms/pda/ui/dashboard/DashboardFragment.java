@@ -50,7 +50,8 @@ public class DashboardFragment extends Fragment {
         kExpired  = v.findViewById(R.id.kpi_expired);
         recent    = v.findViewById(R.id.recent_container);
 
-        welcome.setText(getString(R.string.dash_welcome, SessionStore.currentUser()));
+        String user = SessionStore.currentUser();
+        welcome.setText(getString(R.string.dash_welcome, user == null || user.isEmpty() ? "—" : user));
         tvOverview.setText(R.string.dash_overview);
     }
 

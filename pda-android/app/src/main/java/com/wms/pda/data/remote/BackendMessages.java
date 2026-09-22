@@ -12,6 +12,8 @@ package com.wms.pda.data.remote;
  *    PDA 再按 reason 分流 —— 那要动后端,见 docs/api-reference.md。
  *  - 后端这两条路径的措辞**并不统一**:抛异常那条是「已出库」,EPC 那条是「EPC 已出库: <epc>」
  *    (见 OutboundService)。现在只靠子串恰好重叠才都能命中,改动时务必两边对照。
+ *
+ * 「哪些文案进 strings.xml、哪些刻意不进」的完整规则见 docs/pda-design.md §13.2。
  */
 public final class BackendMessages {
 

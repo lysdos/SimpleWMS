@@ -157,7 +157,7 @@ public class InboundDetailActivity extends AppCompatActivity {
                 TextView tvQty     = row.findViewById(R.id.tv_qty);
 
                 tvSkuName.setText((l.sku == null ? "?" : l.sku) + "  " + (l.name == null ? "" : l.name));
-                tvQty.setText(getString(R.string.qty_fmt, l.qty, l.uom == null ? "" : l.uom));
+                tvQty.setText(getString(R.string.qty_fmt, l.qty, getString(R.string.uom_piece)));
 
                 StringBuilder info = new StringBuilder();
                 if (l.location != null && !l.location.isEmpty()) {

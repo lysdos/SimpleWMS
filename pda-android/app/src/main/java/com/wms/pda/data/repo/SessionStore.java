@@ -48,9 +48,10 @@ public final class SessionStore {
                 .apply();
     }
 
+    /** 当前登录账号。异常态(有登录标记但没存下账号)返回 null,由调用方给占位符 */
     public static String currentUser() {
         ensure();
-        return prefs.getString(KEY_USER, "操作员");
+        return prefs.getString(KEY_USER, null);
     }
 
     public static String token() {

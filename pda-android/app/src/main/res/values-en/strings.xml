@@ -239,6 +239,12 @@
     <string name="outbound_scan_hint">Scan to confirm: scanned barcodes are marked verified and deducted on commit</string>
     <string name="outbound_loc_unassigned">No location</string>
     <string name="outbound_loc_no_warehouse">No warehouse</string>
+    <!--
+      Unit suffix on a line's quantity. The backend has no uom column and the web line rows
+      show a bare number, so this is a UI constant rather than data ("units" matches the
+      wording already used by lines_summary_fmt).
+    -->
+    <string name="uom_piece">units</string>
     <string name="qty_fmt">× %1$d %2$s</string>
     <string name="scanned_out_fmt">Shipped: %1$s</string>
     <string name="stocktake_located_fmt">Located: %1$s</string>

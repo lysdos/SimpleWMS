@@ -249,6 +249,12 @@
     <string name="outbound_scan_hint">扫码确认:扫到的条码会标记为已核实,提交出库时统一扣减</string>
     <string name="outbound_loc_unassigned">未指定库位</string>
     <string name="outbound_loc_no_warehouse">未分配仓库</string>
+    <!--
+      明细行数量的单位后缀。后端整库没有 uom 字段,Web 的明细行也不带单位;PDA 固定叫「件」。
+      所以它是**界面常量、不是数据** —— 原先写死在 Mappers 里当模型字段(uom="件"),
+      英文界面下会渲染成「× 5 件」。挪到这里后中英各自可切。
+    -->
+    <string name="uom_piece">件</string>
     <string name="qty_fmt">× %1$d %2$s</string>
     <string name="scanned_out_fmt">已出库: %1$s</string>
     <string name="stocktake_located_fmt">已定位: %1$s</string>

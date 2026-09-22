@@ -47,28 +47,8 @@ public class InboundOrder {
         public String productionDate; // 生产日期(yyyy-MM-dd,可空)
         public Integer shelfLifeDays; // 保质期天数(可空)
         public int qty;             // 后端 quantity
-        public String uom;          // 后端无此字段,PDA 端占位 "件"
         public List<String> codes;  // commit 后生成的 24 位码
 
         public InboundLine() {}
-
-        public InboundLine(Integer id, Integer productId, String sku, String name,
-                           String supplier, String unitPrice, Integer beforeQty,
-                           Integer afterQty, String location, String rowRemark,
-                           int qty, String uom, List<String> codes) {
-            this.id = id;
-            this.productId = productId;
-            this.sku = sku;
-            this.name = name;
-            this.supplier = supplier;
-            this.unitPrice = unitPrice;
-            this.beforeQty = beforeQty;
-            this.afterQty = afterQty;
-            this.location = location;
-            this.rowRemark = rowRemark;
-            this.qty = qty;
-            this.uom = uom;
-            this.codes = codes;
-        }
     }
 }
