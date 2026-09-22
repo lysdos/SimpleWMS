@@ -247,6 +247,32 @@
     <string name="stocktake_unknown_barcode_fmt">Barcode not found: %1$s</string>
     <string name="stocktake_not_in_order">This SKU is not in this stock check</string>
 
+    <string name="external_no_prefix_fmt">External no.: %1$s</string>
+
+    <!-- 详情页的提示语(与全部在库单元那批同源,见 values/strings.xml 的说明) -->
+    <string name="msg_submit_failed">Submit failed: %1$s</string>
+    <string name="msg_cancel_failed">Cancel failed: %1$s</string>
+    <string name="msg_load_failed">Load failed: %1$s</string>
+    <string name="msg_delete_failed">Delete failed: %1$s</string>
+    <string name="msg_scan_failed">Scan failed: %1$s</string>
+    <string name="msg_scan_exception">Scan error: %1$s</string>
+    <string name="msg_deleted">Deleted</string>
+    <string name="scan_rfid_timeout">RFID scan timed out, no tag read</string>
+    <string name="scan_barcode_timeout">Barcode scan timed out, no code read</string>
+    <string name="scan_already_scanned_fmt">Already scanned: %1$s</string>
+    <string name="scan_unknown_reason">Unknown reason</string>
+    <string name="scan_skipped_fmt">Skipped — %1$s</string>
+    <string name="scan_skipped_dup_fmt">Skipped — %1$s (%2$d more duplicate errors omitted)</string>
+    <string name="scan_code_not_in_stock">Code not in stock, skipped</string>
+    <string name="scan_already_out">Already shipped, skipped</string>
+    <string name="scan_scrapped">Code scrapped, skipped</string>
+    <string name="scan_not_locked">Code not reserved for this order, skipped</string>
+    <string name="scan_locked_by_other">Code reserved by another order, skipped</string>
+    <string name="scan_not_in_this_order">Code not in this order, skipped</string>
+    <string name="stocktake_already_counted">Already counted</string>
+    <string name="stocktake_marked_surplus_fmt">Recorded as surplus: %1$s</string>
+    <string name="stocktake_no_lines">No lines in this stock check</string>
+
     <!-- 权限/状态 -->
     <string name="msg_logout_done">Logged out</string>
     <string name="msg_saved">Saved</string>

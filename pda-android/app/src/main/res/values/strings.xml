@@ -258,6 +258,39 @@
     <string name="stocktake_unknown_barcode_fmt">未找到此条码: %1$s</string>
     <string name="stocktake_not_in_order">此 SKU 不在本盘点单中</string>
 
+    <!-- 详情页通用头部的字段前缀(「客户/部门: 」等已有键见上;这里补缺的那个) -->
+    <string name="external_no_prefix_fmt">外部单号: %1$s</string>
+
+    <!--
+      扫码/提交/加载这类**提示语**。原先三个详情页各自在 Java 里写死,而且同一句在多处重复
+      (提交失败、加载失败、RFID 超时… 出库与盘点两页各写一遍),现在共用这一套。
+      注意:扫码被拒时**判定用的**那些中文片段不在这里 —— 见 data/remote/BackendMessages,
+      那些是协议判断、不能翻译。
+    -->
+    <string name="msg_submit_failed">提交失败: %1$s</string>
+    <string name="msg_cancel_failed">取消失败: %1$s</string>
+    <string name="msg_load_failed">加载失败: %1$s</string>
+    <string name="msg_delete_failed">删除失败: %1$s</string>
+    <string name="msg_scan_failed">扫码失败: %1$s</string>
+    <string name="msg_scan_exception">扫码异常: %1$s</string>
+    <string name="msg_deleted">已删除</string>
+    <string name="scan_rfid_timeout">RFID 扫码超时,未读到标签</string>
+    <string name="scan_barcode_timeout">条码扫码超时,未读到码</string>
+    <string name="scan_already_scanned_fmt">该码已扫过: %1$s</string>
+    <string name="scan_unknown_reason">未知原因</string>
+    <!-- 扫码被拒时"原因 + 已跳过"的包装。%1$s 的原因可能来自后端,所以只翻包装、不翻它 -->
+    <string name="scan_skipped_fmt">%1$s,已跳过</string>
+    <string name="scan_skipped_dup_fmt">%1$s(另有 %2$d 个重复错误省略),已跳过</string>
+    <string name="scan_code_not_in_stock">该码未入库,已跳过</string>
+    <string name="scan_already_out">该码已出过库,已跳过</string>
+    <string name="scan_scrapped">该码已报废,已跳过</string>
+    <string name="scan_not_locked">该码未锁定给本出库单,已跳过</string>
+    <string name="scan_locked_by_other">该码已被其他出库单锁定,已跳过</string>
+    <string name="scan_not_in_this_order">该码不在当前出库单中,已跳过</string>
+    <string name="stocktake_already_counted">该码已盘过</string>
+    <string name="stocktake_marked_surplus_fmt">已记为盘盈: %1$s</string>
+    <string name="stocktake_no_lines">盘点单无明细</string>
+
     <!-- 权限/状态 -->
     <string name="msg_logout_done">已退出登录</string>
     <string name="msg_saved">已保存</string>

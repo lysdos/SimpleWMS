@@ -103,14 +103,14 @@ public class StocktakeDetailActivity extends AppCompatActivity {
             public void onError(int code, String msg) {
                 stopScan();
                 Toast.makeText(StocktakeDetailActivity.this,
-                        code == -100 ? msg : "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                        code == -100 ? msg : getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onTimeout() {
                 stopScan();
                 Toast.makeText(StocktakeDetailActivity.this,
-                        "RFID 扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
+                        R.string.scan_rfid_timeout, Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -134,14 +134,14 @@ public class StocktakeDetailActivity extends AppCompatActivity {
             public void onError(int code, String msg) {
                 stopScan();
                 Toast.makeText(StocktakeDetailActivity.this,
-                        code == -100 ? msg : "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                        code == -100 ? msg : getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onTimeout() {
                 stopScan();
                 Toast.makeText(StocktakeDetailActivity.this,
-                        "条码扫码超时,未读到码", Toast.LENGTH_SHORT).show();
+                        R.string.scan_barcode_timeout, Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -219,7 +219,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                             }
                         }
                         Toast.makeText(StocktakeDetailActivity.this,
-                                overage ? "已记为盘盈: " + canon
+                                overage ? getString(R.string.stocktake_marked_surplus_fmt, canon)
                                         : getString(R.string.stocktake_located_fmt, canon),
                                 Toast.LENGTH_SHORT).show();
                         render();
@@ -228,15 +228,15 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                         // 按后端提示语分流(为什么不能翻译,见 BackendMessages 的类注释)
                         if (msg != null && msg.contains(BackendMessages.ALREADY_COUNTED)) {
                             Toast.makeText(StocktakeDetailActivity.this,
-                                    "该码已盘过", Toast.LENGTH_SHORT).show();
+                                    R.string.stocktake_already_counted, Toast.LENGTH_SHORT).show();
                         } else if (msg != null && msg.contains(BackendMessages.CODE_NOT_FOUND)) {
                             Toast.makeText(StocktakeDetailActivity.this,
-                                    "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
+                                    R.string.scan_code_not_in_stock, Toast.LENGTH_SHORT).show();
                         } else {
                             // 网络/服务端瞬时失败:放开去重,允许用户重扫该码
                             triedCodes.remove(canon);
                             Toast.makeText(StocktakeDetailActivity.this,
-                                    "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    getString(R.string.msg_scan_failed, msg), Toast.LENGTH_SHORT).show();
                         }
                     }
                 });
@@ -263,12 +263,12 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                             scannedCodes.remove(c);
                                         }
                                         Toast.makeText(StocktakeDetailActivity.this,
-                                                "已删除", Toast.LENGTH_SHORT).show();
+                                                R.string.msg_deleted, Toast.LENGTH_SHORT).show();
                                         render();
                                     }
                                     @Override public void onError(int code, String msg) {
                                         Toast.makeText(StocktakeDetailActivity.this,
-                                                "删除失败: " + msg, Toast.LENGTH_SHORT).show();
+                                                getString(R.string.msg_delete_failed, msg), Toast.LENGTH_SHORT).show();
                                     }
                                 }))
                 .setNegativeButton(R.string.action_cancel, null)
@@ -291,7 +291,8 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                         finish();
                                     }
                                     @Override public void onError(int code, String msg) {
-                                        Toast.makeText(StocktakeDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(StocktakeDetailActivity.this,
+                                                getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
                                     }
                                 }))
                 .setNegativeButton(R.string.action_cancel, null)
@@ -307,7 +308,8 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                         doRender(o);
                     }
                     @Override public void onError(int code, String msg) {
-                        Toast.makeText(StocktakeDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(StocktakeDetailActivity.this,
+                                getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
                     }
                 });
     }
@@ -410,7 +412,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
 
         if (detailLines.isEmpty() && surplusLines.isEmpty()) {
             TextView empty = new TextView(this);
-            empty.setText("盘点单无明细");
+            empty.setText(R.string.stocktake_no_lines);
             empty.setTextColor(0xFF9AA3B2);
             empty.setPadding(24, 24, 24, 24);
             llLines.addView(empty);

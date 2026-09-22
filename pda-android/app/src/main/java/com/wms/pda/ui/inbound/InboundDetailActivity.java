@@ -73,11 +73,12 @@ public class InboundDetailActivity extends AppCompatActivity {
                     RepositoryProvider.get().deleteInboundItem(String.valueOf(dbId), String.valueOf(l.id),
                             new WmsCallback<InboundOrder>() {
                                 @Override public void onSuccess(InboundOrder o) {
-                                    Toast.makeText(InboundDetailActivity.this, "已删除", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(InboundDetailActivity.this, R.string.msg_deleted, Toast.LENGTH_SHORT).show();
                                     render();
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(InboundDetailActivity.this, "删除失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(InboundDetailActivity.this,
+                                            getString(R.string.msg_delete_failed, msg), Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })
@@ -96,7 +97,8 @@ public class InboundDetailActivity extends AppCompatActivity {
             }
             @Override public void onError(int code, String msg) {
                 btnComplete.setEnabled(true);
-                Toast.makeText(InboundDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(InboundDetailActivity.this,
+                        getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -109,7 +111,8 @@ public class InboundDetailActivity extends AppCompatActivity {
                 doRender(o);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(InboundDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(InboundDetailActivity.this,
+                        getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -120,11 +123,12 @@ public class InboundDetailActivity extends AppCompatActivity {
         StatusPill.apply((TextView) findViewById(R.id.tv_status), o.status);
 
         TextView tvExternal = findViewById(R.id.tv_external_no);
-        tvExternal.setText(o.externalNo == null || o.externalNo.isEmpty()
-                ? "外部单号: —" : "外部单号: " + o.externalNo);
+        tvExternal.setText(getString(R.string.external_no_prefix_fmt,
+                o.externalNo == null || o.externalNo.isEmpty() ? "—" : o.externalNo));
 
         TextView tvOperator = findViewById(R.id.tv_operator);
-        tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
+        tvOperator.setText(getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
 
         TextView tvRemark = findViewById(R.id.tv_remark);
         tvRemark.setText(o.remark == null || o.remark.isEmpty()
@@ -199,7 +203,8 @@ public class InboundDetailActivity extends AppCompatActivity {
                                     render();
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(InboundDetailActivity.this, "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(InboundDetailActivity.this,
+                                            getString(R.string.msg_cancel_failed, msg), Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })

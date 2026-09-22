@@ -143,7 +143,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
                                 finish();
                             }
                             @Override public void onError(int code, String msg) {
-                                Toast.makeText(OutboundDetailActivity.this, "提交失败: " + msg, Toast.LENGTH_SHORT).show();
+                                Toast.makeText(OutboundDetailActivity.this,
+                                        getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
                             }
                         }));
     }
@@ -192,7 +193,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                     Toast.makeText(OutboundDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(OutboundDetailActivity.this,
-                            "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                            getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
                 }
             }
 
@@ -200,7 +201,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onTimeout() {
                 stopScan();
                 Toast.makeText(OutboundDetailActivity.this,
-                        "RFID 扫码超时,未读到标签", Toast.LENGTH_SHORT).show();
+                        getString(R.string.scan_rfid_timeout), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -234,7 +235,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                     Toast.makeText(OutboundDetailActivity.this, msg, Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(OutboundDetailActivity.this,
-                            "扫码异常: " + msg, Toast.LENGTH_SHORT).show();
+                            getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
                 }
             }
 
@@ -242,7 +243,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onTimeout() {
                 stopScan();
                 Toast.makeText(OutboundDetailActivity.this,
-                        "条码扫码超时,未读到码", Toast.LENGTH_SHORT).show();
+                        getString(R.string.scan_barcode_timeout), Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -350,20 +351,22 @@ public class OutboundDetailActivity extends AppCompatActivity {
                             scannedCodes.add(canonical);
                             if (r.alreadyScanned) {
                                 Toast.makeText(OutboundDetailActivity.this,
-                                        "该码已扫过: " + canonical, Toast.LENGTH_SHORT).show();
+                                        getString(R.string.scan_already_scanned_fmt, canonical), Toast.LENGTH_SHORT).show();
                             } else {
                                 BeepUtil.success();
                                 Toast.makeText(OutboundDetailActivity.this,
-                                        "已出库: " + canonical, Toast.LENGTH_SHORT).show();
+                                        getString(R.string.scanned_out_fmt, canonical), Toast.LENGTH_SHORT).show();
                             }
                             renderSoon();
                         } else {
-                            String reason = (r == null || r.reason == null) ? "未知原因" : r.reason;
+                            // r.reason 来自后端,只翻包装、不翻它
+                            String reason = (r == null || r.reason == null)
+                                    ? getString(R.string.scan_unknown_reason) : r.reason;
                             showScanErrorLimited(reason);
                         }
                     }
                     @Override public void onError(int code, String msg) {
-                        showScanErrorLimited("扫码失败: " + msg);
+                        showScanErrorLimited(getString(R.string.msg_scan_failed, msg));
                     }
                 });
     }
@@ -407,7 +410,9 @@ public class OutboundDetailActivity extends AppCompatActivity {
         int n = suppressedErrCount;
         suppressedErrCount = 0;
         BeepUtil.error();
-        String text = n > 0 ? reason + "(另有 " + n + " 个重复错误省略),已跳过" : reason + ",已跳过";
+        String text = n > 0
+                ? getString(R.string.scan_skipped_dup_fmt, reason, n)
+                : getString(R.string.scan_skipped_fmt, reason);
         Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
     }
 
@@ -425,7 +430,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         scannedCodes.add(canonicalCode(code));
                         BeepUtil.success();
                         Toast.makeText(OutboundDetailActivity.this,
-                                "已出库: " + code, Toast.LENGTH_SHORT).show();
+                                getString(R.string.scanned_out_fmt, code), Toast.LENGTH_SHORT).show();
                         renderSoon();
                     }
                     @Override public void onError(int code, String msg) {
@@ -439,19 +444,19 @@ public class OutboundDetailActivity extends AppCompatActivity {
         BeepUtil.error();
         if (msg == null) msg = "";
         if (msg.contains(BackendMessages.CODE_NOT_FOUND)) {
-            Toast.makeText(this, "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_code_not_in_stock, Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.ALREADY_OUT)) {
-            Toast.makeText(this, "该码已出过库,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_already_out, Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.SCRAPPED)) {
-            Toast.makeText(this, "该码已报废,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_scrapped, Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.NOT_LOCKED)) {
-            Toast.makeText(this, "该码未锁定给本出库单,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_not_locked, Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.LOCKED_BY_OTHER)) {
-            Toast.makeText(this, "该码已被其他出库单锁定,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_locked_by_other, Toast.LENGTH_SHORT).show();
         } else if (code == 404) {
-            Toast.makeText(this, "该码不在当前出库单中,已跳过", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_not_in_this_order, Toast.LENGTH_SHORT).show();
         } else {
-            Toast.makeText(this, "扫码失败: " + msg, Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, getString(R.string.msg_scan_failed, msg), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -488,7 +493,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         doRender(o);
                     }
                     @Override public void onError(int code, String msg) {
-                        Toast.makeText(OutboundDetailActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(OutboundDetailActivity.this,
+                                getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
                     }
                 });
     }
@@ -542,15 +548,16 @@ public class OutboundDetailActivity extends AppCompatActivity {
         StatusPill.apply((TextView) findViewById(R.id.tv_status), o.status);
 
         TextView tvCustomer = findViewById(R.id.tv_customer);
-        tvCustomer.setText(o.customer == null || o.customer.isEmpty()
-                ? "客户/部门: —" : "客户/部门: " + o.customer);
+        tvCustomer.setText(getString(R.string.customer_prefix_fmt,
+                o.customer == null || o.customer.isEmpty() ? "—" : o.customer));
 
         TextView tvExternalNo = findViewById(R.id.tv_external_no);
-        tvExternalNo.setText(o.externalNo == null || o.externalNo.isEmpty()
-                ? "外部单号: —" : "外部单号: " + o.externalNo);
+        tvExternalNo.setText(getString(R.string.external_no_prefix_fmt,
+                o.externalNo == null || o.externalNo.isEmpty() ? "—" : o.externalNo));
 
         TextView tvOperator = findViewById(R.id.tv_operator);
-        tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
+        tvOperator.setText(getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
 
         TextView tvRemark = findViewById(R.id.tv_remark);
         tvRemark.setText(o.remark == null || o.remark.isEmpty()
@@ -702,7 +709,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
                                     finish();  // 取消后单据不再是草稿,返回列表
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(OutboundDetailActivity.this, "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(OutboundDetailActivity.this,
+                                            getString(R.string.msg_cancel_failed, msg), Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })
