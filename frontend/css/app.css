@@ -318,8 +318,28 @@ a:hover { color: var(--c-brand-hover); }
     box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
 }
 .input-sm { padding: 6px 10px; font-size: 13px; }
-select[multiple].input, select[multiple].select { padding: 4px; }
-select[multiple].input option, select[multiple].select option { padding: 4px 8px; border-radius: var(--r-sm); }
+
+/* ------------------------------------------------------------
+   多选行列表 —— 替代原生 <select multiple>。
+   原生多选里,不加 Ctrl/⌘ 的点击会**覆盖**已选(选第二个必须按修饰键),
+   和 PDA 的 setMultiChoiceItems(点一下切换一个)也不一致。
+   这里用 <label> 包 checkbox:点整行即切换,不需要修饰键。
+   ------------------------------------------------------------ */
+.ms-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ms-head .input { flex: 1; }
+.ms-count { margin-left: auto; flex: none; font-size: 12px; color: var(--c-text-3); white-space: nowrap; }
+.ms-list {
+    border: 1px solid var(--c-border); border-radius: var(--r-md);
+    background: #fff; max-height: 168px; overflow-y: auto;
+}
+.ms-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 14px; cursor: pointer; }
+.ms-item:hover { background: #F5F8FF; }
+.ms-item input { flex: none; margin: 0; cursor: pointer; }
+.ms-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 到上限后被禁用的行(未选中的那些) */
+.ms-item.is-off { color: var(--c-text-3); cursor: not-allowed; }
+.ms-item.is-off:hover { background: transparent; }
+.ms-empty { padding: 10px 12px; font-size: 13px; color: var(--c-text-3); }
 
 /* ============================================================
    按钮

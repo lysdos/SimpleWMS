@@ -292,8 +292,8 @@ const Views = {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
                 ? `<button class="btn-link" onclick="editInboundOrder(${o.id})">${t('common.edit')}</button>
-                   <button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.commit')}</button>
-                   <button class="btn-link danger" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('common.cancel')}</button>`
+                   <button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('orders.btn.commit')}</button>
+                   <button class="btn-link danger" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('orders.btn.cancel')}</button>`
                 : '';
             return `
             <tr>
@@ -373,8 +373,8 @@ const Views = {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
                 ? `<button class="btn-link" onclick="editOutboundOrder(${o.id})">${t('common.edit')}</button>
-                   <button class="btn-link" onclick="commitOutboundOrder(${o.id})">${t('common.commit')}</button>
-                   <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id})">${t('common.cancel')}</button>`
+                   <button class="btn-link" onclick="commitOutboundOrder(${o.id})">${t('orders.btn.commit')}</button>
+                   <button class="btn-link danger" onclick="cancelOutboundOrder(${o.id})">${t('orders.btn.cancel')}</button>`
                 : '';
             return `
             <tr>
@@ -949,9 +949,7 @@ const Views = {
         const defaultId = (p.suppliers || []).find(s => s.isDefault)?.id
                        || p.defaultSupplierId
                        || (selected[0] || '');
-        const supplierOptions = suppliers.map(s =>
-            `<option value="${s.id}" ${selected.includes(s.id)?'selected':''}>${escapeHtml(s.name)}</option>`
-        ).join('');
+        const supplierItems = suppliers.map(s => ({ value: s.id, label: s.name }));
         const defaultOptions = suppliers.map(s =>
             `<option value="${s.id}" ${s.id===defaultId?'selected':''}>${escapeHtml(s.name)}</option>`
         ).join('');
@@ -1025,9 +1023,8 @@ const Views = {
         <div class="form-row">
             <div class="form-field" style="flex:2;">
                 <label>${t('product.form.suppliers')}</label>
-                <select id="pf-suppliers" class="select" multiple size="4" style="min-height:80px;">
-                    ${supplierOptions || `<option value="" disabled>${t('product.form.empty_supplier')}</option>`}
-                </select>
+                <div class="ms-head"><span class="ms-count" id="pf-supplier-list-count"></span></div>
+                <div class="ms-list" id="pf-supplier-list">${Views.multiCheckListItems(supplierItems, { selected, empty: t('product.form.empty_supplier') })}</div>
             </div>
             <div class="form-field">
                 <label>${t('product.form.default_supplier')}</label>
@@ -1043,9 +1040,7 @@ const Views = {
                 <input id="pf-remark" class="input" value="${escapeHtml(p.remark||'')}" placeholder="${t('new_order.ph.remark')}">
             </div>
         </div>
-        <input type="hidden" id="pf-id" value="${p.id || ''}">
-        <input type="hidden" id="pf-selected-suppliers" value="${escapeHtml(JSON.stringify(selected))}">
-        <input type="hidden" id="pf-default-supplier-id" value="${defaultId}">`;
+        <input type="hidden" id="pf-id" value="${p.id || ''}">`;
     },
 
     /* ================== 供应商管理列表 ================== */
@@ -1395,6 +1390,27 @@ const Views = {
         return html;
     },
 
+    /**
+     * 多选列表的「行」—— 原生 <select multiple> 的等价物。
+     * 原生多选里不加 Ctrl/⌘ 的点击会**覆盖**已选(选第二个必须按修饰键),
+     * 与 PDA 的 setMultiChoiceItems(点一下切换一个)也不一致;
+     * 换成 <label> 包 checkbox 后点整行即切换。
+     * items:[{value, label}];opts.selected 里的值按字符串比对;
+     * 只产出行,外壳(.ms-head / .ms-list)由各调用点的模板给出。
+     */
+    multiCheckListItems(items, opts) {
+        opts = opts || {};
+        const picked = new Set((opts.selected || []).map(String));
+        const list = items || [];
+        if (list.length === 0) return `<div class="ms-empty">${escapeHtml(opts.empty || '')}</div>`;
+        return list.map(it => {
+            const v = String(it.value);
+            return `<label class="ms-item"><input type="checkbox" value="${escapeHtml(v)}"`
+                 + (picked.has(v) ? ' checked' : '')
+                 + `><span>${escapeHtml(it.label)}</span></label>`;
+        }).join('');
+    },
+
     /* ================== 库存盘点 ================== */
     stockChecks(data, filter) {
         const list = (data && data.list) || [];
@@ -1499,15 +1515,19 @@ const Views = {
              只选一个就等价于旧的按库位),见 app.js 的 paintScopeUi。 -->
         <div class="form-field" id="nsc-sku-wrap" style="display:none;">
             <label>${t('stock_check.scope.sku')}</label>
-            <input id="nsc-sku-filter" class="input" placeholder="${t('stock_check.sku.filter_placeholder')}">
-            <select id="nsc-sku-multi" class="select" multiple size="6" style="width:100%;margin-top:6px;"></select>
+            <div class="ms-head">
+                <input id="nsc-sku-filter" class="input" placeholder="${t('stock_check.sku.filter_placeholder')}">
+                <span class="ms-count" id="nsc-sku-list-count"></span>
+            </div>
+            <div class="ms-list" id="nsc-sku-list"></div>
             <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.sku.multi_hint')}</div>
         </div>
         <div class="form-field" id="nsc-warehouse-wrap" style="display:none;">
             <label>${t('stock_check.scope.warehouse')}</label>
             <select id="nsc-warehouse-select" class="select" style="width:100%;"></select>
             <label style="margin-top:10px;display:block;font-size:13px;color:var(--c-text-2);">${t('stock_check.loc.multi_label')}</label>
-            <select id="nsc-location-multi" class="select" multiple size="6" style="width:100%;"></select>
+            <div class="ms-head"><span class="ms-count" id="nsc-loc-list-count"></span></div>
+            <div class="ms-list" id="nsc-loc-list"></div>
             <div style="font-size:12px;color:var(--c-text-3);margin-top:6px;">${t('stock_check.loc.multi_hint')}</div>
         </div>
         <div class="form-field">
@@ -1566,7 +1586,7 @@ const Views = {
                     <th>${t('stock_check.col.loc')}</th>
                     <th class="num">${t('stock_check.col.system_qty')}</th>
                     <th class="num">${t('stock_check.col.counted_qty')}</th>
-                    <th class="num">${t('stock_check.col.diff')}</th>
+                    <th class="num">${t('stock_check.detail.diff')}</th>
                     <th>${t('stock_check.col.row_remark')}</th>
                     <th>${t('common.actions')}</th>
                 </tr>`;

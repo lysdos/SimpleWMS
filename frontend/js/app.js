@@ -308,25 +308,66 @@ function gotoStockCheckPage(p) {
     loadStockChecks();
 }
 
+/* ---------- 多选行列表(替代原生 <select multiple>) ----------
+   原生多选里不加 Ctrl/⌘ 的点击会**覆盖**已选 —— 选第二个必须按修饰键,
+   与 PDA 的 setMultiChoiceItems(点一下切换一个)也不一致。
+   现在的列表把 checkbox 包在 <label> 里,点整行即切换,不需要修饰键。 */
+
+/** 取多选列表当前勾选的值,按行序返回 */
+function checkedValues(listId) {
+    const list = document.getElementById(listId);
+    if (!list) return [];
+    return Array.from(list.querySelectorAll('input[type="checkbox"]:checked')).map(b => b.value);
+}
+
+/**
+ * 装配一个多选列表:顶部「已选 N 个」+ 到上限后禁用其余未勾选的行。
+ * change 用事件委托绑在容器上,所以之后重填 innerHTML(异步到达 / 切仓库)不必重新绑定。
+ * 返回 sync:重填内容后调一次,把计数与禁用位重算。
+ * opts.countFn(必给)因为「已选 N 个」后面跟的名词各处不同;
+ * opts.max 项数上限;opts.maxChars 勾选值拼成逗号串后的字符上限 —— 都为 0 表示不限。
+ */
+function bindCheckList(listId, opts) {
+    opts = opts || {};
+    const max      = opts.max || 0;
+    const maxChars = opts.maxChars || 0;
+    const list = document.getElementById(listId);
+    const count = document.getElementById(listId + '-count');
+    const sync = () => {
+        if (!list) return;
+        const boxes = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+        const picked = boxes.filter(b => b.checked);
+        if (count) count.textContent = opts.countFn(picked.length);
+        if (!max && !maxChars) return;
+        const joined = picked.map(b => b.value).join(',');
+        boxes.forEach(b => {
+            // 长度要按「把这一行也拼进去之后」算,不是按当前串长
+            const cand = joined ? joined + ',' + b.value : b.value;
+            const off = !b.checked
+                && ((max && picked.length >= max) || (maxChars && cand.length > maxChars));
+            b.disabled = off;
+            const item = b.closest('.ms-item');
+            if (item) item.classList.toggle('is-off', off);
+        });
+    };
+    if (list) list.addEventListener('change', sync);
+    sync();
+    return sync;
+}
+
 function openNewStockCheckModal() {
     showModal(t('stock_check.modal.title.new'), Views.newStockCheckForm(), async () => {
-        const scope    = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
-        const skuMulti = document.getElementById('nsc-sku-multi');
-        const whSel    = document.getElementById('nsc-warehouse-select');
-        const locMulti = document.getElementById('nsc-location-multi');
+        const scope = (document.querySelector('input[name="nsc-scope"]:checked') || {}).value || 'ALL';
+        const whSel = document.getElementById('nsc-warehouse-select');
         let keyword = '';
         let warehouseId = null;
         if (scope === 'SKU') {
-            // 多选下拉 -> 后端收的仍是逗号分隔串(接口没变,限额也没变)
-            keyword = skuMulti
-                ? Array.from(skuMulti.selectedOptions).map(o => o.value).join(',')
-                : '';
+            // 多选列表 -> 后端收的仍是逗号分隔串(接口没变,限额也没变)
+            keyword = checkedValues('nsc-sku-list').join(',');
         } else if (scope === 'WAREHOUSE') {
             warehouseId = (whSel && whSel.value) ? Number(whSel.value) : null;
             // 不勾库位 = 空关键字,后端按"整个仓库"处理
-            keyword = locMulti
-                ? Array.from(locMulti.selectedOptions).map(o => o.value).join(',')
-                : '';
+            keyword = checkedValues('nsc-loc-list').join(',');
         }
         const remark  = document.getElementById('nsc-remark').value.trim();
 
@@ -347,33 +388,49 @@ function openNewStockCheckModal() {
         } catch (e) { toast(e.message, 'error'); return false; }
     });
 
-    // 模式 radio 联动:ALL 无输入 / SKU 过滤框+多选下拉 / WAREHOUSE 仓库下拉+库位多选(不勾 = 整个仓库)
+    // 模式 radio 联动:ALL 无输入 / SKU 过滤框+多选列表 / WAREHOUSE 仓库下拉+库位多选(不勾 = 整个仓库)
     const radios   = document.querySelectorAll('input[name="nsc-scope"]');
     const skuWrap  = document.getElementById('nsc-sku-wrap');
     const whWrap   = document.getElementById('nsc-warehouse-wrap');
     let skuCache   = null;   // 商品列表只在弹窗存活期间拉一次
     let skuLoading = false;
 
-    /** 过滤:只切选项的显隐,不重渲染 —— 重渲染会把已勾选的项丢掉 */
+    // 上限与后端 StockCheckService 的 MAX_ITEMS / MAX_KEYWORD_CHARS 对齐,让超限在
+    // **前端就选不动**,而不是提交后吃一个 400。SKU 列表与库位列表共用同一组上限 ——
+    // 后端也是在同一个 parseList 里按「解析后的项数」和「原始串长」两道卡。
+    const MAX_PICK = 50;
+    const MAX_KEYWORD_CHARS = 500;
+    const syncSku = bindCheckList('nsc-sku-list', {
+        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS,
+        countFn: n => t('stock_check.sku.selected_fmt', { n })
+    });
+    const syncLoc = bindCheckList('nsc-loc-list', {
+        max: MAX_PICK, maxChars: MAX_KEYWORD_CHARS,
+        countFn: n => t('stock_check.loc.selected_fmt', { n })
+    });
+    // 过滤框只按输入过滤(不重新拉数据):选项数据在 fillSkuOptions 里填一次,
+    // 这里挂一次监听即可 —— 重填 innerHTML 不会影响这个监听。
+    const skuFilterBox = document.getElementById('nsc-sku-filter');
+    if (skuFilterBox) skuFilterBox.addEventListener('input', paintSkuFilter);
+
+    /** 过滤:只切行的显隐,不重填 —— 重填会把已勾选的项丢掉 */
     function paintSkuFilter() {
-        const multi = document.getElementById('nsc-sku-multi');
-        const box   = document.getElementById('nsc-sku-filter');
-        if (!multi) return;
+        const list = document.getElementById('nsc-sku-list');
+        const box  = document.getElementById('nsc-sku-filter');
+        if (!list) return;
         const kw = (box && box.value ? box.value : '').trim().toLowerCase();
-        Array.from(multi.options).forEach(o => {
-            const hit = !kw || o.text.toLowerCase().includes(kw);
-            o.hidden = !hit;
-            o.style.display = hit ? '' : 'none';   // 保险:有的浏览器只看 style
+        list.querySelectorAll('.ms-item').forEach(el => {
+            el.style.display = (!kw || el.textContent.toLowerCase().includes(kw)) ? '' : 'none';
         });
     }
 
     function fillSkuOptions() {
-        const multi = document.getElementById('nsc-sku-multi');
-        if (!multi) return;
-        multi.innerHTML = (skuCache || []).map(p =>
-            `<option value="${escapeHtml(p.sku)}">${escapeHtml(p.sku)} · ${escapeHtml(p.name || '')}</option>`).join('');
-        const box = document.getElementById('nsc-sku-filter');
-        if (box) box.oninput = paintSkuFilter;
+        const list = document.getElementById('nsc-sku-list');
+        if (!list) return;
+        list.innerHTML = Views.multiCheckListItems(
+            (skuCache || []).map(p => ({ value: p.sku, label: p.sku + ' · ' + (p.name || '') })),
+            { empty: t('new_order.placeholder.no_product') });
+        syncSku();
     }
 
     function ensureSkuList() {
@@ -398,15 +455,17 @@ function openNewStockCheckModal() {
         skuWrap.style.display = (cur === 'SKU') ? '' : 'none';
         if (cur === 'SKU') {
             ensureSkuList();
+            paintSkuFilter();   // 切回来时按当前过滤词刷一遍(行在隐藏容器里也该保持隐藏)
         } else if (cur === 'WAREHOUSE') {
             // 仓库下拉 + 库位多选(库位跟着所选仓库联动)。
             // 这里单独拉一次 /api/locations 而不是用 state.locations —— 后者会被库位管理页
             // 的筛选结果改写,勾选项会莫名缺一块(见 state.locMap 那段注释)。
+            // 切仓库时库位列表会重填、勾选随之清空:这是**对的** —— 后端只收单个
+            // warehouseId,勾了别的仓库的库位也进不了范围(IN 子句被 warehouse_id 收窄)。
             ensureWarehouses()
                 .then(() => api.get('/api/locations'))
                 .then(locs => {
-                    const whSel    = document.getElementById('nsc-warehouse-select');
-                    const locMulti = document.getElementById('nsc-location-multi');
+                    const whSel = document.getElementById('nsc-warehouse-select');
                     const whs = (state.warehouses || []).filter(w => w.enabled !== false);
                     whSel.innerHTML = whs.map(w =>
                         `<option value="${w.id}">${escapeHtml(w.name)}</option>`).join('');
@@ -414,8 +473,13 @@ function openNewStockCheckModal() {
                         const whId = whSel.value;
                         const mine = (locs || []).filter(l =>
                             l.enabled !== false && String(l.warehouseId || '') === String(whId));
-                        locMulti.innerHTML = mine.map(l =>
-                            `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' · ' + escapeHtml(l.name) : ''}</option>`).join('');
+                        document.getElementById('nsc-loc-list').innerHTML = Views.multiCheckListItems(
+                            mine.map(l => ({
+                                value: l.code,
+                                label: l.code + (l.name && l.name !== l.code ? ' · ' + l.name : '')
+                            })),
+                            { empty: t('product.form.empty_loc') });
+                        syncLoc();
                     };
                     whSel.onchange = paintLocs;
                     paintLocs();
@@ -833,6 +897,7 @@ async function newProduct() {
             await loadProducts();
         } catch (e) { toast(e.message, 'error'); return false; }
     });
+    bindCheckList('pf-supplier-list', { countFn: n => t('product.form.suppliers_selected_fmt', { n }) });
 }
 
 async function viewProduct(id) {
@@ -857,6 +922,7 @@ async function editProduct(id) {
                 await loadProducts();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
+        bindCheckList('pf-supplier-list', { countFn: n => t('product.form.suppliers_selected_fmt', { n }) });
     } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -925,9 +991,8 @@ function readProductForm() {
     if (!name) { toast(t('product.error.name_required'), 'error'); return null; }
     if (!location) { toast(t('product.error.loc_required'), 'error'); return null; }
 
-    const sel = document.getElementById('pf-suppliers');
     const def = document.getElementById('pf-default-supplier').value;
-    const selectedIds = sel ? Array.from(sel.selectedOptions).map(o => Number(o.value)).filter(Boolean) : [];
+    const selectedIds = checkedValues('pf-supplier-list').map(Number).filter(Boolean);
     const defNum = def ? Number(def) : null;
     const finalIds = selectedIds.slice();
     if (defNum && !finalIds.includes(defNum)) {
