@@ -7,8 +7,6 @@
     <string name="action_cancel">取消</string>
     <string name="action_save">保存</string>
     <string name="action_submit">提交</string>
-    <string name="action_scan">扫码</string>
-    <string name="action_print">打印条码</string>
     <string name="action_transfer">调拨</string>
     <string name="action_scrap">报废</string>
     <string name="action_refresh">刷新</string>
@@ -16,7 +14,6 @@
     <string name="action_settings">设置</string>
     <string name="action_logout">退出登录</string>
     <string name="action_search">搜索</string>
-    <string name="action_back">返回</string>
     <string name="action_clear">清空</string>
 
     <!-- 单据状态(出入库单 / 盘点单)。文案原先是 Enums.DocStatus 枚举里带的 label ——
@@ -93,11 +90,8 @@
     <string name="inbound_tab_done">已入库</string>
     <string name="inbound_new_title">新建入库单</string>
     <string name="inbound_detail_title">入库单详情</string>
-    <string name="inbound_supplier">供应商</string>
     <string name="inbound_external_no">外部单号</string>
-    <string name="inbound_warehouse">目标仓库</string>
     <string name="inbound_remark">备注</string>
-    <string name="inbound_scan_hint">点击下方按钮扫码,扫到的条码会自动加入入库明细</string>
     <string name="inbound_add_item_action">添加明细</string>
     <string name="inbound_pick_product">选择商品</string>
     <string name="inbound_pick_qty">入库数量</string>
@@ -143,10 +137,6 @@
     <string name="inventory_title">库存管理</string>
     <string name="inventory_search_hint">按 SKU / 名称 / 条码搜索</string>
     <string name="inventory_qty_on_hand">在库数量</string>
-    <string name="inventory_qty_available">可用数量</string>
-    <string name="inventory_qty_locked">锁定数量</string>
-    <string name="inventory_warehouse_col">仓库</string>
-    <string name="inventory_location">库位</string>
     <string name="inventory_expiry_fmt">效期: %1$s</string>
     <string name="inventory_expiry_none">效期: —</string>
     <string name="inventory_expiry_expiring_fmt">效期: %1$s · 临期 %2$d天</string>
@@ -170,7 +160,6 @@
     <string name="transfer_title">库存调拨</string>
     <string name="transfer_target_label">目标库位</string>
     <string name="transfer_target_warehouse">调入仓库</string>
-    <string name="transfer_qty">调拨数量</string>
     <string name="transfer_no_other_location">没有其他可用库位,请先在 PC 端维护库位</string>
     <!-- 弹窗里的信息行:SKU · 码 + 换行 + 这一行。%1$s 是当前库位码,空值由调用方换成 — -->
     <string name="transfer_current_location_fmt">\n当前库位: %1$s</string>
@@ -256,19 +245,13 @@
     <string name="lines_empty_outbound">暂无明细,请扫码添加</string>
     <string name="customer_prefix_fmt">客户/部门: %1$s</string>
     <string name="supplier_prefix_fmt">供应商: %1$s</string>
-    <string name="warehouse_prefix_fmt">目标仓库: %1$s</string>
-    <string name="outbound_warehouse_prefix_fmt">出库仓库: %1$s</string>
     <string name="created_at_fmt">创建时间: %1$s</string>
     <string name="outbound_scan_hint">扫码确认:扫到的条码会标记为已核实,提交出库时统一扣减</string>
     <string name="outbound_loc_unassigned">未指定库位</string>
     <string name="outbound_loc_no_warehouse">未分配仓库</string>
     <string name="qty_fmt">× %1$d %2$s</string>
-    <string name="barcode_fmt">条码 %1$s</string>
-    <string name="joined_fmt">已加入: %1$s</string>
     <string name="scanned_out_fmt">已出库: %1$s</string>
     <string name="stocktake_located_fmt">已定位: %1$s</string>
-    <string name="stocktake_unknown_barcode_fmt">未找到此条码: %1$s</string>
-    <string name="stocktake_not_in_order">此 SKU 不在本盘点单中</string>
 
     <!-- 详情页通用头部的字段前缀(「客户/部门: 」等已有键见上;这里补缺的那个) -->
     <string name="external_no_prefix_fmt">外部单号: %1$s</string>

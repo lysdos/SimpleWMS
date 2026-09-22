@@ -15,8 +15,6 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_save">Save</string>
     <string name="action_submit">Submit</string>
-    <string name="action_scan">Scan</string>
-    <string name="action_print">Print barcode</string>
     <string name="action_transfer">Transfer</string>
     <string name="action_scrap">Scrap</string>
     <string name="action_refresh">Refresh</string>
@@ -24,7 +22,6 @@
     <string name="action_settings">Settings</string>
     <string name="action_logout">Log out</string>
     <string name="action_search">Search</string>
-    <string name="action_back">Back</string>
     <string name="action_clear">Clear</string>
 
     <!-- 单据状态(出入库单 / 盘点单) -->
@@ -94,11 +91,8 @@
     <string name="inbound_tab_done">Received</string>
     <string name="inbound_new_title">New inbound order</string>
     <string name="inbound_detail_title">Inbound order</string>
-    <string name="inbound_supplier">Supplier</string>
     <string name="inbound_external_no">External no.</string>
-    <string name="inbound_warehouse">Target warehouse</string>
     <string name="inbound_remark">Remark</string>
-    <string name="inbound_scan_hint">Tap the button below to scan; scanned barcodes are added to the lines automatically</string>
     <string name="inbound_add_item_action">Add line</string>
     <string name="inbound_pick_product">Pick product</string>
     <string name="inbound_pick_qty">Quantity</string>
@@ -143,10 +137,6 @@
     <string name="inventory_title">Inventory</string>
     <string name="inventory_search_hint">Search by SKU / name / barcode</string>
     <string name="inventory_qty_on_hand">On hand</string>
-    <string name="inventory_qty_available">Available</string>
-    <string name="inventory_qty_locked">Locked</string>
-    <string name="inventory_warehouse_col">Warehouse</string>
-    <string name="inventory_location">Location</string>
     <string name="inventory_expiry_fmt">Expiry: %1$s</string>
     <string name="inventory_expiry_none">Expiry: —</string>
     <string name="inventory_expiry_expiring_fmt">Expiry: %1$s · %2$d d left</string>
@@ -165,7 +155,6 @@
     <string name="transfer_title">Transfer stock</string>
     <string name="transfer_target_label">Target location</string>
     <string name="transfer_target_warehouse">Target warehouse</string>
-    <string name="transfer_qty">Quantity</string>
     <string name="transfer_no_other_location">No other location available — set up locations on the PC first</string>
     <!-- Info line in the dialog: "SKU · code" then a newline then this line. %1$s is the current
          location code; the caller substitutes — (em dash) when it is empty. -->
@@ -246,19 +235,13 @@
     <string name="lines_empty_outbound">No lines yet — scan to add</string>
     <string name="customer_prefix_fmt">Customer / Dept: %1$s</string>
     <string name="supplier_prefix_fmt">Supplier: %1$s</string>
-    <string name="warehouse_prefix_fmt">Target warehouse: %1$s</string>
-    <string name="outbound_warehouse_prefix_fmt">From warehouse: %1$s</string>
     <string name="created_at_fmt">Created: %1$s</string>
     <string name="outbound_scan_hint">Scan to confirm: scanned barcodes are marked verified and deducted on commit</string>
     <string name="outbound_loc_unassigned">No location</string>
     <string name="outbound_loc_no_warehouse">No warehouse</string>
     <string name="qty_fmt">× %1$d %2$s</string>
-    <string name="barcode_fmt">Barcode %1$s</string>
-    <string name="joined_fmt">Added: %1$s</string>
     <string name="scanned_out_fmt">Shipped: %1$s</string>
     <string name="stocktake_located_fmt">Located: %1$s</string>
-    <string name="stocktake_unknown_barcode_fmt">Barcode not found: %1$s</string>
-    <string name="stocktake_not_in_order">This SKU is not in this stock check</string>
 
     <string name="external_no_prefix_fmt">External no.: %1$s</string>
 
