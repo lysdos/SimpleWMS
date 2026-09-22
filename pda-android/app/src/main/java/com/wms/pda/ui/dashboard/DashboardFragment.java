@@ -86,7 +86,10 @@ public class DashboardFragment extends Fragment {
                     View row = li.inflate(R.layout.item_op_log, recent, false);
                     ((TextView) row.findViewById(R.id.tv_type)).setText(op.type);
                     ((TextView) row.findViewById(R.id.tv_ref)).setText(op.refNo);
-                    ((TextView) row.findViewById(R.id.tv_time)).setText(op.time == null ? "" : op.time.substring(11));
+                    // op.time 在映射层已经是 "yyyy-MM-dd HH:mm"(RemoteWmsRepository 截好并换掉了 T),
+                    // 这里**不要再切一刀**:原来 substring(11) 只留 "HH:mm",年月日就是这么丢的,
+                    // 而且按固定下标切串一旦后端给更短的格式还会越界。
+                    ((TextView) row.findViewById(R.id.tv_time)).setText(op.time == null ? "" : op.time);
                     ((TextView) row.findViewById(R.id.tv_summary)).setText(op.summary);
                     recent.addView(row);
                 }
