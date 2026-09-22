@@ -65,8 +65,8 @@ public class LoginActivity extends AppCompatActivity {
     private void doLogin() {
         String u = etUser.getText().toString().trim();
         String p = etPwd.getText().toString().trim();
-        if (u.isEmpty()) { etUser.setError("请输入账号"); return; }
-        if (p.isEmpty()) { etPwd.setError("请输入密码"); return; }
+        if (u.isEmpty()) { etUser.setError(getString(R.string.err_username_required)); return; }
+        if (p.isEmpty()) { etPwd.setError(getString(R.string.err_password_required)); return; }
 
         setLoading(true);
         ApiClient api = new ApiClient();
@@ -84,7 +84,7 @@ public class LoginActivity extends AppCompatActivity {
             }
             @Override public void onError(int code, String msg) {
                 setLoading(false);
-                etPwd.setError("登录失败: " + msg);
+                etPwd.setError(getString(R.string.msg_login_failed, msg));
                 // 登录失败 → 清除仓库引用,避免残留失效的 remote 实例
                 RepositoryProvider.reset();
                 SessionStore.logout();

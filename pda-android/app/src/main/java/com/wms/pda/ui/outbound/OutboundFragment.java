@@ -89,7 +89,8 @@ public class OutboundFragment extends Fragment {
                                     }
                                     @Override public void onError(int code, String msg) {
                                         if (!isAdded()) return;
-                                        Toast.makeText(requireContext(), "取消失败: " + msg, Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(requireContext(),
+                                                getString(R.string.msg_cancel_failed, msg), Toast.LENGTH_SHORT).show();
                                     }
                                 }))
                 .setNegativeButton(R.string.action_cancel, null)
@@ -105,7 +106,8 @@ public class OutboundFragment extends Fragment {
             }
             @Override public void onError(int code, String msg) {
                 if (!isAdded()) return;
-                android.widget.Toast.makeText(requireContext(), "加载失败: " + msg, android.widget.Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(requireContext(),
+                        getString(R.string.msg_load_failed, msg), android.widget.Toast.LENGTH_SHORT).show();
                 btnNew.setEnabled(true);
             }
         });

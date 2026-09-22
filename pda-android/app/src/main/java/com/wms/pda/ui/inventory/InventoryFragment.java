@@ -128,7 +128,8 @@ public class InventoryFragment extends Fragment {
             }
             @Override public void onError(int code, String msg) {
                 if (!isAdded()) return;
-                Toast.makeText(requireContext(), "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), getString(R.string.msg_load_failed, msg),
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }

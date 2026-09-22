@@ -80,6 +80,7 @@
     <string name="dash_kpi_total_value">Total value</string>
     <string name="dash_overview">Overview</string>
     <string name="dash_recent_title">Recent activity</string>
+    <string name="dash_recent_empty">No recent activity</string>
     <string name="log_type_in">Inbound</string>
     <string name="log_type_out">Outbound</string>
     <string name="log_type_check">Stock check</string>
@@ -307,11 +308,16 @@
     <string name="msg_load_locations_failed">Failed to load locations: %1$s</string>
     <string name="msg_transfer_failed">Transfer failed: %1$s</string>
     <string name="msg_scrap_failed">Scrap failed: %1$s</string>
+    <string name="msg_created_fmt">Created: %1$s</string>
+    <string name="msg_login_failed">Login failed: %1$s</string>
 
-    <!-- Field validation, shared by the inbound/outbound line dialogs -->
+    <!-- Field validation -->
     <string name="err_product_missing_id">This product has no ID — refresh and retry</string>
     <string name="err_qty_invalid">Enter a valid quantity</string>
     <string name="err_qty_positive">Quantity must be greater than 0</string>
+    <string name="err_customer_required">Enter the customer / department</string>
+    <string name="err_username_required">Enter your account</string>
+    <string name="err_password_required">Enter your password</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">Logged out</string>

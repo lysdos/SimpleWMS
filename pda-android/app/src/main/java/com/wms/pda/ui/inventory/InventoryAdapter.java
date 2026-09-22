@@ -54,7 +54,8 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
         // 仓库名由后端列表带出(warehouseName),查不到就退回裸码 —— 与 Web 库存列表一致。
         String loc = (i.locationCode == null || i.locationCode.isEmpty()) ? "—" : i.locationCode;
         String wh  = i.warehouseName == null ? "" : i.warehouseName.trim();
-        h.tvLocation.setText("库位: " + ("—".equals(loc) || wh.isEmpty() ? loc : wh + "/" + loc));
+        h.tvLocation.setText(h.itemView.getContext().getString(R.string.location_prefix_fmt,
+                "—".equals(loc) || wh.isEmpty() ? loc : wh + "/" + loc));
         bindExpiry(h, i);
 
         int qty = i.remaining == null ? 0 : i.remaining;

@@ -34,12 +34,14 @@ public class InboundNewActivity extends AppCompatActivity {
             submit.setEnabled(false);
             RepositoryProvider.get().createInbound(externalNo, null, remark, new WmsCallback<InboundOrder>() {
                 @Override public void onSuccess(InboundOrder order) {
-                    Toast.makeText(InboundNewActivity.this, "已创建: " + order.id, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(InboundNewActivity.this,
+                            getString(R.string.msg_created_fmt, order.id), Toast.LENGTH_SHORT).show();
                     finish();
                 }
                 @Override public void onError(int code, String msg) {
                     submit.setEnabled(true);
-                    Toast.makeText(InboundNewActivity.this, "创建失败: " + msg, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(InboundNewActivity.this,
+                            getString(R.string.msg_create_failed, msg), Toast.LENGTH_SHORT).show();
                 }
             });
         });

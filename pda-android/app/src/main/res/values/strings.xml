@@ -78,6 +78,7 @@
     <string name="dash_kpi_total_value">库存总值</string>
     <string name="dash_overview">系统概览</string>
     <string name="dash_recent_title">最近操作</string>
+    <string name="dash_recent_empty">暂无最近操作</string>
     <!-- 最近操作行上的类型标签。后端只给原始值 IN/OUT/CHECK/TRANSFER/SCRAP,文案在这边翻 -->
     <string name="log_type_in">入库</string>
     <string name="log_type_out">出库</string>
@@ -329,11 +330,16 @@
     <string name="msg_load_locations_failed">加载库位失败: %1$s</string>
     <string name="msg_transfer_failed">调拨失败: %1$s</string>
     <string name="msg_scrap_failed">报废失败: %1$s</string>
+    <string name="msg_created_fmt">已创建: %1$s</string>
+    <string name="msg_login_failed">登录失败: %1$s</string>
 
-    <!-- 入参校验提示(入库/出库明细弹窗共用同一套) -->
+    <!-- 入参校验提示 -->
     <string name="err_product_missing_id">该商品缺少 ID,请刷新重试</string>
     <string name="err_qty_invalid">请输入有效数量</string>
     <string name="err_qty_positive">数量必须大于 0</string>
+    <string name="err_customer_required">请填写客户/部门</string>
+    <string name="err_username_required">请输入账号</string>
+    <string name="err_password_required">请输入密码</string>
 
     <!-- 权限/状态 -->
     <string name="msg_logout_done">已退出登录</string>
