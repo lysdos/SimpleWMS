@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -34,6 +35,23 @@
         <activity android:name=".ui.outbound.OutboundNewActivity"    android:exported="false" />
         <activity android:name=".ui.stocktake.StocktakeListActivity"  android:exported="false" />
         <activity android:name=".ui.stocktake.StocktakeDetailActivity" android:exported="false" />
+
+        <!--
+          appcompat 的语言选择需要这个占位 Service:**API < 33** 时由它承载
+          autoStoreLocales 这个 meta-data,否则设置页选的语言重启后就丢了
+          (API >= 33 走系统的 LocaleManager,不需要它)。
+          appcompat 自己的 manifest 里没有这一条,必须由应用声明 —— 见 AppLocalesMetadataHolderService。
+          enabled=false:它只是个 meta-data 载体,永远不该被真的启动,lint 对此有专门告警。
+        -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false"
+            tools:ignore="AppLocalesMetadataHolderService">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
 
     </application>
 </manifest>

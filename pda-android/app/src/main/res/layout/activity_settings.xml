@@ -88,9 +88,31 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="保存后下次启动会使用新地址。\n格式示例:http://192.168.11.160:9080"
+                android:text="@string/settings_saved_tip"
                 style="@style/Text.Caption"
                 android:layout_marginTop="@dimen/space_md" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/divider"
+                android:layout_marginTop="@dimen/space_lg" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_language"
+                style="@style/Text.Caption"
+                android:layout_marginTop="@dimen/space_lg" />
+
+            <Spinner
+                android:id="@+id/sp_language"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/touch_min"
+                android:layout_marginTop="@dimen/space_xs"
+                android:background="@drawable/bg_input"
+                android:paddingStart="@dimen/space_md"
+                android:paddingEnd="@dimen/space_md" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>

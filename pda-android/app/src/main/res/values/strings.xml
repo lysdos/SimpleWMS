@@ -36,6 +36,12 @@
     <string name="settings_test_success">连接成功</string>
     <string name="settings_test_fail">连接失败</string>
     <string name="settings_reset">恢复默认</string>
+    <!-- 语言名按惯例用各自的语言显示,不随界面语言变 —— 所以标 translatable="false" -->
+    <string name="settings_language">语言</string>
+    <string name="settings_language_zh" translatable="false">中文</string>
+    <string name="settings_language_en" translatable="false">English</string>
+    <!-- 原本写死在 activity_settings.xml 里,抽出来英文界面才切得动 -->
+    <string name="settings_saved_tip">保存后下次启动会使用新地址。\n格式示例:http://192.168.11.160:9080</string>
 
     <!-- 主框架 -->
     <string name="tab_dashboard">仪表盘</string>
