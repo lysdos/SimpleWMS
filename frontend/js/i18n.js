@@ -505,7 +505,7 @@ const I18N = (() => {
         'stock_check.export.over':{ 'zh-CN': '导出盘盈',                    'en-US': 'Export Overages' },
         'stock_check.export.short':{ 'zh-CN': '导出盘亏',                   'en-US': 'Export Shortages' },
         'stock_check.col.counted_qty':{ 'zh-CN': '实盘数',                  'en-US': 'Counted Qty' },
-        'stock_check.detail.diff':{ 'zh-CN': '差异',                       'en-US': 'Diff' },
+        'stock_check.col.diff_qty':{ 'zh-CN': '差异',                      'en-US': 'Diff' },
         'stock_check.col.row_remark':{ 'zh-CN': '行备注',                   'en-US': 'Row Remark' },
         'stock_check.detail.empty':{ 'zh-CN': '无明细',                     'en-US': 'No items' },
         'stock_check.btn.save':{ 'zh-CN': '保存',                          'en-US': 'Save' },

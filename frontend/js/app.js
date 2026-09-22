@@ -431,6 +431,9 @@ function openNewStockCheckModal() {
             (skuCache || []).map(p => ({ value: p.sku, label: p.sku + ' · ' + (p.name || '') })),
             { empty: t('new_order.placeholder.no_product') });
         syncSku();
+        // 重填会把行上的 display 清掉,而用户可能在商品返回**之前**就已经打了过滤词
+        // (过滤框是立刻可见的,列表却是异步填的)—— 不重放一次,过滤框有字但全列都显示。
+        paintSkuFilter();
     }
 
     function ensureSkuList() {

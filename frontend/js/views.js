@@ -1493,7 +1493,8 @@ const Views = {
     },
 
     newStockCheckForm() {
-        // 四种模式:ALL=全部在库 / SKU=按 SKU / LOCATION=按单个库位 / WAREHOUSE=按仓库(可选多个库位)
+        // 三种模式:ALL=全部在库 / SKU=按 SKU / WAREHOUSE=按仓库(可选多个库位)。
+        // 另有 SCOPE_LOCATION,但只用于**读取历史单** —— 创建入口已移除,见下方注释。
         return `
         <div class="form-row" style="gap:8px;margin-bottom:12px;">
             <label style="font-size:13px;color:var(--c-text-2);min-width:64px;">${t('stock_check.scope_label')}</label>
@@ -1586,7 +1587,7 @@ const Views = {
                     <th>${t('stock_check.col.loc')}</th>
                     <th class="num">${t('stock_check.col.system_qty')}</th>
                     <th class="num">${t('stock_check.col.counted_qty')}</th>
-                    <th class="num">${t('stock_check.detail.diff')}</th>
+                    <th class="num">${t('stock_check.col.diff_qty')}</th>
                     <th>${t('stock_check.col.row_remark')}</th>
                     <th>${t('common.actions')}</th>
                 </tr>`;
