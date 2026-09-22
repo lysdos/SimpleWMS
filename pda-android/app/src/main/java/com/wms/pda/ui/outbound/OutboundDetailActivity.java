@@ -22,6 +22,7 @@ import com.wms.pda.data.model.EpcScanResult;
 import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.Location;
 import com.wms.pda.data.model.OutboundOrder;
+import com.wms.pda.data.remote.BackendMessages;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 import com.wms.pda.scan.ScanManager;
@@ -431,18 +432,19 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 });
     }
 
+    /** 扫码被拒时按**后端提示语**分流(为什么只能认字、不能翻译,见 BackendMessages 的类注释)。 */
     private void handleScanError(int code, String msg) {
         BeepUtil.error();
         if (msg == null) msg = "";
-        if (msg.contains("码不存在")) {
+        if (msg.contains(BackendMessages.CODE_NOT_FOUND)) {
             Toast.makeText(this, "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
-        } else if (msg.contains("已出库")) {
+        } else if (msg.contains(BackendMessages.ALREADY_OUT)) {
             Toast.makeText(this, "该码已出过库,已跳过", Toast.LENGTH_SHORT).show();
-        } else if (msg.contains("已报废")) {
+        } else if (msg.contains(BackendMessages.SCRAPPED)) {
             Toast.makeText(this, "该码已报废,已跳过", Toast.LENGTH_SHORT).show();
-        } else if (msg.contains("未锁定给本出库单")) {
+        } else if (msg.contains(BackendMessages.NOT_LOCKED)) {
             Toast.makeText(this, "该码未锁定给本出库单,已跳过", Toast.LENGTH_SHORT).show();
-        } else if (msg.contains("已被其他出库单锁定")) {
+        } else if (msg.contains(BackendMessages.LOCKED_BY_OTHER)) {
             Toast.makeText(this, "该码已被其他出库单锁定,已跳过", Toast.LENGTH_SHORT).show();
         } else if (code == 404) {
             Toast.makeText(this, "该码不在当前出库单中,已跳过", Toast.LENGTH_SHORT).show();

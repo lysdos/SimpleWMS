@@ -16,6 +16,7 @@ import androidx.core.os.LocaleListCompat;
 import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
 import com.wms.pda.data.api.ApiClient;
+import com.wms.pda.data.remote.BackendMessages;
 import com.wms.pda.data.repo.SettingsStore;
 
 import java.util.Locale;
@@ -129,8 +130,9 @@ public class SettingsActivity extends AppCompatActivity {
                         // 网络异常:超时/连接拒绝/DNS 解析失败
                         Toast.makeText(SettingsActivity.this,
                                 "连接失败: " + msg, Toast.LENGTH_SHORT).show();
-                    } else if (msg != null && msg.contains("未登录")) {
-                        // HTTP 响应体含 "未登录" → 这是 WMS 后端(只是没登录)
+                    } else if (msg != null && msg.contains(BackendMessages.NOT_LOGGED_IN)) {
+                        // 响应体含「未登录」→ 这是 WMS 后端(只是没登录)。
+                        // 这是靠后端文案做的**协议判断**,不是界面文案,不能翻译(见 BackendMessages)。
                         Toast.makeText(SettingsActivity.this,
                                 "连接成功，WMS 后端", Toast.LENGTH_SHORT).show();
                     } else {

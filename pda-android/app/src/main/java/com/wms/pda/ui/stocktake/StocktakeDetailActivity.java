@@ -17,6 +17,7 @@ import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
 import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.StocktakeOrder;
+import com.wms.pda.data.remote.BackendMessages;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
 import com.wms.pda.ui.common.StatusPill;
@@ -224,10 +225,11 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                         render();
                     }
                     @Override public void onError(int code, String msg) {
-                        if (msg != null && msg.contains("已盘过")) {
+                        // 按后端提示语分流(为什么不能翻译,见 BackendMessages 的类注释)
+                        if (msg != null && msg.contains(BackendMessages.ALREADY_COUNTED)) {
                             Toast.makeText(StocktakeDetailActivity.this,
                                     "该码已盘过", Toast.LENGTH_SHORT).show();
-                        } else if (msg != null && msg.contains("码不存在")) {
+                        } else if (msg != null && msg.contains(BackendMessages.CODE_NOT_FOUND)) {
                             Toast.makeText(StocktakeDetailActivity.this,
                                     "该码未入库,已跳过", Toast.LENGTH_SHORT).show();
                         } else {

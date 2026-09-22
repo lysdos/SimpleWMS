@@ -60,6 +60,23 @@ public class DashboardFragment extends Fragment {
         reload();
     }
 
+    /**
+     * 流水类型(后端给原始值 IN/OUT/CHECK/TRANSFER/SCRAP)→ 界面文案。
+     * 原来这步在数据层做(RemoteWmsRepository.mapLogType),那样拿不到 Context、也翻不了英文。
+     * 认不出的类型按原样显示 —— 宁可露个生码,也别把信息吞掉。
+     */
+    private String logTypeLabel(String raw) {
+        if (raw == null || raw.isEmpty()) return getString(R.string.log_type_other);
+        switch (raw) {
+            case "IN":       return getString(R.string.log_type_in);
+            case "OUT":      return getString(R.string.log_type_out);
+            case "CHECK":    return getString(R.string.log_type_check);
+            case "TRANSFER": return getString(R.string.log_type_transfer);
+            case "SCRAP":    return getString(R.string.log_type_scrap);
+            default:         return raw;
+        }
+    }
+
     private void reload() {
         RepositoryProvider.get().loadDashboard(new WmsCallback<DashboardSnapshot>() {
             @Override public void onSuccess(DashboardSnapshot snap) {
@@ -84,7 +101,7 @@ public class DashboardFragment extends Fragment {
                 }
                 for (OpLog op : ops) {
                     View row = li.inflate(R.layout.item_op_log, recent, false);
-                    ((TextView) row.findViewById(R.id.tv_type)).setText(op.type);
+                    ((TextView) row.findViewById(R.id.tv_type)).setText(logTypeLabel(op.type));
                     ((TextView) row.findViewById(R.id.tv_ref)).setText(op.refNo);
                     // op.time 在映射层已经是 "yyyy-MM-dd HH:mm"(RemoteWmsRepository 截好并换掉了 T),
                     // 这里**不要再切一刀**:原来 substring(11) 只留 "HH:mm",年月日就是这么丢的,

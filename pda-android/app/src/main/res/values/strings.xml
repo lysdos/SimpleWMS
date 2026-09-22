@@ -59,6 +59,13 @@
     <string name="dash_kpi_total_value">库存总值</string>
     <string name="dash_overview">系统概览</string>
     <string name="dash_recent_title">最近操作</string>
+    <!-- 最近操作行上的类型标签。后端只给原始值 IN/OUT/CHECK/TRANSFER/SCRAP,文案在这边翻 -->
+    <string name="log_type_in">入库</string>
+    <string name="log_type_out">出库</string>
+    <string name="log_type_check">盘点</string>
+    <string name="log_type_transfer">调拨</string>
+    <string name="log_type_scrap">报废</string>
+    <string name="log_type_other">操作</string>
 
     <!-- 入库 -->
     <string name="inbound_title">入库登记</string>

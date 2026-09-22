@@ -6,7 +6,6 @@ import com.google.gson.reflect.TypeToken;
 import com.wms.pda.data.api.ApiClient;
 import com.wms.pda.data.api.dto.Dto;
 import com.wms.pda.data.model.DashboardSnapshot;
-import com.wms.pda.data.model.Enums;
 import com.wms.pda.data.model.InboundOrder;
 import com.wms.pda.data.model.InventoryItem;
 import com.wms.pda.data.model.OpLog;
@@ -103,7 +102,10 @@ public class RemoteWmsRepository implements WmsRepository {
                             for (Dto.InventoryLog l : logs) {
                                 OpLog op = new OpLog();
                                 op.time = l.createdAt == null ? "" : l.createdAt.length() > 16 ? l.createdAt.substring(0, 16).replace("T", " ") : l.createdAt;
-                                op.type = mapLogType(l.type);
+                                // 只带后端给的原始类型(IN/OUT/CHECK/…)原样过来。翻成中文是**界面**的事,
+                                // 由 DashboardFragment 按资源来 —— 数据层拿不到 Context,也翻不了英文。
+                                // 这里不做 null→"" 的兜底:空值该由界面决定显示成什么,数据层不替它拿主意。
+                                op.type = l.type;
                                 op.refNo = l.orderId == null ? "" : "#" + l.orderId;
                                 op.summary = (l.productName == null ? "" : l.productName)
                                         + (l.quantity == null ? "" : " ×" + l.quantity)
@@ -121,18 +123,6 @@ public class RemoteWmsRepository implements WmsRepository {
             }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
-    }
-
-    private static String mapLogType(String type) {
-        if (type == null) return "操作";
-        switch (type) {
-            case "IN":       return "入库";
-            case "OUT":      return "出库";
-            case "CHECK":    return "盘点";
-            case "TRANSFER": return "调拨";
-            case "SCRAP":    return "报废";
-            default:         return type;
-        }
     }
 
     // ---- 入库 ----

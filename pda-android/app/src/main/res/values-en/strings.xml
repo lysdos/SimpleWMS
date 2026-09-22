@@ -63,6 +63,12 @@
     <string name="dash_kpi_total_value">Total value</string>
     <string name="dash_overview">Overview</string>
     <string name="dash_recent_title">Recent activity</string>
+    <string name="log_type_in">Inbound</string>
+    <string name="log_type_out">Outbound</string>
+    <string name="log_type_check">Stock check</string>
+    <string name="log_type_transfer">Transfer</string>
+    <string name="log_type_scrap">Scrap</string>
+    <string name="log_type_other">Action</string>
 
     <!-- 入库 -->
     <string name="inbound_title">Inbound</string>
