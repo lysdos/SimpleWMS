@@ -292,8 +292,8 @@ const Views = {
             const st = o.status || 'DRAFT';
             const actionBtns = (st === 'DRAFT')
                 ? `<button class="btn-link" onclick="editInboundOrder(${o.id})">${t('common.edit')}</button>
-                   <button class="btn-link" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('orders.btn.commit')}</button>
-                   <button class="btn-link danger" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('orders.btn.cancel')}</button>`
+                   <button class="btn-link" data-order-no="${escapeHtml(o.orderNo)}" onclick="commitInboundOrder(${o.id}, this)">${t('orders.btn.commit')}</button>
+                   <button class="btn-link danger" data-order-no="${escapeHtml(o.orderNo)}" onclick="cancelInboundOrder(${o.id}, this)">${t('orders.btn.cancel')}</button>`
                 : '';
             return `
             <tr>
@@ -910,8 +910,8 @@ const Views = {
             <button class="btn btn-sm" onclick="printAllInboundBarcodes(${o.id})">${t('inbound_order.btn.print_all')}</button>
             <a class="btn btn-sm" href="/api/inbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
             ${o.status === 'DRAFT' ? `
-                <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('inbound_order.btn.commit')}</button>
-                <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelInboundOrder(${o.id}, '${escapeHtml(o.orderNo)}')">${t('inbound_order.btn.cancel')}</button>
+                <button class="btn btn-sm btn-primary" style="margin-left:8px;" data-order-no="${escapeHtml(o.orderNo)}" onclick="commitInboundOrder(${o.id}, this)">${t('inbound_order.btn.commit')}</button>
+                <button class="btn btn-sm btn-danger" style="margin-left:8px;" data-order-no="${escapeHtml(o.orderNo)}" onclick="cancelInboundOrder(${o.id}, this)">${t('inbound_order.btn.cancel')}</button>
             ` : ''}
         </div>`;
     },
@@ -1183,7 +1183,7 @@ const Views = {
                     <td class="actions">
                         <button class="btn-link" onclick="viewLocation(${l.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editLocation(${l.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delLocation(${l.id}, '${escapeHtml(l.code)}')">${t('common.delete')}</button>
+                        <button class="btn-link danger" data-code="${escapeHtml(l.code)}" onclick="delLocation(${l.id}, this)">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         const whOpts = (warehouses || [])
@@ -1718,10 +1718,10 @@ const Views = {
                     <td>${escapeHtml(it.createdBy || '-')}</td>
                     <td>${formatDate(it.createdAt)}</td>
                     <td class="actions" style="white-space:nowrap;">
-                        <button class="btn-link" onclick="viewBarcode(${it.id}, '${escapeHtml(it.code)}')">${t('inventory.btn.barcode')}</button>
+                        <button class="btn-link" data-code="${escapeHtml(it.code)}" onclick="viewBarcode(${it.id}, this)">${t('inventory.btn.barcode')}</button>
                         ${it.status === 'IN_STOCK' ? `
-                            <button class="btn-link" onclick="transferInventory(${it.id}, '${escapeHtml(it.code)}', '${escapeHtml(it.locationCode)}')">${t('inventory.btn.transfer')}</button>
-                            <button class="btn-link danger" onclick="scrapInventory(${it.id}, '${escapeHtml(it.code)}')">${t('inventory.btn.scrap')}</button>
+                            <button class="btn-link" data-code="${escapeHtml(it.code)}" data-current-loc="${escapeHtml(it.locationCode)}" onclick="transferInventory(${it.id}, this)">${t('inventory.btn.transfer')}</button>
+                            <button class="btn-link danger" data-code="${escapeHtml(it.code)}" onclick="scrapInventory(${it.id}, this)">${t('inventory.btn.scrap')}</button>
                         ` : `<span style="color:#9ca3af;font-size:12px;">—</span>`}
                     </td>
                 </tr>`).join('');

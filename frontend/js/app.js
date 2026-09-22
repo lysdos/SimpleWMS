@@ -327,6 +327,18 @@ function checkedValues(listId) {
 }
 
 /**
+ * 读内联 onclick 传进来的 data-* 值(调用方写成 `onclick="f(id, this)"` + `data-xxx="…"`)。
+ *
+ * 为什么不直接把值塞进 JS 字符串:那样要 escapeHtml 一层,而浏览器先把属性里的实体
+ * **解码回引号**、再当 JS 解析 —— 编码里带个单引号就拼成 `f(7, 'A'B')`,整条 onclick
+ * 直接语法错误(按钮点了没反应),再离谱点还能被拼成可执行代码。走属性则永不进 JS 源码。
+ */
+function btnData(el, key, fallback) {
+    const v = (el && el.dataset) ? el.dataset[key] : '';
+    return v || fallback;
+}
+
+/**
  * 过滤:只切行的显隐,不重填 —— 重填会把已勾选的项丢掉。
  * 一行都不剩时打开「没匹配」那行(列表本身为空走的是 .ms-empty,与这里无关)。
  */
@@ -847,7 +859,8 @@ function openOrderDetailModal(type, o) {
 }
 
 /* 提交入库单 */
-async function commitInboundOrder(id, orderNo) {
+async function commitInboundOrder(id, btn) {
+    const orderNo = btnData(btn, 'orderNo', '#' + id);
     if (!confirm(t('inbound.confirm_commit', { n: orderNo }))) return;
     try {
         await api.post(`/api/inbound/orders/${id}/commit`);
@@ -860,7 +873,8 @@ async function commitInboundOrder(id, orderNo) {
 }
 
 /* 取消入库单 */
-async function cancelInboundOrder(id, orderNo) {
+async function cancelInboundOrder(id, btn) {
+    const orderNo = btnData(btn, 'orderNo', '#' + id);
     if (!confirm(t('inbound.confirm_cancel', { n: orderNo }))) return;
     try {
         await api.post(`/api/inbound/orders/${id}/cancel`);
@@ -1160,11 +1174,10 @@ async function editLocation(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delLocation(id, code) {
-    // 库位码由调用方从行里带进来(与出入库单的提交/取消按钮同一套做法)。
-    // 不再从 state.locations 里反查:那份现在只在**下拉要被打开时**才加载,
-    // 光进库位管理页它可能是空的,反查会退化成「#12」。
-    const label = code || ('#' + id);
+function delLocation(id, btn) {
+    // 库位码由按钮的 data-code 带进来。不再从 state.locations 里反查:那份现在只在
+    // **下拉要被打开时**才加载,光进库位管理页它可能是空的,反查会退化成「#12」。
+    const label = btnData(btn, 'code', '#' + id);
     confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}\n\n${t('location.del_tip')}`, async () => {
         try {
             await api.del('/api/locations/' + id);
@@ -1316,7 +1329,8 @@ function gotoInventoryPage(p) {
     loadInventory();
 }
 
-function viewBarcode(id, code) {
+function viewBarcode(id, btn) {
+    const code = btnData(btn, 'code', '#' + id);
     showModal(t('inventory.modal.barcode_title'), `
         <div style="text-align:center;padding:16px 0;">
             <img src="/api/inventory/items/${id}/barcode.png" alt="${escapeHtml(code)}"
@@ -1332,7 +1346,8 @@ function viewBarcode(id, code) {
     freshModalOk(t('common.close')).addEventListener('click', closeModal);
 }
 
-function scrapInventory(id, code) {
+function scrapInventory(id, btn) {
+    const code = btnData(btn, 'code', '#' + id);
     showModal(t('inventory.modal.scrap_title'), `
         <p style="margin:0 0 12px;font-size:13px;color:var(--c-text-2);">
             ${t('inventory.modal.scrap_tip')}
@@ -1353,7 +1368,9 @@ function scrapInventory(id, code) {
     });
 }
 
-async function transferInventory(id, code, currentLoc) {
+async function transferInventory(id, btn) {
+    const code = btnData(btn, 'code', '#' + id);
+    const currentLoc = btnData(btn, 'currentLoc', '');
     await ensureLocations();
     // 目标库位按所属仓库分组,多仓库下单子长了也不至于混在一起
     const locOptions = Views.locationOptgroups(
