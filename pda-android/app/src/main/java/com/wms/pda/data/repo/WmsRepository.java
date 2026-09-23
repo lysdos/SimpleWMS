@@ -84,13 +84,11 @@ public interface WmsRepository {
     /** @param warehouseId 仅 scope=WAREHOUSE 时需要;keyword 为可选的库位码列表(逗号分隔,空=整个仓库) */
     void createStocktake(String scope, String keyword, Integer warehouseId,
                          String remark, WmsCallback<StocktakeOrder> cb);
-    /** 手填实盘数量;countedQty = -1 表示清空 */
-    void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb);
     /** 扫码定位行;单外码/非在库码由后端自动追加盘盈行 */
     void submitStocktakeScan(String orderId, String barcode, WmsCallback<StocktakeOrder> cb);
     /** 删除盘点明细行(仅 DRAFT);用于清理盘盈自动追加的多余行 */
     void deleteStocktakeItem(String orderDbId, String itemId, WmsCallback<Void> cb);
     void commitStocktake(String orderId, WmsCallback<StocktakeOrder> cb);
 
-    // ---- 商品下拉:复用 searchInventory("") 拿到所有 InventoryItem,字段已够用(sku/name/barcode/uom) ----
+    // ---- 商品下拉:复用 searchInventory("") 拿到所有 InventoryItem,字段已够用(sku/name/barcode) ----
 }

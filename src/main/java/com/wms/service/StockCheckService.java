@@ -203,7 +203,7 @@ public class StockCheckService {
     @Transactional
     public void fillCount(int checkId, int itemId, int countedQty, String remark) {
         if (countedQty < 0) throw new IllegalArgumentException("实盘数不能小于 0");
-        StockCheck c = dao.findCheckById(checkId);
+        StockCheck c = dao.findCheckByIdForUpdate(checkId);
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 状态可填实盘数,当前: " + c.getStatus());
@@ -226,7 +226,7 @@ public class StockCheckService {
      */
     @Transactional
     public StockCheck commit(int checkId) {
-        StockCheck c = dao.findCheckById(checkId);
+        StockCheck c = dao.findCheckByIdForUpdate(checkId);
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可提交,当前: " + c.getStatus());
@@ -243,7 +243,7 @@ public class StockCheckService {
     /** 删除盘点明细行(仅 DRAFT);用于清理盘盈时自动追加的多余行 */
     @Transactional
     public void deleteItem(int checkId, int itemId) {
-        StockCheck c = dao.findCheckById(checkId);
+        StockCheck c = dao.findCheckByIdForUpdate(checkId);
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可删除明细,当前: " + c.getStatus());
@@ -254,31 +254,14 @@ public class StockCheckService {
     }
 
     /**
-     * 盘盈行(账面没有、实物扫到了):扫码扫到盘点范围外的单元时,scanCodeToCheck 会追加一条
-     * {@code systemQty=0, countedQty=1} 的行。
+     * 统一重算盘点单的统计:应盘 / 已盘 / 差异。
      *
-     * 它不属于"应盘"的对象,所以**不计入应盘数/已盘数** —— 否则现场扫到一个范围外的码,
-     * 「已盘 6/7」就会变成「6/8」,看起来像盘点单自己变大了。
+     * 口径(未盘行不计入已盘、也不计入差异;盘盈行三样都不计)全部落在
+     * {@link com.wms.dao.StockCheckDao#updateStats(int)} 那条原子 SQL 里 —— 这里**故意不把明细
+     * 读进 Java 算**:并发扫码时"读-算-写回"会丢更新,详见那个方法的注释。
      */
-    private static boolean isSurplus(StockCheckItem it) {
-        int sys = it.getSystemQty() == null ? 0 : it.getSystemQty();
-        Integer counted = it.getCountedQty();
-        return sys == 0 && counted != null && counted > 0;
-    }
-
-    /** 统一重算盘点单统计:总数 / 已盘数 / 差异数(未盘行不计入已盘,也不计入差异;盘盈行两样都不计) */
     private void recalcStats(int checkId) {
-        List<StockCheckItem> all = dao.findItemsByCheckId(checkId);
-        int total = 0, counted = 0, diffCount = 0;
-        for (StockCheckItem it : all) {
-            if (isSurplus(it)) continue;
-            total++;
-            if (it.getCountedQty() != null) {
-                counted++;
-                if (it.getCountedQty().intValue() != it.getSystemQty().intValue()) diffCount++;
-            }
-        }
-        dao.updateStats(checkId, total, counted, diffCount);
+        dao.updateStats(checkId);
     }
 
     /**
@@ -310,8 +293,8 @@ public class StockCheckService {
      */
     @Transactional
     public StockCheck scanCodeToCheck(int checkId, String code) {
-        // 1) 盘点单状态校验
-        StockCheck c = dao.findCheckById(checkId);
+        // 1) 盘点单状态校验(**加锁读,且必须是本事务第一条读** —— 理由见 StockCheckDao.findCheckByIdForUpdate)
+        StockCheck c = dao.findCheckByIdForUpdate(checkId);
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 状态可扫码,当前: " + c.getStatus());

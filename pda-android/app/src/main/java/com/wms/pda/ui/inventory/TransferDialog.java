@@ -40,13 +40,13 @@ final class TransferDialog {
                     }
                 }
                 if (options.isEmpty()) {
-                    Toast.makeText(ctx, R.string.location_none_available, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ctx, R.string.transfer_no_other_location, Toast.LENGTH_SHORT).show();
                     return;
                 }
                 showPicker(ctx, item, currentLoc, locs, options);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(ctx, ctx.getString(R.string.location_load_failed_fmt, msg),
+                Toast.makeText(ctx, ctx.getString(R.string.msg_load_locations_failed, msg),
                         Toast.LENGTH_SHORT).show();
             }
         });
@@ -60,7 +60,7 @@ final class TransferDialog {
         Spinner spTarget = v.findViewById(R.id.sp_target);
 
         tvInfo.setText((item.sku == null ? "?" : item.sku) + " · " + (item.code == null ? "" : item.code)
-                + "\n" + ctx.getString(R.string.location_current_fmt, currentLoc.isEmpty() ? "—" : currentLoc));
+                + ctx.getString(R.string.transfer_current_location_fmt, currentLoc.isEmpty() ? "—" : currentLoc));
 
         // 默认选中该单元当前所在的仓库。**不能把 currentLoc 当 preferred** ——
         // 它在上面的候选里已被剔除(不能调拨到自己),查不到就会静默落到第一个仓库,
@@ -83,11 +83,12 @@ final class TransferDialog {
                     RepositoryProvider.get().transfer(item.id, toLoc,
                             new WmsCallback<Void>() {
                                 @Override public void onSuccess(Void v) {
-                                    Toast.makeText(ctx, ctx.getString(R.string.location_transferred_fmt, toLoc),
+                                    Toast.makeText(ctx, ctx.getString(R.string.transfer_done_fmt, toLoc),
                                             Toast.LENGTH_SHORT).show();
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(ctx, "调拨失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ctx, ctx.getString(R.string.msg_transfer_failed, msg),
+                                            Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })

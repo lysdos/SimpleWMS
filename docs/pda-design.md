@@ -338,7 +338,65 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 minify:release 开启 `minifyEnabled` + `shrinkResources`
 调试版使用 Android 默认 debug keystore
 
-## 13. 当前遗留问题
+## 13. 多语言(i18n)
+
+中英双语,**默认中文**。机制用 appcompat 的 `AppCompatDelegate.setApplicationLocales`
+(1.6.1 起内置),不自己写 `attachBaseContext`。
+
+| 位置 | 说明 |
+|---|---|
+| `res/values/strings.xml` | **中文 = 默认**。以键名覆盖,不按语言分目录层级 |
+| `res/values-en/strings.xml` | 英文覆盖 |
+| 设置页语言下拉 | 唯一的切换入口(`SettingsActivity.setupLanguageSpinner`) |
+| `AndroidManifest.xml` | 必须声明 `AppLocalesMetadataHolderService` + `autoStoreLocales=true`。API<33 靠它记住语言,不声明则重启后回到系统语言 |
+
+语言名(`settings_language_zh` / `settings_language_en`)标 `translatable="false"`:语言名按惯例
+用各自语言显示、不随界面语言变,所以这两个键**只存在于 `values/`** —— 中英键数差 2 就是这么来的。
+
+### 13.1 接线规则(踩过的坑)
+
+1. **整句带占位符的必须做成资源**,不能在 Java 里 `中文 + 值` 拼接 —— 只翻值会半中半英。
+   `"库位: " + X` 是错的,`location_prefix_fmt` = `库位: %1$s` 才对。
+   分隔符(`" · "` / `" × "` / 两个空格 / `•`)是标点,**不进资源**。
+2. **同一句话在多处复用时抽共用键**,否则必然出现「一页翻了、另一页没翻」
+   —— 明细行的「保存失败」原先在四个文件里各写了一遍。
+3. **同一屏内两处出现的同一组文案必须同源** —— 库存卡片的状态胶囊与筛选下拉共用
+   `inventory_status_*`,下拉顺序须与 `InventoryFragment.STATUS_VALUES` 对齐。
+4. **模型层不持有界面文案** —— 单据状态原先写在 `Enums.DocStatus` 的 label 上,
+   已移到 `StatusPill` + 资源键。
+5. **界面常量别伪装成数据字段** —— 明细行的单位后缀曾经是 `Mappers` 里写死的
+   `uom = "件"` 当模型字段用(后端整库没有 uom 列,Web 明细行也不带单位),
+   英文界面下会渲染成「× 5 件」。现在归位成 `uom_piece` 资源。
+
+### 13.2 禁区:这几类中文**刻意不翻**
+
+| 类别 | 位置 | 为什么 |
+|---|---|---|
+| 协议判断用的文案 | `data/remote/BackendMessages`(7 条) | 出库扫码的 4 种拒绝原因在后端**全部是 409**,只能靠消息文本 `contains` 区分,翻译即失配 |
+| 网络/硬件诊断标签 | `ApiClient` 5 / `RemoteWmsRepository` 4 / `UhfScannerImpl` 5 / `BarcodeHardwareScannerImpl` 3 / `BarcodeScannerImpl` 1 / `ScanManager` 1(共 19 处) | 见下 |
+
+诊断标签不翻的三条理由:
+
+1. **后端业务消息本身就是中文并原样回显**(如 `InventoryItemController` 的
+   `throw new NotFoundException("编码不存在: " + code)`)。英文界面下**错误路径必然中英混排**,
+   翻掉本地标签只能改善一半。
+2. 其中过半是**面向开发者的诊断**(`BarcodeDecoder.open() 返回 false`、`登录响应缺少 token`、
+   `单号无效: <id>`),翻了对现场用户没有意义。
+3. 要翻就得给这两层引入全局 Context 持有者,而它在 API 30 上跟不跟 `setApplicationLocales`
+   **未经验证**;收益约 9 条、代价是全局态 + 一个未验证机制,不划算。
+
+**结论:正常路径全英文,错误 / 诊断路径可能混排 —— 这是刻意的取舍,不是遗漏。**
+动这两层之前先读这一节,别顺手「补翻」。
+
+### 13.3 改动的自检方法
+
+- **键一致性**:比对中英两个文件的键集合(缺失 / 多余 / 重复)以及占位符 `%1$s` 序列是否逐个对齐。
+- **编译即证明无悬空引用**:本仓不用 `getIdentifier()` 反射取资源,所以键删掉后若仍有静态引用会
+  直接编译失败 —— `assembleDebug` 通过就等于「删干净了」。
+- **英文确实打进包**:`aapt2 dump resources <apk>` 数 `(en)` 条目,应与 `values-en/` 的键数一致。
+  只看源码文件不算数。
+
+## 14. 当前遗留问题
 
 ### Blocker(影响功能)
 - B1:LoginActivity 实际**未调用 /api/auth/login**,代码注释说"原型阶段"
@@ -356,8 +414,9 @@ minify:release 开启 `minifyEnabled` + `shrinkResources`
 - M5:`showOrderPicker` 手工 Map→DTO 转换脆弱
 - M6:摄像头资源释放路径不完整
 - M7:`SessionStore.role` UI 未消费
+- M8:data/scan 层 19 处诊断文案不随语言切换 —— **刻意取舍,不是遗漏**,见 §13.2,不要顺手补翻
 
-## 14. 后续方向
+## 15. 后续方向
 
 - 库存 iData SDK 适配(目前仅 UROVO,多厂家需要 Impl 切换)
 - 离线缓存(扫码本地暂存,网络恢复后批量提交)

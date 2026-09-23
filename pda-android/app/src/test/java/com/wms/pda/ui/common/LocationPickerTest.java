@@ -32,7 +32,10 @@ import static org.junit.Assert.assertNull;
  */
 @RunWith(RobolectricTestRunner.class)
 // 28:本机已缓存 API 28 的 android-all 运行时,离线也能跑(34 需要 Robolectric ≥4.11)
-@Config(sdk = 28)
+// qualifiers:断言的是中文文案(「(未分配)」),必须钉住 locale —— Robolectric 默认 locale 是英文,
+// 加了 values-en/ 之后会去取英文资源,这几条断言就会莫名变红。本测试验的是**分组与选中逻辑**,
+// 不该随界面语言漂移,所以钉死 zh-rCN(与 SettingsActivity.LANG_ZH 同值)。
+@Config(sdk = 28, qualifiers = "zh-rCN")
 public class LocationPickerTest {
 
     private Spinner spWarehouse;

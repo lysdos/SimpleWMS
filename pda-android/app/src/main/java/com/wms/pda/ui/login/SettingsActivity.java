@@ -53,7 +53,7 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.btn_reset).setOnClickListener(v -> {
             SettingsStore.reset();
             et.setText(SettingsStore.getBaseUrl());
-            Toast.makeText(this, "已恢复默认", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.settings_reset_done, Toast.LENGTH_SHORT).show();
         });
         findViewById(R.id.btn_save).setOnClickListener(v -> save());
     }
@@ -101,7 +101,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
 
         btnTest.setEnabled(false);
-        btnTest.setText("连接中...");
+        btnTest.setText(R.string.settings_testing);
 
         ApiClient probe = new ApiClient();
         probe.refreshBaseUrl();
@@ -117,7 +117,7 @@ public class SettingsActivity extends AppCompatActivity {
                     btnTest.setEnabled(true);
                     btnTest.setText(R.string.settings_test);
                     Toast.makeText(SettingsActivity.this,
-                            "连接成功，WMS 后端", Toast.LENGTH_SHORT).show();
+                            R.string.settings_test_success, Toast.LENGTH_SHORT).show();
                 });
             }
 
@@ -129,16 +129,16 @@ public class SettingsActivity extends AppCompatActivity {
                     if (code == -1) {
                         // 网络异常:超时/连接拒绝/DNS 解析失败
                         Toast.makeText(SettingsActivity.this,
-                                "连接失败: " + msg, Toast.LENGTH_SHORT).show();
+                                getString(R.string.settings_test_fail_fmt, msg), Toast.LENGTH_SHORT).show();
                     } else if (msg != null && msg.contains(BackendMessages.NOT_LOGGED_IN)) {
                         // 响应体含「未登录」→ 这是 WMS 后端(只是没登录)。
                         // 这是靠后端文案做的**协议判断**,不是界面文案,不能翻译(见 BackendMessages)。
                         Toast.makeText(SettingsActivity.this,
-                                "连接成功，WMS 后端", Toast.LENGTH_SHORT).show();
+                                R.string.settings_test_success, Toast.LENGTH_SHORT).show();
                     } else {
                         // 有 HTTP 响应但不是 WMS → 连到了其他服务
                         Toast.makeText(SettingsActivity.this,
-                                "已连接，但不是 WMS 后端", Toast.LENGTH_SHORT).show();
+                                R.string.settings_not_wms, Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -148,7 +148,7 @@ public class SettingsActivity extends AppCompatActivity {
     private void save() {
         String url = et.getText().toString().trim();
         if (url.isEmpty()) {
-            et.setError("地址不能为空");
+            et.setError(getString(R.string.settings_address_required));
             return;
         }
         SettingsStore.setBaseUrl(url);

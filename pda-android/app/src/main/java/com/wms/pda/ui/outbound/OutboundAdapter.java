@@ -1,5 +1,6 @@
 package com.wms.pda.ui.outbound;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -53,15 +54,17 @@ class OutboundAdapter extends RecyclerView.Adapter<OutboundAdapter.VH> {
         h.tvId.setText(o.id);
         StatusPill.apply(h.tvStatus, o.status);
 
-        h.tvCustomer.setText(o.customer == null || o.customer.isEmpty()
-                ? "客户: —" : "客户: " + o.customer);
-        h.tvExternalNo.setText(o.externalNo == null || o.externalNo.isEmpty()
-                ? "外部单号: —" : "外部单号: " + o.externalNo);
-        h.tvOperator.setText(o.createdBy == null ? "创建人: —" : "创建人: " + o.createdBy);
+        Context ctx = h.tvId.getContext();
+        h.tvCustomer.setText(ctx.getString(R.string.customer_prefix_fmt,
+                o.customer == null || o.customer.isEmpty() ? "—" : o.customer));
+        h.tvExternalNo.setText(ctx.getString(R.string.external_no_prefix_fmt,
+                o.externalNo == null || o.externalNo.isEmpty() ? "—" : o.externalNo));
+        h.tvOperator.setText(ctx.getString(R.string.created_by_fmt,
+                o.createdBy == null ? "—" : o.createdBy));
 
         int itemCount = o.itemCount == null ? 0 : o.itemCount;
         int totalQty  = o.totalQuantity == null ? 0 : o.totalQuantity;
-        h.tvSummary.setText(itemCount + " 行 · " + totalQty + " 件");
+        h.tvSummary.setText(ctx.getString(R.string.lines_summary_fmt, itemCount, totalQty));
 
         h.tvTime.setText(o.createdAt == null ? "" :
                 (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt));

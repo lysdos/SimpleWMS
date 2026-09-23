@@ -31,19 +31,21 @@ public class OutboundNewActivity extends AppCompatActivity {
 
         submit.setOnClickListener(v -> {
             String cust = etCust.getText().toString().trim();
-            if (cust.isEmpty()) { etCust.setError("请填写客户/部门"); return; }
+            if (cust.isEmpty()) { etCust.setError(getString(R.string.err_customer_required)); return; }
             String externalNo = etExternalNo.getText().toString().trim();
             String remark = etRemark.getText().toString().trim();
             submit.setEnabled(false);
             // customer 真实传入后端(后端必填);externalNo / remark 可选
             RepositoryProvider.get().createOutbound(cust, externalNo, remark, new WmsCallback<OutboundOrder>() {
                 @Override public void onSuccess(OutboundOrder o) {
-                    Toast.makeText(OutboundNewActivity.this, "已创建: " + o.id, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(OutboundNewActivity.this,
+                            getString(R.string.msg_created_fmt, o.id), Toast.LENGTH_SHORT).show();
                     finish();
                 }
                 @Override public void onError(int code, String msg) {
                     submit.setEnabled(true);
-                    Toast.makeText(OutboundNewActivity.this, "创建失败: " + msg, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(OutboundNewActivity.this,
+                            getString(R.string.msg_create_failed, msg), Toast.LENGTH_SHORT).show();
                 }
             });
         });

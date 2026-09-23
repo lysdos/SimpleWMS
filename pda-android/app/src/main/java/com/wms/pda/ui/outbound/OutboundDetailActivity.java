@@ -566,8 +566,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
         TextView tvSummary = findViewById(R.id.tv_summary);
         int itemCount = o.itemCount == null ? 0 : o.itemCount;
         int totalQtyAll  = o.totalQuantity == null ? 0 : o.totalQuantity;
-        tvSummary.setText(itemCount + " 行 · " + totalQtyAll + " 件 · 创建于 " +
-                (o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
+        tvSummary.setText(getString(R.string.lines_summary_created_fmt, itemCount, totalQtyAll,
+                o.createdAt == null ? "—" : (o.createdAt.length() > 16 ? o.createdAt.substring(0, 16).replace("T", " ") : o.createdAt)));
 
         // 计算总数量
         totalQty = 0;
@@ -597,16 +597,16 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 TextView tvQty     = row.findViewById(R.id.tv_qty);
 
                 tvSkuName.setText((l.sku == null ? "?" : l.sku) + "  " + (l.name == null ? "" : l.name));
-                tvQty.setText("× " + l.qty + " " + (l.uom == null ? "" : l.uom));
+                tvQty.setText(getString(R.string.qty_fmt, l.qty, getString(R.string.uom_piece)));
 
                 StringBuilder info = new StringBuilder();
                 if (l.location != null && !l.location.isEmpty()) {
                     // 历史单:手工指定过库位
-                    info.append(getString(R.string.location_label_fmt, locLabel(l.location))).append("  ");
+                    info.append(getString(R.string.location_prefix_fmt, locLabel(l.location))).append("  ");
                 } else {
                     // 新单:出库是"自动跨库位找货",行上没有单一库位,靠下面的拣货分布定位
-                    info.append(getString(R.string.location_label_fmt, getString(R.string.location_auto)))
-                            .append("  ");
+                    info.append(getString(R.string.location_prefix_fmt,
+                            getString(R.string.location_auto))).append("  ");
                 }
                 if (l.picks != null && !l.picks.isEmpty()) {
                     StringBuilder p = new StringBuilder();
@@ -614,10 +614,14 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         if (p.length() > 0) p.append(" · ");
                         p.append(locLabel(e.getKey())).append(" × ").append(e.getValue());
                     }
-                    info.append("拣货: ").append(p).append("  ");
+                    info.append(getString(R.string.picks_prefix_fmt, p)).append("  ");
                 }
-                if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
-                if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);
+                if (l.unitPrice != null && !l.unitPrice.isEmpty()) {
+                    info.append(getString(R.string.unit_price_prefix_fmt, l.unitPrice)).append("  ");
+                }
+                if (l.rowRemark != null && !l.rowRemark.isEmpty()) {
+                    info.append(getString(R.string.remark_prefix_fmt, l.rowRemark));
+                }
                 tvInfo.setText(info.toString());
 
                 // 逐件显示库存单元编码
@@ -739,11 +743,11 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
     private void updateProgress() {
         if (totalQty <= 0) {
-            tvProgress.setText("暂无明细");
+            tvProgress.setText(R.string.no_lines);
             progressBar.setProgress(0);
             return;
         }
-        tvProgress.setText("已扫描 " + scannedQty + " / " + totalQty + " 件");
+        tvProgress.setText(getString(R.string.scan_progress_fmt, scannedQty, totalQty));
         int percent = totalQty > 0 ? (scannedQty * 100 / totalQty) : 0;
         progressBar.setProgress(percent);
     }

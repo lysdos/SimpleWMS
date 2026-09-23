@@ -38,7 +38,8 @@ final class EditInboundHeaderDialog {
                                     if (onDone != null) onDone.run();
                                 }
                                 @Override public void onError(int code, String msg) {
-                                    Toast.makeText(ctx, "保存失败: " + msg, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ctx, ctx.getString(R.string.msg_save_failed, msg),
+                                            Toast.LENGTH_SHORT).show();
                                 }
                             });
                 })

@@ -38,6 +38,9 @@ public class OutboundOrderDao {
             "UPDATE outbound_order SET customer=?, external_no=?, remark=? WHERE id=? AND status=?",
             customer, externalNo, remark, id, OutboundOrder.STATUS_DRAFT);
     }
+    // ⚠️ 与 InboundOrderDao.refreshAggregates 同形状(DML 里的相关子查询 = 加锁读,会锁住该单明细的
+    // 索引范围)。目前靠"一张单一个人操作"的人工节奏安全;若出现同单并发写明细,需先把单头行加锁 ——
+    // 做法与原因见 StockCheckDao.findCheckByIdForUpdate。
     public void refreshAggregates(int id){jdbc.update("UPDATE outbound_order o SET total_quantity=COALESCE((SELECT SUM(quantity) FROM outbound_order_item WHERE order_id=o.id),0),item_count=COALESCE((SELECT COUNT(*) FROM outbound_order_item WHERE order_id=o.id),0) WHERE o.id=?",id);}
     public int deleteItemsByOrderId(int id){return jdbc.update("DELETE FROM outbound_order_item WHERE order_id=?",id);}
     public OutboundOrder findOrderById(int id){List<OutboundOrder>l=jdbc.query("SELECT * FROM outbound_order WHERE id=?",ORDER_ROW,id);return l.isEmpty()?null:l.get(0);}

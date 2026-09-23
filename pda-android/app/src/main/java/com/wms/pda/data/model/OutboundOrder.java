@@ -50,7 +50,6 @@ public class OutboundOrder {
         public String location;      // 空 = 自动(跨库位找货),实际分布看 picks
         public String rowRemark;
         public int qty;
-        public String uom;           // 后端无字段,PDA 端占位 "件"
         public List<String> codes;   // 每个库存单元的编码(逐件显示用)
         /** 拣货分布:库位码 → 件数。行上 location 为空时,现场靠这个知道去哪儿拿货。 */
         public java.util.Map<String, Integer> picks;
@@ -58,21 +57,5 @@ public class OutboundOrder {
         public java.util.Map<String, List<String>> codesByLocation;
 
         public Line() {}
-
-        public Line(Integer id, Integer productId, String sku, String name,
-                    String unitPrice, Integer beforeQty, Integer afterQty,
-                    String location, String rowRemark, int qty, String uom) {
-            this.id = id;
-            this.productId = productId;
-            this.sku = sku;
-            this.name = name;
-            this.unitPrice = unitPrice;
-            this.beforeQty = beforeQty;
-            this.afterQty = afterQty;
-            this.location = location;
-            this.rowRemark = rowRemark;
-            this.qty = qty;
-            this.uom = uom;
-        }
     }
 }

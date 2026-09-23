@@ -53,7 +53,6 @@ final class Mappers {
         l.productionDate = it.productionDate;
         l.shelfLifeDays = it.shelfLifeDays;
         l.qty = it.quantity == null ? 0 : it.quantity;
-        l.uom = "件";  // 后端未持久化单位,PDA 端占位
         l.codes = it.codes;
         return l;
     }
@@ -86,7 +85,6 @@ final class Mappers {
                 l.location = it.location;
                 l.rowRemark = it.rowRemark;
                 l.qty = it.quantity == null ? 0 : it.quantity;
-                l.uom = "件";
                 l.codes = it.codes;
                 l.picks = it.picks;
                 l.codesByLocation = it.codesByLocation;

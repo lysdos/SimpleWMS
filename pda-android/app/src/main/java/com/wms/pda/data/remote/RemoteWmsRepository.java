@@ -29,7 +29,7 @@ import java.util.Map;
  *
  * 响应翻译:
  * - 后端 InboundOrder.orderNo → PDA model.id(展示用)
- * - 后端 item.productName/sku/qty/location → PDA InboundLine.sku/name/qty/uom(uom 暂用 "件")
+ * - 后端 item.productName/sku/qty/location → PDA InboundLine.sku/name/qty/location
  */
 public class RemoteWmsRepository implements WmsRepository {
 
@@ -539,13 +539,6 @@ public class RemoteWmsRepository implements WmsRepository {
             @Override public void onSuccess(Dto.StockCheck o) { cb.onSuccess(Mappers.toModel(o)); }
             @Override public void onError(int code, String msg) { cb.onError(code, msg); }
         });
-    }
-
-    @Override
-    public void recordActualQty(String orderId, String sku, int qty, WmsCallback<Void> cb) {
-        // 需要先拿到 stock_check_item 的 itemId;简化:让 UI 维护 sku→itemId 映射
-        // 此方法 PDA 端目前主要用于手填 EditText,直接 call /scan 替代
-        cb.onError(501, "PDA 端手填请用扫码模式(每次扫码 +1)");
     }
 
     @Override

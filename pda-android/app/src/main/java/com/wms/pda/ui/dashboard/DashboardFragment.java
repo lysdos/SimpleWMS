@@ -50,7 +50,8 @@ public class DashboardFragment extends Fragment {
         kExpired  = v.findViewById(R.id.kpi_expired);
         recent    = v.findViewById(R.id.recent_container);
 
-        welcome.setText(getString(R.string.dash_welcome, SessionStore.currentUser()));
+        String user = SessionStore.currentUser();
+        welcome.setText(getString(R.string.dash_welcome, user == null || user.isEmpty() ? "—" : user));
         tvOverview.setText(R.string.dash_overview);
     }
 
@@ -93,7 +94,7 @@ public class DashboardFragment extends Fragment {
                 List<OpLog> ops = snap.recentOps;
                 if (ops == null || ops.isEmpty()) {
                     TextView empty = new TextView(requireContext());
-                    empty.setText("暂无最近操作");
+                    empty.setText(R.string.dash_recent_empty);
                     empty.setTextColor(0xFF9AA3B2);
                     empty.setPadding(24, 16, 24, 16);
                     recent.addView(empty);
@@ -113,7 +114,8 @@ public class DashboardFragment extends Fragment {
             }
             @Override public void onError(int code, String msg) {
                 if (!isAdded()) return;
-                Toast.makeText(requireContext(), "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), getString(R.string.msg_load_failed, msg),
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }

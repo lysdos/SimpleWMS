@@ -93,7 +93,8 @@ public class StocktakeListActivity extends AppCompatActivity {
                 btnNew.setEnabled(true);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(StocktakeListActivity.this, "加载失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(StocktakeListActivity.this,
+                        getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
                 btnNew.setEnabled(true);
             }
         });
@@ -164,7 +165,8 @@ public class StocktakeListActivity extends AppCompatActivity {
                         showSkuPicker(products, pickedSkus, paintSkuValue);
                     }
                     @Override public void onError(int code, String msg) {
-                        Toast.makeText(StocktakeListActivity.this, "加载商品失败: " + msg, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(StocktakeListActivity.this,
+                                getString(R.string.msg_load_products_failed, msg), Toast.LENGTH_SHORT).show();
                     }
                 });
                 return;
@@ -290,7 +292,8 @@ public class StocktakeListActivity extends AppCompatActivity {
                 RepositoryProvider.get().createStocktake(scope, keyword, warehouseId, remark,
                         new WmsCallback<StocktakeOrder>() {
                     @Override public void onSuccess(StocktakeOrder o) {
-                        Toast.makeText(StocktakeListActivity.this, "已创建盘点单 " + o.id, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(StocktakeListActivity.this,
+                                getString(R.string.stocktake_created_fmt, o.id), Toast.LENGTH_SHORT).show();
                         dialog.dismiss();
                         Intent i = new Intent(StocktakeListActivity.this, StocktakeDetailActivity.class);
                         i.putExtra("orderId", o.id);
@@ -300,7 +303,8 @@ public class StocktakeListActivity extends AppCompatActivity {
                         startActivity(i);
                     }
                     @Override public void onError(int code, String msg) {
-                        Toast.makeText(StocktakeListActivity.this, "创建失败: " + msg, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(StocktakeListActivity.this,
+                                getString(R.string.msg_create_failed, msg), Toast.LENGTH_SHORT).show();
                     }
                 });
             });

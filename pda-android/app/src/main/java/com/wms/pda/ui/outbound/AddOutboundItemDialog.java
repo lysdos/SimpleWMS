@@ -32,7 +32,7 @@ final class AddOutboundItemDialog {
                 showLoaded(ctx, orderDbId, list == null ? new ArrayList<>() : list, onDone);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed) + ": " + msg,
+                Toast.makeText(ctx, ctx.getString(R.string.msg_load_products_failed, msg),
                         Toast.LENGTH_SHORT).show();
             }
         });
@@ -80,24 +80,24 @@ final class AddOutboundItemDialog {
             }
             Product picked = products.get(pIdx);
             if (picked.id == null) {
-                Toast.makeText(ctx, "该商品缺少 ID,请刷新重试", Toast.LENGTH_SHORT).show();
+                Toast.makeText(ctx, R.string.err_product_missing_id, Toast.LENGTH_SHORT).show();
                 return;
             }
             int qty;
             try { qty = Integer.parseInt(etQty.getText().toString().trim()); }
-            catch (Exception ex) { Toast.makeText(ctx, "请输入有效数量", Toast.LENGTH_SHORT).show(); return; }
-            if (qty <= 0) { Toast.makeText(ctx, "数量必须大于 0", Toast.LENGTH_SHORT).show(); return; }
+            catch (Exception ex) { Toast.makeText(ctx, R.string.err_qty_invalid, Toast.LENGTH_SHORT).show(); return; }
+            if (qty <= 0) { Toast.makeText(ctx, R.string.err_qty_positive, Toast.LENGTH_SHORT).show(); return; }
 
             String rowRemark = etRowRemark.getText().toString().trim();
             RepositoryProvider.get().addOutboundItem(String.valueOf(orderDbId), picked.id, qty,
                     rowRemark, new WmsCallback<com.wms.pda.data.model.OutboundOrder>() {
                         @Override public void onSuccess(com.wms.pda.data.model.OutboundOrder o) {
-                            Toast.makeText(ctx, "已添加", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(ctx, R.string.msg_added, Toast.LENGTH_SHORT).show();
                             dialog.dismiss();
                             if (onDone != null) onDone.run();
                         }
                         @Override public void onError(int code, String msg) {
-                            Toast.makeText(ctx, "添加失败: " + msg, Toast.LENGTH_SHORT).show();
+                            Toast.makeText(ctx, ctx.getString(R.string.msg_add_failed, msg), Toast.LENGTH_SHORT).show();
                         }
                     });
         }));
