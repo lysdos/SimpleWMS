@@ -2,6 +2,8 @@ package com.wms.pda.ui.stocktake;
 
 import android.content.res.ColorStateList;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -53,6 +55,9 @@ public class StocktakeDetailActivity extends AppCompatActivity {
     /** 失败提示限频:2 秒窗口内只响一次铃+弹一次 toast,窗口内的重复失败只计数(与出库详情页同一套) */
     private long lastErrFeedbackMs = 0L;
     private int suppressedErrCount = 0;
+    /** 连续扫码成功时合并刷新(见 renderSoon),与出库详情页同一套 */
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private Runnable pendingRender;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -228,7 +233,8 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                 Toast.LENGTH_SHORT).show();
                         // 记上了才响:盘盈也是**记录成功**(后端已追加行),所以和「已盘」一样响单音
                         BeepUtil.success();
-                        render();
+                        // 防抖,别每条都刷:render() 里含一次 GET,齐发时会把同一次盘点打成几十个请求
+                        renderSoon();
                     }
                     @Override public void onError(int code, String msg) {
                         // 按后端提示语分流(为什么不能翻译,见 BackendMessages 的类注释)
@@ -324,6 +330,28 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                 }))
                 .setNegativeButton(R.string.action_cancel, null)
                 .show();
+    }
+
+    /**
+     * 连续扫码成功时合并刷新,300ms 防抖(与出库详情页同一套)。
+     *
+     * 为什么需要:{@link #render()} 里含一次 {@code GET /api/stock-checks/{id}},再整页重建。
+     * RFID 齐发一次几十个码,不防抖就是**每个码一次多余请求**打在同一张单上 —— 除了掉帧
+     * (现场实测 Skipped 166 frames、Davey 2.8s),还会加重同一张单的并发锁竞争。
+     * 防抖后:持续扫码期间不发请求,停手 300ms 才刷一次。
+     * 注意**不影响即时反馈**:蜂鸣与 toast 用的是扫码响应本身,不走这条路径。
+     */
+    private void renderSoon() {
+        if (pendingRender != null) uiHandler.removeCallbacks(pendingRender);
+        pendingRender = this::render;
+        uiHandler.postDelayed(pendingRender, 300);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        // 撤掉待执行的 render:否则 Activity 已销毁还会再发一次 GET、并对已解绑的视图做重建
+        uiHandler.removeCallbacksAndMessages(null);
     }
 
     private void render() {
