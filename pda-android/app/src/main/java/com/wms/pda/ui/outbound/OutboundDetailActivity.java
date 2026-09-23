@@ -67,7 +67,12 @@ public class OutboundDetailActivity extends AppCompatActivity {
     /** 已成功扫描的 24 位码(用于避免重复提示) */
     private final Set<String> scannedCodes = new HashSet<>();
 
-    /** 本单已提交过的码(成功或失败都算):连续扫码时失败的码静默跳过,不重复弹错误提示 */
+    /**
+     * 已提交给后端、还没结论的码,用来压住 UHF 连续盘点对同一标签的重复上报。
+     * 成功后会同时落进 scannedCodes;失败则立刻移除(见 submitEpcScan),所以这里
+     * **不会**留下"被拒过"的码。留下就等于在本会话里把它永久静音 —— 而拒的原因会随
+     * 手改单据而变(现场踩到:码先被 RFID 盘点拒掉,之后靠「添加明细」才锁给本单)。
+     */
     private final Set<String> triedCodes = new HashSet<>();
 
     /** 当前出库单的总数量(用于进度计算) */
@@ -181,7 +186,10 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onScanResult(ScanResult result) {
                 String code = result.getCode();
                 if (code == null || code.isEmpty()) return;
-                String canon = canonicalCode(code);
+                // 只认本单期望码集里的码:连续盘点每 2 秒把视野里的标签全报一遍,
+                // 范围外的提交过去必然被拒 —— 白刷后端,还会把码记进去重集合。
+                String canon = findExpectedCode(code);
+                if (canon == null) return;
                 if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
                 submitEpcScan(code, canon);
             }
@@ -223,6 +231,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
             public void onScanResult(ScanResult result) {
                 String code = result.getCode();
                 if (code == null || code.isEmpty()) return;
+                // 条码**故意不**做期望集过滤:这是操作员瞄准某个目标的动作,
+                // 扫到不对的货要给出明确原因(未锁定/已出库),静默会让人以为枪坏了。
                 String canon = canonicalCode(code);
                 if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
                 submitScan(code);
@@ -340,7 +350,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
     /**
      * UHF EPC 扫码提交:走 /scan-epc 专用接口。
      * matched=true → 成功(已扫过幂等返回不发成功音,只刷新);
-     * matched=false → 失败原因提示(限频),该码本次会话内静默跳过。
+     * matched=false → 失败原因提示(限频),并**放开去重**允许重扫(与盘点页同一套处理)。
      */
     private void submitEpcScan(String epc, String canonical) {
         triedCodes.add(canonical);
@@ -359,6 +369,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
                             }
                             renderSoon();
                         } else {
+                            // 放开去重:被拒的原因(未锁定/已出库/…)会变,不能当"已处理"缓存
+                            triedCodes.remove(canonical);
                             // r.reason 来自后端,只翻包装、不翻它
                             String reason = (r == null || r.reason == null)
                                     ? getString(R.string.scan_unknown_reason) : r.reason;
@@ -366,6 +378,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         }
                     }
                     @Override public void onError(int code, String msg) {
+                        // 网络/服务端瞬时失败:同样放开去重,允许重扫
+                        triedCodes.remove(canonical);
                         showScanErrorLimited(getString(R.string.msg_scan_failed, msg));
                     }
                 });
@@ -724,11 +738,11 @@ public class OutboundDetailActivity extends AppCompatActivity {
     }
 
     /**
-     * 把扫到的原始码归一化成后端存的完整编码。
-     * 条码枪可能吞前导零(后端 findByCode 靠尾匹配兜底),
-     * 若直接把原始码放进 scannedCodes,明细区的 ✓ 标记比对不上会漏打。
+     * 在本单的期望码集里找与这个原始码对应的完整编码,找不到返回 null。
+     * 期望码集 = 本单锁住的库存单元编码(OutboundService 填的 Line.codes),**含还没扫过的那些**,
+     * 所以"找不到"就意味着这不是本单的货 —— UHF 视野里的环境标签全归这类。
      */
-    private String canonicalCode(String raw) {
+    private String findExpectedCode(String raw) {
         if (raw == null) return null;
         String r = raw.trim();
         for (OutboundOrder.Line l : loadedLines) {
@@ -738,7 +752,17 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 if (c.equals(r) || c.endsWith(r) || r.endsWith(c)) return c;
             }
         }
-        return r;
+        return null;
+    }
+
+    /**
+     * 把扫到的原始码归一化成后端存的完整编码;不在本单期望码集里就原样返回。
+     * 条码枪可能吞前导零(后端 findByCode 靠尾匹配兜底),
+     * 若直接把原始码放进 scannedCodes,明细区的 ✓ 标记比对不上会漏打。
+     */
+    private String canonicalCode(String raw) {
+        String hit = findExpectedCode(raw);
+        return hit != null ? hit : (raw == null ? null : raw.trim());
     }
 
     private void updateProgress() {
