@@ -105,4 +105,36 @@ public class LocationDao {
     public int delete(int id) {
         return jdbc.update("DELETE FROM location WHERE id = ?", id);
     }
+
+    // ---------- 「在用」统计与级联改名 ----------
+    // 库位码是裸字符串引用(inventory_item.location_code / product.location),
+    // 没有外键。删除前要拦住、改名时要跟着搬,否则货会变成追溯不到的幽灵单元。
+
+    /** 落在该库位码上的库存单元数(含 PENDING 草稿占位) */
+    public int countInventoryUnits(String code) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM inventory_item WHERE location_code = ?", Integer.class, code);
+        return n == null ? 0 : n;
+    }
+
+    /** 把该库位码当默认库位的商品数 */
+    public int countProductsUsing(String code) {
+        Integer n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM product WHERE location = ?", Integer.class, code);
+        return n == null ? 0 : n;
+    }
+
+    /** 库位改名时,把实时引用(库存单元)一并搬过去 */
+    public int reassignInventoryUnits(String fromCode, String toCode) {
+        return jdbc.update(
+                "UPDATE inventory_item SET location_code = ?, updated_at = CURRENT_TIMESTAMP " +
+                "WHERE location_code = ?", toCode, fromCode);
+    }
+
+    /** 库位改名时,把商品的默认库位一并搬过去 */
+    public int reassignProducts(String fromCode, String toCode) {
+        return jdbc.update(
+                "UPDATE product SET location = ?, updated_at = CURRENT_TIMESTAMP WHERE location = ?",
+                toCode, fromCode);
+    }
 }

@@ -8,6 +8,7 @@ import com.wms.model.InventoryItem;
 import com.wms.model.StockCheck;
 import com.wms.model.StockCheckItem;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -112,6 +113,18 @@ public class StockCheckService {
             if (warehouseId == null) {
                 throw new IllegalArgumentException("WAREHOUSE 模式必须提供仓库");
             }
+            // 仓库必须真实存在且启用 —— 以前只判了非空,于是 warehouseId=999 会
+            // 建出一张名为「仓库#999」、件数为 0 的"看起来正常"的空盘点单
+            List<Integer> whEnabled = jdbc.queryForList(
+                    "SELECT enabled FROM warehouse WHERE id = ?", Integer.class, warehouseId);
+            if (whEnabled.isEmpty()) {
+                throw new NotFoundException("仓库不存在, warehouseId=" + warehouseId);
+            }
+            if (Integer.valueOf(0).equals(whEnabled.get(0))) {
+                throw new IllegalArgumentException("仓库已停用,不能发起盘点: " + warehouseName(warehouseId));
+            }
+            // 记下范围所属仓库:扫码时据此挡住来自其他仓库的码
+            c.setWarehouseId(warehouseId);
             List<String> locs = parseList(keyword);
             StringBuilder sql = new StringBuilder(
                     "SELECT * FROM inventory_item WHERE status = 'IN_STOCK' AND location_code IN ("
@@ -133,7 +146,20 @@ public class StockCheckService {
         }
 
         c.setTotalCount(items.size());
-        int checkId = dao.insertCheck(c);
+        // 四个分支都会写 scope_keyword,统一在这里卡列宽 ——
+        // WAREHOUSE 存的是重新拼出来的「人读范围描述」,比输入串长
+        //(分隔符 1 字符变 3 字符,前面还要加仓库名),输入侧的 500 字符闸门拦不住,
+        // 超列宽会以数据库异常的形式炸在 insertCheck 上
+        ensureScopeKeywordFits(c);
+        int checkId;
+        try {
+            checkId = dao.insertCheck(c);
+        } catch (DuplicateKeyException dup) {
+            // 同一秒内两处同时建单,随机后缀撞上了 uk_stock_check_no:换一个号再来一次。
+            // 不重试的话用户看到的是一句原始驱动报错(Duplicate entry ...)
+            c.setCheckNo(genCheckNo());
+            checkId = dao.insertCheck(c);
+        }
         c.setId(checkId);
 
         // 写入明细
@@ -310,6 +336,21 @@ public class StockCheckService {
             dao.updateCountedQty(line.getId(), 1);
         } else {
             // 4b) 不在快照中(单外码 / 非在库码):追加盘盈行(应盘 0 / 实盘 1)
+            //
+            // 按仓库盘点时先挡住来自其他仓库的码:否则误扫的货会直接变成这张单的
+            // 盘盈,而那张真正管着它仓库的盘点单可能也把它记成自己的盘盈 ——
+            // 同一个实物被两张单各算一次。盘点范围是"这仓的货",不是"随便扫什么"。
+            if (c.getWarehouseId() != null) {
+                List<Integer> unitWh = jdbc.queryForList(
+                        "SELECT warehouse_id FROM location WHERE code = ?",
+                        Integer.class, inv.getLocationCode());
+                Integer whId = unitWh.isEmpty() ? null : unitWh.get(0);
+                if (!c.getWarehouseId().equals(whId)) {
+                    throw new UnprocessableException(
+                            "该码不在本次盘点的仓库范围内(它在库位 " + inv.getLocationCode()
+                                    + (whId == null ? ",未挂到任何仓库" : ",属于其他仓库") + "),请确认是否扫错");
+                }
+            }
             StockCheckItem it = new StockCheckItem();
             it.setCheckId(checkId);
             it.setInventoryItemId(inv.getId());
@@ -358,9 +399,23 @@ public class StockCheckService {
         return new ArrayList<>(set);
     }
 
+    /** scope_keyword 的列宽(VARCHAR(512)),与 sql/mysql-schema.sql 对齐 */
+    private static final int SCOPE_KEYWORD_MAX = 512;
+
+    /** 存进库前的最后一道闸:超长就报 400,而不是让数据库抛 Data too long */
+    private void ensureScopeKeywordFits(StockCheck c) {
+        String k = c.getScopeKeyword();
+        if (k != null && k.length() > SCOPE_KEYWORD_MAX) {
+            throw new IllegalArgumentException("盘点范围描述过长(" + k.length() + " 字符,上限 "
+                    + SCOPE_KEYWORD_MAX + ");请减少勾选的库位/SKU 数量后重试");
+        }
+    }
+
     private static String genCheckNo() {
         String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        int rnd = (int) (Math.random() * 900) + 100;
+        // 4 位随机后缀:同秒建单的碰撞概率从 1/900 降到 1/9000;
+        // 真撞上了 create 里还有一次换号重试兜底
+        int rnd = (int) (Math.random() * 9000) + 1000;
         return "CHK-" + ts + "-" + rnd;
     }
 }

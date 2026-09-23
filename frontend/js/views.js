@@ -566,7 +566,10 @@ const Views = {
      * 历史单据照样要看。返回值已经过 HTML 转义,调用方不要再包 escapeHtml。
      */
     locLabel(code) {
-        if (!code) return '-';
+        // 空库位码说「未指定库位」而不是「-」:同一个字段全系统一个说法
+        // (Web 分区抬头、CSV 的「库位」列、PDA 都用这一个词)。
+        // 以前这里印 '-'、locText 印「未指定库位」,同一张表里两种写法。
+        if (!code) return escapeHtml(t('outbound_order.loc.unassigned'));
         const esc = escapeHtml(code);
         // views.js 与 app.js 都是经典脚本,共用全局词法作用域;调用发生在渲染期,
         // 那时 app.js 早已执行完,不存在 TDZ 问题。
@@ -1245,7 +1248,11 @@ const Views = {
 
     locationForm(l, warehouses) {
         l = l || {};
+        // 只列启用的仓库:后端已拒绝"把库位挂到已停用仓库"(400),
+        // 下拉里就不该把它列出来让用户白试一次。当前编辑的库位若正挂在一个
+        // 已停用仓库下,仍把它带出来,否则一保存就会把归属悄悄改掉。
         const whOpts = (warehouses || [])
+            .filter(w => w.enabled !== false || String(l.warehouseId || '') === String(w.id))
             .map(w => `<option value="${w.id}" ${String(l.warehouseId||'')===String(w.id)?'selected':''}>${escapeHtml(w.name)}</option>`)
             .join('');
         return `

@@ -24,6 +24,8 @@ public class StockCheckDao {
         c.setCheckNo(rs.getString("check_no"));
         c.setScope(rs.getString("scope"));
         c.setScopeKeyword(rs.getString("scope_keyword"));
+        int wid = rs.getInt("warehouse_id");
+        c.setWarehouseId(rs.wasNull() ? null : wid);
         c.setRemark(rs.getString("remark"));
         c.setCreatedBy(rs.getString("created_by"));
         c.setStatus(rs.getString("status"));
@@ -62,21 +64,23 @@ public class StockCheckDao {
     };
 
     public int insertCheck(StockCheck c) {
-        String sql = "INSERT INTO stock_check (check_no, scope, scope_keyword, remark, " +
+        String sql = "INSERT INTO stock_check (check_no, scope, scope_keyword, warehouse_id, remark, " +
                 "created_by, status, total_count, counted_count, diff_count) " +
-                "VALUES (?,?,?,?,?,?,?,?,?)";
+                "VALUES (?,?,?,?,?,?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, c.getCheckNo());
             ps.setString(2, c.getScope());
             ps.setString(3, c.getScopeKeyword());
-            ps.setString(4, c.getRemark());
-            ps.setString(5, c.getCreatedBy());
-            ps.setString(6, c.getStatus() == null ? StockCheck.STATUS_DRAFT : c.getStatus());
-            ps.setInt(7, c.getTotalCount() == null ? 0 : c.getTotalCount());
-            ps.setInt(8, c.getCountedCount() == null ? 0 : c.getCountedCount());
-            ps.setInt(9, c.getDiffCount() == null ? 0 : c.getDiffCount());
+            if (c.getWarehouseId() == null) ps.setNull(4, java.sql.Types.INTEGER);
+            else ps.setInt(4, c.getWarehouseId());
+            ps.setString(5, c.getRemark());
+            ps.setString(6, c.getCreatedBy());
+            ps.setString(7, c.getStatus() == null ? StockCheck.STATUS_DRAFT : c.getStatus());
+            ps.setInt(8, c.getTotalCount() == null ? 0 : c.getTotalCount());
+            ps.setInt(9, c.getCountedCount() == null ? 0 : c.getCountedCount());
+            ps.setInt(10, c.getDiffCount() == null ? 0 : c.getDiffCount());
             return ps;
         }, kh);
         return GeneratedKeys.id(kh);

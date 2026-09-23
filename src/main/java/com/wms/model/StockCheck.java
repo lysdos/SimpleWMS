@@ -18,6 +18,8 @@ public class StockCheck {
     private String checkNo;
     private String scope;
     private String scopeKeyword;
+    /** 盘点范围所属仓库(仅 scope=WAREHOUSE 时写入);扫码时据此挡住来自其他仓库的码 */
+    private Integer warehouseId;
     private String remark;
     private String createdBy;
     private String status;
@@ -38,6 +40,8 @@ public class StockCheck {
     public void setScope(String scope) { this.scope = scope; }
     public String getScopeKeyword() { return scopeKeyword; }
     public void setScopeKeyword(String scopeKeyword) { this.scopeKeyword = scopeKeyword; }
+    public Integer getWarehouseId() { return warehouseId; }
+    public void setWarehouseId(Integer warehouseId) { this.warehouseId = warehouseId; }
     public String getRemark() { return remark; }
     public void setRemark(String remark) { this.remark = remark; }
     public String getCreatedBy() { return createdBy; }

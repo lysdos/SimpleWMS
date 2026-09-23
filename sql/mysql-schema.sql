@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS location (
     updated_by   VARCHAR(64) DEFAULT NULL COMMENT '更新人',
     updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_location_code` (`code`),
     KEY `idx_location_warehouse` (`warehouse_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库位(货架/货位;归属仓库)';
 
@@ -308,6 +309,7 @@ CREATE TABLE IF NOT EXISTS stock_check (
     check_no        VARCHAR(64) NOT NULL COMMENT '盘点单号(唯一,格式 CK-yyyyMMddHHmmss-序号)',
     scope           VARCHAR(16) NOT NULL DEFAULT 'ALL' COMMENT '盘点范围:ALL=全部在库 / SKU=按SKU / LOCATION=按单个库位(创建入口已移除,仅为读取历史单保留) / WAREHOUSE=按仓库(可限定该仓下的若干库位)',
     scope_keyword   VARCHAR(512) DEFAULT NULL COMMENT '范围关键字(scope=SKU 时为多 SKU;LOCATION 时为库位编码;WAREHOUSE 时为**人读的范围描述**,如"主仓库 / A-01-01 / B-01-01",未限定库位则只是仓库名 —— 该模式不解析此列,只用于展示。输入上限 500 字符)',
+    warehouse_id    INT DEFAULT NULL COMMENT '盘点范围所属仓库 → warehouse.id(仅 scope=WAREHOUSE 时写入,扫码时据此挡住来自其他仓库的码;其他模式为空)',
     remark          VARCHAR(255) DEFAULT NULL COMMENT '备注',
     created_by      VARCHAR(64) NOT NULL COMMENT '创建人',
     status          VARCHAR(16) NOT NULL DEFAULT 'DRAFT' COMMENT '状态:DRAFT=盘点中 / COMMITTED=已提交 / CANCELLED=已取消',

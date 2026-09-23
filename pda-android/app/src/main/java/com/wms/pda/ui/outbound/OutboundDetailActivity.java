@@ -602,10 +602,11 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 StringBuilder info = new StringBuilder();
                 if (l.location != null && !l.location.isEmpty()) {
                     // 历史单:手工指定过库位
-                    info.append("库位: ").append(locLabel(l.location)).append("  ");
+                    info.append(getString(R.string.location_label_fmt, locLabel(l.location))).append("  ");
                 } else {
                     // 新单:出库是"自动跨库位找货",行上没有单一库位,靠下面的拣货分布定位
-                    info.append("库位: 自动  ");
+                    info.append(getString(R.string.location_label_fmt, getString(R.string.location_auto)))
+                            .append("  ");
                 }
                 if (l.picks != null && !l.picks.isEmpty()) {
                     StringBuilder p = new StringBuilder();

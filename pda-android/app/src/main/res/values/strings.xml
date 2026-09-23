@@ -98,6 +98,15 @@
     <string name="inbound_pick_supplier">供应商(可选)</string>
     <string name="inbound_pick_location">库位(先选仓库,再选库位)</string>
     <string name="location_picker_none">不指定(用商品默认库位)</string>
+    <!-- 编辑既有明细时首项的含义是"保持原库位",不是"回到商品默认库位"(后端对空值的语义) -->
+    <string name="location_picker_keep">保持原库位</string>
+    <string name="location_current_fmt">当前库位: %1$s</string>
+    <string name="location_label_fmt">库位: %1$s</string>
+    <string name="location_auto">自动</string>
+    <string name="label_code_fmt">码 %1$s</string>
+    <string name="location_none_available">没有其他可用库位,请先在 PC 端维护库位</string>
+    <string name="location_load_failed_fmt">加载库位失败: %1$s</string>
+    <string name="location_transferred_fmt">已调拨到 %1$s</string>
     <string name="inbound_row_remark">行备注(可选)</string>
     <string name="inbound_production_date">生产日期(可选)</string>
     <string name="inbound_shelf_life">保质期(天,可选)</string>

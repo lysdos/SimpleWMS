@@ -140,7 +140,10 @@ public class OutboundService {
         List<OutboundOrderItem> lines=orderDao.findItemsByOrderId(id);
         if(o.getTotalQuantity()==null||o.getTotalQuantity()<=0)throw new IllegalStateException("草稿单不能为空");
         // ====== 方案 A:commit 时不重新挑码,直接把所有 RESERVED 单元 → OUT ======
-        List<com.wms.dao.InventoryItemDao.ConsumeRecord> records = itemDao.commitReservations(id);
+        // 传入单据总量:老数据行(remaining>1)是按整行锁的,提交时必须按实际需要量
+        // 扣减并把余货退回在库,否则 product.quantity 会与实际扣掉的实物数对不上
+        List<com.wms.dao.InventoryItemDao.ConsumeRecord> records =
+                itemDao.commitReservations(id, o.getTotalQuantity());
         if (records.isEmpty()) {
             throw new IllegalStateException("草稿单未锁定任何 inventory_item,请先调 /orders/{id}/reserve 补全锁定");
         }

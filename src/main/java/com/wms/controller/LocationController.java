@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/locations")
@@ -41,11 +42,14 @@ public class LocationController {
         return ApiResponse.ok(locationService.create(l));
     }
 
+    /**
+     * 局部更新。收 Map 而不是 Location:需要区分「字段没带」和「字段显式为 null」,
+     * 前者要保留原值(否则不带 enabled 会把停用项改回启用、不带 warehouseId 会把库位踢出仓库)。
+     */
     @PutMapping("/{id}")
     @RequireRole("ADMIN")
-    public ApiResponse<Location> update(@PathVariable int id, @RequestBody Location l) {
-        l.setId(id);
-        return ApiResponse.ok(locationService.update(l));
+    public ApiResponse<Location> update(@PathVariable int id, @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(locationService.update(id, body));
     }
 
     @DeleteMapping("/{id}")

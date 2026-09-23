@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/warehouses")
@@ -40,11 +41,14 @@ public class WarehouseController {
         return ApiResponse.ok(warehouseService.create(w));
     }
 
+    /**
+     * 局部更新。收 Map 而不是 Warehouse:需要区分「字段没带」和「字段显式为 null」,
+     * 前者保留原值(否则不带 enabled 会把停用的仓库静默重启)。
+     */
     @PutMapping("/{id}")
     @RequireRole("ADMIN")
-    public ApiResponse<Warehouse> update(@PathVariable int id, @RequestBody Warehouse w) {
-        w.setId(id);
-        return ApiResponse.ok(warehouseService.update(w));
+    public ApiResponse<Warehouse> update(@PathVariable int id, @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(warehouseService.update(id, body));
     }
 
     @DeleteMapping("/{id}")

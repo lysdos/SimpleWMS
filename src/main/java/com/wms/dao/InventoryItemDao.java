@@ -201,7 +201,8 @@ public class InventoryItemDao {
      */
     public int deletePendingByInboundItem(int inboundItemId, int limit) {
         return jdbc.update(
-                "DELETE FROM inventory_item WHERE inbound_item_id = ? AND status = ? LIMIT ?",
+                "DELETE FROM inventory_item WHERE inbound_item_id = ? AND status = ? " +
+                "ORDER BY id LIMIT ?",
                 inboundItemId, InventoryItem.STATUS_PENDING, limit);
     }
 
@@ -337,10 +338,22 @@ public class InventoryItemDao {
     // ====== DRAFT 出库单 EPC 锁定(方案 A:建单立刻锁) ======
 
     /**
+     * 出库拣货的排序口径:先到期先出(FEFO)。
+     *
+     * 一级键必须是 expiry_date(到期日),不是 production_date —— 生产得早不等于
+     * 到期得早:保质期 365 天的 1 月批次,排在保质期 30 天的 6 月批次后面才对,
+     * 而按生产日期排会先把 1 月那批拣走,让已过期的 6 月批次继续躺在库位上。
+     * 到期日为空的(没记效期)一律排最后,不插到已知效期的货前面。
+     */
+    private static final String FEFO_ORDER =
+            "(expiry_date IS NULL) ASC, expiry_date ASC, " +
+            "(production_date IS NULL) ASC, production_date ASC, id ASC";
+
+    /**
      * 为 DRAFT 出库单按 FEFO(先到期先出) 锁定 N 个 inventory_item(整件一物一码)。
      * 锁定后状态 = RESERVED,outbound_order_id 写上。
      * 优先 remaining=1 的标准单元,不足时退到 remaining>1 的老数据(整批锁)。
-     * 排序: 有生产日期的按日期升序(最早生产的先出),无日期的按 id 升序(FIFO)。
+     * 排序见 {@link #FEFO_ORDER}。
      *
      * locationCode 传 null/空 = **不限库位,把该商品的货放在一个候选池里一起排 FEFO**。
      * 这是"一个商品会分散在多个库位"之后的默认走法:一批货主仓库位放不下时
@@ -362,7 +375,7 @@ public class InventoryItemDao {
         List<InventoryItem> units = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE product_id = ? " + locClause + "AND status = 'IN_STOCK' AND remaining = 1 " +
-                "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
+                "ORDER BY " + FEFO_ORDER,
                 ROW, args);
         int left = needQty;
         for (InventoryItem it : units) {
@@ -381,7 +394,7 @@ public class InventoryItemDao {
         List<InventoryItem> legacy = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE product_id = ? " + locClause + "AND status = 'IN_STOCK' AND remaining > 1 " +
-                "ORDER BY (production_date IS NULL) ASC, production_date ASC, id ASC",
+                "ORDER BY " + FEFO_ORDER,
                 ROW, args);
         for (InventoryItem it : legacy) {
             if (left <= 0) break;
@@ -420,37 +433,79 @@ public class InventoryItemDao {
     }
 
     /**
-     * 提交 DRAFT 出库单:把 RESERVED 单元正式设为 OUT,remaining 减 1(老数据整批扣减)。
-     * 库存(product.quantity)由 Service 层用 adjustQuantity 减。
+     * 提交 DRAFT 出库单:把 RESERVED 单元正式设为 OUT,扣减 remaining。
+     * 库存(product.quantity)由 Service 层用 adjustQuantity 按行数量减。
+     *
+     * needQty = 本单实际要出的总件数。为什么要显式传进来:
+     * 老数据行(remaining>1)在预留时是**整行锁**的,而真正的取用数只存在于
+     * 预留时的内存变量里。提交时若按整行扣,单件数量却只减了本单的份额,
+     * product.quantity 就会永久高出「实际扣掉的实物数」。
+     * 这里按 needQty 夹住消耗量,多出来的一律退回在库,少了的直接报错回滚 ——
+     * 宁可让用户看到「预留不足」,也不要留下静默的账实差。
      */
-    public List<ConsumeRecord> commitReservations(int outboundOrderId) {
-        // 1) 整件一物一码:RESERVED → OUT, remaining=0
+    public List<ConsumeRecord> commitReservations(int outboundOrderId, int needQty) {
         List<ConsumeRecord> out = new ArrayList<>();
+        int need = needQty;
+
+        // 1) 整件一物一码:RESERVED → OUT, remaining=0
         List<InventoryItem> units = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE status = 'RESERVED' AND outbound_order_id = ? AND remaining = 1 " +
                 "ORDER BY id ASC",
                 ROW, outboundOrderId);
         for (InventoryItem u : units) {
+            if (need <= 0) {
+                // 预留件数多于本单实际需要(单据被改小过):多余的退回在库,不吞货
+                jdbc.update(
+                        "UPDATE inventory_item SET status = 'IN_STOCK', outbound_order_id = NULL, " +
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ?", u.getId());
+                continue;
+            }
             jdbc.update(
-                    "UPDATE inventory_item SET status = ?, remaining = 0, " +
+                    "UPDATE inventory_item SET status = ?, remaining = 0, outbound_order_id = NULL, " +
                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     InventoryItem.STATUS_OUT, u.getId());
             out.add(new ConsumeRecord(u.getId(), 1));
+            need--;
         }
-        // 2) 老数据(remaining>1):按 create 时的 take 数已占,这里整批扣 → OUT
+
+        // 2) 老数据(remaining>1):只扣本单需要的部分,余货原行退回在库
         List<InventoryItem> legacy = jdbc.query(
                 "SELECT * FROM inventory_item " +
                 "WHERE status = 'RESERVED' AND outbound_order_id = ? AND remaining > 1 " +
                 "ORDER BY id ASC",
                 ROW, outboundOrderId);
         for (InventoryItem u : legacy) {
-            int take = u.getRemaining();  // 整批都归本单
-            jdbc.update(
-                    "UPDATE inventory_item SET status = ?, remaining = 0, " +
-                    "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    InventoryItem.STATUS_OUT, u.getId());
-            out.add(new ConsumeRecord(u.getId(), take));
+            int take = Math.min(u.getRemaining(), Math.max(need, 0));
+            if (take <= 0) {
+                jdbc.update(
+                        "UPDATE inventory_item SET status = 'IN_STOCK', outbound_order_id = NULL, " +
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ?", u.getId());
+                continue;
+            }
+            if (take >= u.getRemaining()) {
+                jdbc.update(
+                        "UPDATE inventory_item SET status = ?, remaining = 0, outbound_order_id = NULL, " +
+                        "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        InventoryItem.STATUS_OUT, u.getId());
+                out.add(new ConsumeRecord(u.getId(), u.getRemaining()));
+                need -= u.getRemaining();
+            } else {
+                // 部分消耗:余货留在原行继续在库
+                jdbc.update(
+                        "UPDATE inventory_item SET status = 'IN_STOCK', remaining = remaining - ?, " +
+                        "outbound_order_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        take, u.getId());
+                out.add(new ConsumeRecord(u.getId(), take));
+                need -= take;
+            }
+        }
+
+        if (need > 0) {
+            // 预留池不足以覆盖单据总量(例如单据被改大后没有重新预留)。
+            // 抛错让事务回滚,而不是让 product.quantity 和实物数量对不上。
+            throw new IllegalStateException("出库预留不足:还差 " + need
+                    + " 件未锁定,请先调用 /orders/{id}/reserve 补全锁定后再提交");
         }
         return out;
     }

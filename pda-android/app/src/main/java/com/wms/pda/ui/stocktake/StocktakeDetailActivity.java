@@ -339,7 +339,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
 
         tvSku.setText(l.sku == null ? "?" : l.sku);
         tvSub.setText((l.productName == null ? "" : l.productName)
-                + " · 码 " + (l.code == null ? "—" : l.code)
+                + " · " + getString(R.string.label_code_fmt, l.code == null ? "—" : l.code)
                 + " · " + (l.locationCode == null ? "—" : l.locationCode));
         tvBook.setText(l.systemQty == null ? "—" : String.valueOf(l.systemQty));
         etActual.setText(l.countedQty == null ? "" : String.valueOf(l.countedQty));

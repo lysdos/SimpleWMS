@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -279,14 +280,35 @@ public class InboundService {
                     ? item.getLocation() : defaultLocationOf(product);
         }
 
-        if (productChanged) {
-            // 换商品:旧商品占位码全部作废,按新商品+新数量重建
+        // 供应商/行备注:patch 里**没带**(null)就沿用原值。
+        // 以前是裸赋值,于是 PDA 上「只改数量」也会把供应商和行备注悄悄清空
+        // (供应商下拉落在「不指定」或原供应商已被改名时,发上来的就是 null)。
+        // 想真的清空就显式发空串 —— 空串会被 blankToNull 归一成 null。
+        String effSupplier = patch.supplier != null ? blankToNull(patch.supplier) : item.getSupplier();
+        String effRowRemark = patch.rowRemark != null ? blankToNull(patch.rowRemark) : item.getRowRemark();
+
+        // 占位单元必须与行快照一致:商品/数量/库位/生产日期/保质期**任一项**变了,
+        // 就把该行的 PENDING 单元整体作废重建。
+        //
+        // 为什么整体重建而不是分别打补丁:占位单元的库位与效期只在创建那一刻写入,
+        // 提交(activateByInboundItem)只改 status/remaining,不会回头读行快照。
+        // 以前按「换商品 / 加数量 / 减数量」分三支处理,于是「只改库位不改数量」
+        // 一个分支都不进 —— 行上写着 B-02、单元还在 A-01,提交后库存落错库位;
+        // 只改效期同理(出库拣货和临期预警读的是单元上的旧到期日)。
+        // 改成一条路径重建,这几类字段就一起跟上了。
+        boolean unitsNeedRebuild = productChanged
+                || newQty != oldQty
+                || !Objects.equals(item.getLocation(), effLocation)
+                || !Objects.equals(item.getProductionDate(), effProdDate)
+                || !Objects.equals(item.getShelfLifeDays(), effShelfDays);
+
+        if (unitsNeedRebuild) {
             itemDao.deletePendingByInboundItem(itemId, Integer.MAX_VALUE);
             BatchItem regen = new BatchItem();
             regen.productId = product.getId();
             regen.quantity = newQty;
-            regen.supplier = blankToNull(patch.supplier);
-            regen.rowRemark = blankToNull(patch.rowRemark);
+            regen.supplier = effSupplier;
+            regen.rowRemark = effRowRemark;
             regen.productionDate = effProdDate;
             regen.shelfLifeDays = effShelfDays;
             regen.location = effLocation;
@@ -294,22 +316,6 @@ public class InboundService {
             for (InventoryItem u : generated) {
                 itemDao.updateInboundItemId(itemId, u.getId());
             }
-        } else if (newQty > oldQty) {
-            // 补占位单元
-            BatchItem extra = new BatchItem();
-            extra.productId = item.getProductId();
-            extra.quantity = newQty - oldQty;
-            extra.supplier = blankToNull(patch.supplier);
-            extra.rowRemark = blankToNull(patch.rowRemark);
-            extra.productionDate = effProdDate;
-            extra.shelfLifeDays = effShelfDays;
-            extra.location = effLocation;
-            List<InventoryItem> generated = processItemBatch(extra, operator, orderId);
-            for (InventoryItem u : generated) {
-                itemDao.updateInboundItemId(itemId, u.getId());
-            }
-        } else if (newQty < oldQty) {
-            itemDao.deletePendingByInboundItem(itemId, oldQty - newQty);
         }
 
         // 行快照同步(换商品时 sku/名称/单价/库位一并更新)
@@ -319,10 +325,10 @@ public class InboundService {
         item.setUnitPrice(product.getUnitPrice() == null ? BigDecimal.ZERO : product.getUnitPrice());
         item.setLocation(effLocation);
         item.setQuantity(newQty);
-        item.setSupplier(blankToNull(patch.supplier));
+        item.setSupplier(effSupplier);
         item.setProductionDate(effProdDate);
         item.setShelfLifeDays(effShelfDays);
-        item.setRowRemark(blankToNull(patch.rowRemark));
+        item.setRowRemark(effRowRemark);
         orderDao.updateItem(item);
         orderDao.refreshAggregates(orderId);
         return getOrder(orderId);

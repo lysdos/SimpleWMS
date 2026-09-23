@@ -1385,7 +1385,9 @@ async function transferInventory(id, btn) {
         </div>
         <label style="display:block;font-size:13px;color:var(--c-text-2);margin-bottom:4px;">${t('inventory.modal.transfer_target')}<span class="req">*</span></label>
         <select id="transfer-to" class="select" style="width:100%;">
-            ${locOptions || `<option value="" disabled>${t('inventory.modal.transfer_empty')}</option>`}
+            ${locOptions
+                ? `<option value="" disabled selected>${t('inventory.modal.transfer_pick')}</option>${locOptions}`
+                : `<option value="" disabled>${t('inventory.modal.transfer_empty')}</option>`}
         </select>
     `, async () => {
         const sel = document.getElementById('transfer-to');

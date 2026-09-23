@@ -294,6 +294,9 @@ public class StocktakeListActivity extends AppCompatActivity {
                         dialog.dismiss();
                         Intent i = new Intent(StocktakeListActivity.this, StocktakeDetailActivity.class);
                         i.putExtra("orderId", o.id);
+                        // 详情页读的是 orderDbId(它按主键重新拉一次单据);
+                        // 列表点击那条路径两个 key 都带,创建这条以前漏了 → 详情页拿到 -1 立刻 finish
+                        if (o.dbId != null) i.putExtra("orderDbId", o.dbId);
                         startActivity(i);
                     }
                     @Override public void onError(int code, String msg) {

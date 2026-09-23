@@ -40,28 +40,39 @@ final class TransferDialog {
                     }
                 }
                 if (options.isEmpty()) {
-                    Toast.makeText(ctx, "没有其他可用库位,请先在 PC 端维护库位", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(ctx, R.string.location_none_available, Toast.LENGTH_SHORT).show();
                     return;
                 }
-                showPicker(ctx, item, currentLoc, options);
+                showPicker(ctx, item, currentLoc, locs, options);
             }
             @Override public void onError(int code, String msg) {
-                Toast.makeText(ctx, "加载库位失败: " + msg, Toast.LENGTH_SHORT).show();
+                Toast.makeText(ctx, ctx.getString(R.string.location_load_failed_fmt, msg),
+                        Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    private static void showPicker(Context ctx, InventoryItem item, String currentLoc, List<Location> options) {
+    private static void showPicker(Context ctx, InventoryItem item, String currentLoc,
+                                   List<Location> all, List<Location> options) {
         View v = LayoutInflater.from(ctx).inflate(R.layout.dialog_transfer_simple, null, false);
         TextView tvInfo = v.findViewById(R.id.tv_info);
         Spinner spWarehouse = v.findViewById(R.id.sp_warehouse);
         Spinner spTarget = v.findViewById(R.id.sp_target);
 
         tvInfo.setText((item.sku == null ? "?" : item.sku) + " · " + (item.code == null ? "" : item.code)
-                + "\n当前库位: " + (currentLoc.isEmpty() ? "—" : currentLoc));
+                + "\n" + ctx.getString(R.string.location_current_fmt, currentLoc.isEmpty() ? "—" : currentLoc));
 
-        // 传当前库位码:所属仓库会被默认选中(查不到就落到第一组)
-        LocationPicker picker = new LocationPicker(spWarehouse, spTarget, options, currentLoc);
+        // 默认选中该单元当前所在的仓库。**不能把 currentLoc 当 preferred** ——
+        // 它在上面的候选里已被剔除(不能调拨到自己),查不到就会静默落到第一个仓库,
+        // 用户看到头部写着"当前库位: 副仓/B-02"、不动手直接确认,货就被挪到了主仓。
+        Integer curWarehouseId = null;
+        if (all != null) {
+            for (Location l : all) {
+                if (currentLoc.equalsIgnoreCase(l.code)) { curWarehouseId = l.warehouseId; break; }
+            }
+        }
+        LocationPicker picker = new LocationPicker(spWarehouse, spTarget, options, null);
+        picker.selectWarehouse(curWarehouseId);
 
         new AlertDialog.Builder(ctx)
                 .setTitle(R.string.transfer_title)
@@ -72,7 +83,8 @@ final class TransferDialog {
                     RepositoryProvider.get().transfer(item.id, toLoc,
                             new WmsCallback<Void>() {
                                 @Override public void onSuccess(Void v) {
-                                    Toast.makeText(ctx, "已调拨到 " + toLoc, Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(ctx, ctx.getString(R.string.location_transferred_fmt, toLoc),
+                                            Toast.LENGTH_SHORT).show();
                                 }
                                 @Override public void onError(int code, String msg) {
                                     Toast.makeText(ctx, "调拨失败: " + msg, Toast.LENGTH_SHORT).show();

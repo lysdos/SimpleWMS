@@ -2,6 +2,7 @@ package com.wms.service;
 
 import com.wms.controller.NotFoundException;
 import com.wms.dao.InventoryItemDao;
+import com.wms.dao.LocationDao;
 import com.wms.dao.ProductDao;
 import com.wms.dao.SupplierDao;
 import com.wms.model.Product;
@@ -14,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -22,12 +24,37 @@ public class ProductService {
     private final ProductDao productDao;
     private final SupplierDao supplierDao;
     private final InventoryItemDao itemDao;
+    private final LocationDao locationDao;
 
     @Autowired
-    public ProductService(ProductDao productDao, SupplierDao supplierDao, InventoryItemDao itemDao) {
+    public ProductService(ProductDao productDao, SupplierDao supplierDao, InventoryItemDao itemDao,
+                          LocationDao locationDao) {
         this.productDao = productDao;
         this.supplierDao = supplierDao;
         this.itemDao = itemDao;
+        this.locationDao = locationDao;
+    }
+
+    /**
+     * 商品默认库位校验。
+     *
+     * 这个值会在入库时被 InboundService.defaultLocationOf 原样当成
+     * inventory_item.location_code 写进库存单元 —— 不校验的话,一个错别字
+     * (A-01-1 写成 A-01-01)就会造出一批「查不到所属仓库」的幽灵单元:
+     * 能出库、计入总量,却在任何按仓筛选和按仓盘点里都看不见。
+     *
+     * 长度卡 32 而非 64:product.location 是 VARCHAR(64),但最终落点
+     * inventory_item.location_code 只有 VARCHAR(32),超了会在入库时报数据库错。
+     */
+    private void validateLocation(String location) {
+        if (location == null || location.isBlank()) return;   // 空 = 交给兜底库位
+        String code = location.trim();
+        if (code.length() > 32) {
+            throw new IllegalArgumentException("默认库位编码过长(最多 32): " + code);
+        }
+        if (locationDao.findByCode(code) == null) {
+            throw new IllegalArgumentException("默认库位不存在: " + code);
+        }
     }
 
     public List<Product> list(String keyword) {
@@ -45,6 +72,7 @@ public class ProductService {
     @Transactional
     public Product create(Product p) {
         validate(p, true);
+        validateLocation(p.getLocation());
         Optional<Product> exist = productDao.findBySku(p.getSku());
         if (exist.isPresent()) {
             throw new IllegalArgumentException("SKU 已存在: " + p.getSku());
@@ -70,6 +98,12 @@ public class ProductService {
         validate(p, false);
         Product exist = productDao.findById(p.getId())
                 .orElseThrow(() -> new IllegalArgumentException("商品不存在, id=" + p.getId()));
+
+        // 只在库位真的被改动时校验:老数据里可能存着已删库位的幽灵码,
+        // 改个商品名字不该被历史脏数据卡住(但新填的必须是真的)
+        if (!Objects.equals(exist.getLocation(), p.getLocation())) {
+            validateLocation(p.getLocation());
+        }
 
         if (!exist.getSku().equals(p.getSku())) {
             productDao.findBySku(p.getSku()).ifPresent(other -> {

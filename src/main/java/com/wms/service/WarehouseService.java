@@ -3,12 +3,14 @@ package com.wms.service;
 import com.wms.controller.NotFoundException;
 import com.wms.dao.WarehouseDao;
 import com.wms.model.Warehouse;
+import com.wms.util.Json;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class WarehouseService {
@@ -40,19 +42,28 @@ public class WarehouseService {
         }
     }
 
+    /**
+     * 局部更新:只应用 patch 里**真正出现过**的字段。
+     * 整对象覆盖会把「没带 enabled」当置空,于是停用的仓库被静默重启 ——
+     * 所以先读原行再按 key 合并。详见 LocationService.update 的同款注释。
+     */
     @Transactional
-    public Warehouse update(Warehouse w) {
-        if (w.getId() == null) throw new IllegalArgumentException("更新失败:缺少 id");
-        if (warehouseDao.findById(w.getId()) == null) {
-            throw new NotFoundException("仓库不存在, id=" + w.getId());
-        }
-        validate(w);
+    public Warehouse update(int id, Map<String, Object> patch) {
+        Warehouse cur = warehouseDao.findById(id);
+        if (cur == null) throw new NotFoundException("仓库不存在, id=" + id);
+
+        if (patch.containsKey("code"))    cur.setCode(Json.asString(patch.get("code")));
+        if (patch.containsKey("name"))    cur.setName(Json.asString(patch.get("name")));
+        if (patch.containsKey("remark"))  cur.setRemark(Json.asString(patch.get("remark")));
+        if (patch.containsKey("enabled")) cur.setEnabled(Json.asBool(patch.get("enabled")));
+
+        validate(cur);
         try {
-            warehouseDao.update(w);
+            warehouseDao.update(cur);
         } catch (DuplicateKeyException e) {
-            throw new IllegalArgumentException("仓库编码已存在: " + w.getCode());
+            throw new IllegalArgumentException("仓库编码已存在: " + cur.getCode());
         }
-        return warehouseDao.findById(w.getId());
+        return warehouseDao.findById(id);
     }
 
     /**
@@ -64,7 +75,8 @@ public class WarehouseService {
     public void delete(int id) {
         Warehouse w = warehouseDao.findById(id);
         if (w == null) throw new NotFoundException("仓库不存在, id=" + id);
-        int n = warehouseDao.countLocations(id);
+        // 锁定读:普通 COUNT 走事务快照,看不见期间刚提交的新库位,会留下孤儿库位
+        int n = warehouseDao.countLocationsLocking(id);
         if (n > 0) {
             throw new IllegalStateException(
                     "该仓库下还有 " + n + " 个库位,不能删除;请先把库位转移到其他仓库,或一并删除");

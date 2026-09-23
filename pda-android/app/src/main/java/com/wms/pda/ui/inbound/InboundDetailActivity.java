@@ -160,7 +160,9 @@ public class InboundDetailActivity extends AppCompatActivity {
                 tvQty.setText("× " + l.qty + " " + (l.uom == null ? "" : l.uom));
 
                 StringBuilder info = new StringBuilder();
-                if (l.location != null && !l.location.isEmpty()) info.append("库位: ").append(l.location).append("  ");
+                if (l.location != null && !l.location.isEmpty()) {
+                    info.append(getString(R.string.location_label_fmt, l.location)).append("  ");
+                }
                 if (l.supplier != null && !l.supplier.isEmpty()) info.append("供应商: ").append(l.supplier).append("  ");
                 if (l.unitPrice != null && !l.unitPrice.isEmpty()) info.append("单价: ¥").append(l.unitPrice).append("  ");
                 if (l.rowRemark != null && !l.rowRemark.isEmpty()) info.append("备注: ").append(l.rowRemark);

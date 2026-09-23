@@ -77,6 +77,56 @@ public class DataSeeder implements CommandLineRunner {
         boolean warehouseIdJustAdded = tryAddColumn("location", "warehouse_id", "INT DEFAULT NULL");
         tryAddIndex("idx_location_warehouse", "location", "warehouse_id");
         ensureDefaultWarehouse(warehouseIdJustAdded);
+
+        // 2026-09-23: 盘点单记下范围所属仓库,供扫码时挡住来自其他仓库的码
+        //(以前按仓盘点会静默吸收误扫的外仓货,记成自己的盘盈)
+        tryAddColumn("stock_check", "warehouse_id", "INT DEFAULT NULL");
+
+        // 2026-09-23: location.code 补唯一索引。
+        // 此前只有 PRIMARY KEY,重复编码能建出来;而库存单元和商品的默认库位
+        // 都是按 code 裸字符串引用的,一码两行会让库存列表的 LEFT JOIN 把每个
+        // 单元返回两行(列表与 total 对不上),并让按仓盘点把别的仓库的货也算进来。
+        ensureLocationCodeUnique();
+    }
+
+    /**
+     * 给 location.code 补唯一索引(幂等)。
+     *
+     * 老库可能已经有重复编码 —— 那种情况下 ALTER 会直接失败,所以先体检:
+     * 有重复就**报错日志 + 跳过**,让人先合并,而不是让应用启动即崩。
+     * 下次启动会再试一次。
+     */
+    private void ensureLocationCodeUnique() {
+        Integer cnt;
+        try {
+            cnt = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.statistics " +
+                    "WHERE table_schema = DATABASE() AND table_name = 'location' " +
+                    "AND index_name = 'uk_location_code'", Integer.class);
+        } catch (Exception e) {
+            cnt = null;
+        }
+        if (cnt != null && cnt > 0) return;
+
+        List<String> dups;
+        try {
+            dups = jdbc.queryForList(
+                    "SELECT code FROM location GROUP BY code HAVING COUNT(*) > 1", String.class);
+        } catch (Exception e) {
+            log.warn("DataSeeder: 检查库位重复编码失败 - {}", e.getMessage());
+            return;
+        }
+        if (!dups.isEmpty()) {
+            log.error("DataSeeder: location 表存在重复的库位编码 {} —— 唯一索引未创建。" +
+                    "请先在库位管理里合并这些编码(把库存调拨到保留的那一个),下次启动会自动补上。", dups);
+            return;
+        }
+        try {
+            jdbc.execute("ALTER TABLE location ADD UNIQUE KEY uk_location_code (code)");
+            log.info("DataSeeder: 已为 location.code 创建唯一索引 uk_location_code");
+        } catch (Exception e) {
+            log.warn("DataSeeder: 创建 uk_location_code 失败 - {}", e.getMessage());
+        }
     }
 
     /**
@@ -113,34 +163,34 @@ public class DataSeeder implements CommandLineRunner {
             return;
         }
 
-        int wid;
-        boolean firstInit = false;
+        Integer wid = null;
         try {
             Integer exist = queryIntOrNull("SELECT id FROM warehouse WHERE code = ?", "WH-DEFAULT");
             if (exist != null) {
                 wid = exist;
             } else {
-                // 只在一条仓库都没有时才自建默认仓库;用户已自建过仓库就不打扰
+                // 只在一条仓库都没有时才自建默认仓库;用户已自建过仓库就不打扰。
+                // 注意这里**不能 return** —— 下面的兜底库位无论有没有默认仓库都必须存在,
+                // 否则「默认库位」会一直是个查不到的幽灵码(见 ensureFallbackLocation)。
                 Integer total = jdbc.queryForObject("SELECT COUNT(*) FROM warehouse", Integer.class);
-                if (total != null && total > 0) return;
-                jdbc.update("INSERT INTO warehouse (code, name, remark, enabled, created_by) " +
-                            "VALUES (?,?,?,?,?)",
-                        "WH-DEFAULT", "默认仓库", "系统初始化自动创建,可改名或停用", Boolean.TRUE, "system");
-                Integer created = queryIntOrNull("SELECT id FROM warehouse WHERE code = ?", "WH-DEFAULT");
-                if (created == null) {
-                    log.warn("DataSeeder: 默认仓库插入后查不到,跳过初始化");
-                    return;
+                if (total == null || total == 0) {
+                    jdbc.update("INSERT INTO warehouse (code, name, remark, enabled, created_by) " +
+                                "VALUES (?,?,?,?,?)",
+                            "WH-DEFAULT", "默认仓库", "系统初始化自动创建,可改名或停用", Boolean.TRUE, "system");
+                    Integer created = queryIntOrNull("SELECT id FROM warehouse WHERE code = ?", "WH-DEFAULT");
+                    if (created == null) {
+                        log.warn("DataSeeder: 默认仓库插入后查不到,跳过初始化");
+                    } else {
+                        wid = created;
+                        log.info("DataSeeder: 已创建默认仓库(WH-DEFAULT),id={}", wid);
+                    }
                 }
-                wid = created;
-                firstInit = true;
-                log.info("DataSeeder: 已创建默认仓库(WH-DEFAULT),id={}", wid);
             }
         } catch (Exception e) {
             log.warn("DataSeeder: 初始化默认仓库失败 - {}", e.getMessage());
-            return;
         }
 
-        if (warehouseIdJustAdded) {
+        if (warehouseIdJustAdded && wid != null) {
             try {
                 int n = jdbc.update("UPDATE location SET warehouse_id = ? WHERE warehouse_id IS NULL", wid);
                 if (n > 0) log.info("DataSeeder: 已将 {} 个存量库位归入默认仓库", n);
@@ -149,20 +199,42 @@ public class DataSeeder implements CommandLineRunner {
             }
         }
 
-        // 只在首次初始化时补兜底库位:否则使用方删掉它之后,每次重启又会被塞回来
-        if (!firstInit) return;
+        ensureFallbackLocation(wid);
+    }
 
+    /**
+     * 确保兜底库位「默认库位」真实存在(每次启动都检查,幂等)。
+     *
+     * 这个 code 一直被 InboundService.defaultLocationOf / ProductDao 当"商品没填库位"
+     * 时的兜底值写进 inventory_item.location_code —— 如果 location 表里没有它,
+     * 那批单元就成了"查不到所属仓库"的幽灵:能出库、计入总量,却在任何按仓筛选
+     * 和按仓盘点里都看不见。
+     *
+     * 以前只在"首次初始化"那一次建,于是用户先自建过仓库、或从备份恢复的库,
+     * 兜底库位永远不会被补上。现在改为每次启动都确保;删也删不掉(见
+     * LocationService.delete 的保护)。
+     *
+     * wid 为空(用户自建了仓库、没有 WH-DEFAULT)时挂在"未分配"下 ——
+     * 不硬塞进某个真实仓库,免得凭空改变那个仓库的盘点范围。
+     */
+    private void ensureFallbackLocation(Integer wid) {
         try {
             Integer cnt = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM location WHERE code = ?", Integer.class,
                     Location.FALLBACK_CODE);
-            if (cnt == null || cnt == 0) {
+            if (cnt != null && cnt > 0) return;
+            if (wid == null) {
+                jdbc.update("INSERT INTO location (code, name, remark, enabled, created_by) " +
+                            "VALUES (?,?,?,?,?)",
+                        Location.FALLBACK_CODE, Location.FALLBACK_CODE,
+                        "商品未设置库位时的兜底库位(系统初始化自动创建)", Boolean.TRUE, "system");
+            } else {
                 jdbc.update("INSERT INTO location (code, name, warehouse_id, remark, enabled, created_by) " +
                             "VALUES (?,?,?,?,?,?)",
                         Location.FALLBACK_CODE, Location.FALLBACK_CODE, wid,
                         "商品未设置库位时的兜底库位(系统初始化自动创建)", Boolean.TRUE, "system");
-                log.info("DataSeeder: 已创建兜底库位「默认库位」");
             }
+            log.info("DataSeeder: 已创建兜底库位「默认库位」");
         } catch (Exception e) {
             log.warn("DataSeeder: 初始化兜底库位失败 - {}", e.getMessage());
         }

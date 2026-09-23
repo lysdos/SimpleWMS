@@ -109,12 +109,18 @@ final class AddInboundItemDialog {
         EditText etProductionDate = v.findViewById(R.id.et_production_date);
         EditText etShelfLife = v.findViewById(R.id.et_shelf_life);
 
-        // 库位两级下拉(仓库 → 库位)。allowNone=true:首项「不指定」表示"用商品的默认库位"
-        // —— 空值直接不放进请求,后端会回落到商品的默认库位(与 Web 端那个空选项同义)。
+        // 库位两级下拉(仓库 → 库位)。allowNone=true:首项是个占位项,选中它 = 请求里不带 location。
+        //
+        // 这条语义在新增和编辑下**不一样**,所以文案必须跟着变:
+        //   - 新增:后端回落到商品的默认库位 → 「不指定(用商品默认库位)」
+        //   - 编辑:后端沿用该行原库位     → 「保持原库位」
+        // 以前两种模式共用同一句"用商品默认库位":编辑时用户选它想改回默认库位,
+        // 保存却什么都没变 —— 是文案在骗人,不是后端错了。
+        int noneLabel = editLine != null ? R.string.location_picker_keep : R.string.location_picker_none;
         LocationPicker locPicker = new LocationPicker(
                 v.findViewById(R.id.sp_location_warehouse),
                 v.findViewById(R.id.sp_location),
-                locations, null, true);
+                locations, null, null, true, noneLabel);
         // 编辑模式:带出这一行原来的库位,免得"只改数量"顺手把库位改没了
         if (editLine != null) locPicker.select(editLine.location);
 
@@ -237,7 +243,8 @@ final class AddInboundItemDialog {
             int sIdx = spSupplier.getSelectedItemPosition();
             String supplier = (sIdx > 0 && sIdx < supplierLabels.size()) ? supplierLabels.get(sIdx) : null;
             String rowRemark = etRowRemark.getText().toString().trim();
-            // null = 不指定 → 请求里不带 location,后端回落到商品默认库位
+            // 选中占位项(null)= 请求里不带 location:新增时后端回落到商品默认库位,
+            // 编辑时后端沿用原库位(选项文案与实际语义保持一致,见上面 noneLabel 的注释)
             String location = locPicker.getSelectedCode();
             String productionDate = etProductionDate.getText().toString().trim();
             if (productionDate.isEmpty()) productionDate = null;

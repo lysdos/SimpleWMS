@@ -99,6 +99,15 @@
     <string name="inbound_pick_supplier">Supplier (optional)</string>
     <string name="inbound_pick_location">Location (pick warehouse first)</string>
     <string name="location_picker_none">Not specified (use product default)</string>
+    <!-- On an existing line the first option means "keep the current location", not "fall back to the product default" -->
+    <string name="location_picker_keep">Keep current location</string>
+    <string name="location_current_fmt">Current location: %1$s</string>
+    <string name="location_label_fmt">Location: %1$s</string>
+    <string name="location_auto">Auto</string>
+    <string name="label_code_fmt">Code %1$s</string>
+    <string name="location_none_available">No other location available; set up locations on the PC first</string>
+    <string name="location_load_failed_fmt">Failed to load locations: %1$s</string>
+    <string name="location_transferred_fmt">Transferred to %1$s</string>
     <string name="inbound_row_remark">Line remark (optional)</string>
     <string name="inbound_production_date">Production date (optional)</string>
     <string name="inbound_shelf_life">Shelf life in days (optional)</string>

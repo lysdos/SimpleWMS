@@ -75,6 +75,33 @@ public class WarehouseDao {
         return n == null ? 0 : n;
     }
 
+    /**
+     * 删仓库前的保护校验:用**锁定读**而不是普通 COUNT。
+     * 普通 COUNT 走事务快照,看不到期间刚提交的新库位,会放行删除并留下孤儿库位;
+     * 锁定读读的是最新已提交版本,能看见并发新建的库位(并挡住它)。
+     * location.warehouse_id 没有外键,这里是唯一能把窗口收窄的地方。
+     */
+    public int countLocationsLocking(int warehouseId) {
+        List<Integer> ids = jdbc.queryForList(
+                "SELECT id FROM location WHERE warehouse_id = ? FOR UPDATE", Integer.class, warehouseId);
+        return ids.size();
+    }
+
+    /**
+     * 挂库位前的存在性校验:加锁读。
+     * 锁住仓库行后,并发的「删仓库」会一直等到本事务提交,
+     * 于是它那次 countLocationsLocking 一定能看到刚建的库位而拒绝删除。
+     *
+     * 用 FOR UPDATE 而不是 FOR SHARE:后者是 MySQL 8.0 才有的语法,
+     * 而本项目声明兼容 5.7+。这里锁的是一行仓库、且只在管理员建/改库位时走,
+     * 独占锁的代价可以忽略。
+     */
+    public boolean existsForUpdate(int id) {
+        List<Integer> r = jdbc.queryForList(
+                "SELECT id FROM warehouse WHERE id = ? FOR UPDATE", Integer.class, id);
+        return !r.isEmpty();
+    }
+
     public int insert(Warehouse w) {
         String sql = "INSERT INTO warehouse (code, name, remark, enabled) VALUES (?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();
