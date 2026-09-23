@@ -283,6 +283,9 @@
     <!-- 扫码被拒时"原因 + 已跳过"的包装。%1$s 的原因可能来自后端,所以只翻包装、不翻它 -->
     <string name="scan_skipped_fmt">%1$s,已跳过</string>
     <string name="scan_skipped_dup_fmt">%1$s(另有 %2$d 个重复错误省略),已跳过</string>
+    <!-- 盘点详情页扫码被拒时的"合并提示"后缀。之所以不复用上面那条:那条结尾带「已跳过」,
+         而盘点页的句子本身已经是完整句(如「该码未入库,已跳过」),套上去会变成「…已跳过,已跳过」。 -->
+    <string name="scan_reject_dup_fmt">%1$s(另有 %2$d 条同类提示已省略)</string>
     <string name="scan_code_not_in_stock">该码未入库,已跳过</string>
     <string name="scan_already_out">该码已出过库,已跳过</string>
     <string name="scan_scrapped">该码已报废,已跳过</string>

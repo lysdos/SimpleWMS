@@ -25,6 +25,7 @@ import com.wms.pda.scan.ScanManager;
 import com.wms.pda.scan.ScanResult;
 import com.wms.pda.scan.ScanType;
 import com.wms.pda.scan.ScannerCallback;
+import com.wms.pda.util.BeepUtil;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -49,6 +50,9 @@ public class StocktakeDetailActivity extends AppCompatActivity {
     /** 本会话内已尝试/已成功的码:防止持续扫描时同一码反复上报 */
     private final Set<String> triedCodes = new HashSet<>();
     private final Set<String> scannedCodes = new HashSet<>();
+    /** 失败提示限频:2 秒窗口内只响一次铃+弹一次 toast,窗口内的重复失败只计数(与出库详情页同一套) */
+    private long lastErrFeedbackMs = 0L;
+    private int suppressedErrCount = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -222,24 +226,47 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                                 overage ? getString(R.string.stocktake_marked_surplus_fmt, canon)
                                         : getString(R.string.stocktake_located_fmt, canon),
                                 Toast.LENGTH_SHORT).show();
+                        // 记上了才响:盘盈也是**记录成功**(后端已追加行),所以和「已盘」一样响单音
+                        BeepUtil.success();
                         render();
                     }
                     @Override public void onError(int code, String msg) {
                         // 按后端提示语分流(为什么不能翻译,见 BackendMessages 的类注释)
                         if (msg != null && msg.contains(BackendMessages.ALREADY_COUNTED)) {
+                            // 「这个码之前已经记过」是**重复上报**、不是拒扫:与出库页对「已扫过」的处理一致,
+                            // 只提示不响铃 —— 齐发时读卡器会反复读到同一批标签,响铃会变成机关枪。
                             Toast.makeText(StocktakeDetailActivity.this,
                                     R.string.stocktake_already_counted, Toast.LENGTH_SHORT).show();
                         } else if (msg != null && msg.contains(BackendMessages.CODE_NOT_FOUND)) {
-                            Toast.makeText(StocktakeDetailActivity.this,
-                                    R.string.scan_code_not_in_stock, Toast.LENGTH_SHORT).show();
+                            showScanRejected(getString(R.string.scan_code_not_in_stock));
                         } else {
                             // 网络/服务端瞬时失败:放开去重,允许用户重扫该码
                             triedCodes.remove(canon);
-                            Toast.makeText(StocktakeDetailActivity.this,
-                                    getString(R.string.msg_scan_failed, msg), Toast.LENGTH_SHORT).show();
+                            showScanRejected(getString(R.string.msg_scan_failed, msg));
                         }
                     }
                 });
+    }
+
+    /**
+     * 扫码被拒的反馈:响**双音** + 弹提示,并做 2 秒限频(与出库详情页同一套)。
+     *
+     * 为什么必须限频:RFID 齐发时读卡器会把货架上**不属于本系统**的标签一起读回来 —— 实测日志里
+     * 一次就有 FA2025…/FD0125…/E280F3…/12345678 等十几个,它们在后端全是 404。不限频就是机关枪式的
+     * 嘟嘟嘟,现场只会要求把声音关掉。窗口内被抑制的次数合并成一句提示,信息不丢。
+     */
+    private void showScanRejected(String reason) {
+        long now = System.currentTimeMillis();
+        if (now - lastErrFeedbackMs < 2000L) {
+            suppressedErrCount++;
+            return;
+        }
+        lastErrFeedbackMs = now;
+        int n = suppressedErrCount;
+        suppressedErrCount = 0;
+        BeepUtil.error();
+        String text = n > 0 ? getString(R.string.scan_reject_dup_fmt, reason, n) : reason;
+        Toast.makeText(this, text, Toast.LENGTH_SHORT).show();
     }
 
     // ============================================================

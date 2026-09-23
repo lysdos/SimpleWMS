@@ -266,6 +266,9 @@
     <string name="scan_unknown_reason">Unknown reason</string>
     <string name="scan_skipped_fmt">Skipped — %1$s</string>
     <string name="scan_skipped_dup_fmt">Skipped — %1$s (%2$d more duplicate errors omitted)</string>
+    <!-- Merge suffix for stocktake scan rejections. Not reusing the key above because that one
+         ends with "Skipped — ", while the stocktake sentences are already complete. -->
+    <string name="scan_reject_dup_fmt">%1$s (%2$d more of the same omitted)</string>
     <string name="scan_code_not_in_stock">Code not in stock, skipped</string>
     <string name="scan_already_out">Already shipped, skipped</string>
     <string name="scan_scrapped">Code scrapped, skipped</string>
