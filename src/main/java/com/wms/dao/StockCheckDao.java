@@ -126,6 +126,26 @@ public class StockCheckDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /**
+     * 加锁读盘点单头。**「改明细 + 重算汇总」的事务必须用这个、而且必须是该事务的第一条读。**
+     *
+     * 为什么:重算用的 {@link #updateStats(int)} 在 DML 里带相关子查询,是**加锁读**,会按
+     * {@code uk(check_id, inventory_item_id)} 把该单整段明细索引范围锁住。两个并发扫码事务若各自
+     * 先改了自己的明细行(已持锁)、再去锁对方那行,就是死锁 —— 现场 RFID 齐发时必现
+     * (实测 15 个并发事务打同一张单:改明细路径每轮 2~4 个事务死锁,盘盈插入路径 8~9 个,
+     * 且被回滚的那次**连插入的明细行一起丢**)。
+     * 把单头行锁提到最前面,同一张单的事务从事务开头就排队,后面那段范围锁就永远没人跟它抢。
+     *
+     * ⚠️ 不能"先用普通 findCheckById 再补一条 FOR UPDATE":锁虽然拿到了,但一致性读视图已经在那之前
+     * 建立,后面的 findItemsByCheckId 仍会读到旧快照 —— 表现为重复扫同一个码不再报「该码已盘过」。
+     * FOR UPDATE 本身是当前读,一次读到位才不会留这个缝。
+     */
+    public StockCheck findCheckByIdForUpdate(int id) {
+        List<StockCheck> list = jdbc.query(
+                "SELECT * FROM stock_check WHERE id = ? FOR UPDATE", CHECK_ROW, id);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
     public List<StockCheckItem> findItemsByCheckId(int checkId) {
         return jdbc.query(
                 "SELECT * FROM stock_check_item WHERE check_id = ? ORDER BY id ASC",
@@ -190,11 +210,56 @@ public class StockCheckDao {
                 diff, itemId);
     }
 
-    public int updateStats(int checkId, int totalCount, int countedCount, int diffCount) {
+    /**
+     * 盘盈行判定(等价于 {@code StockCheckService} 里原先那个 {@code isSurplus()}):**账面为 0 且实盘 > 0**。
+     * 扫到盘点范围外的单元时 scanCodeToCheck 会自动追加这样一行(systemQty=0, countedQty=1),
+     * 它不属于"应盘"的对象,所以不计入应盘/已盘/差异 —— 否则现场扫到一个范围外的码,
+     * 「已盘 6/7」就会变成「已盘 6/8」,看着像盘点单自己变大了。
+     *
+     * ⚠️ `counted_qty IS NOT NULL` 不能省:counted_qty 可空(schema 是 DEFAULT NULL),
+     * 少了它,`counted_qty > 0` 在 NULL 时求值为 NULL,整个 AND 变 NULL,`NOT NULL` 还是 NULL,
+     * 该行会被 COUNT 静默丢掉 —— 而 Java 侧写的是 `counted != null`,是会把这种行算进应盘的。
+     *
+     * system_qty 目前是 NOT NULL,COALESCE 是防御性的(留个万一)。
+     */
+    private static final String SURPLUS_COND =
+            "COALESCE(i.system_qty, 0) = 0 AND i.counted_qty IS NOT NULL AND i.counted_qty > 0";
+
+    /**
+     * 重算盘点单的三个汇总列。口径:应盘 = 非盘盈行;已盘 = 非盘盈且 counted_qty 非空;
+     * 差异 = 非盘盈且已盘且实盘≠账面(未盘行不计入已盘,也不计入差异)。
+     *
+     * **为什么整段算在一条 SQL 里、不把明细读进 Java 再写回**:UHF 连续扫码会并发提交
+     * (现场一秒几十个请求),若先在应用层 SELECT 明细、算好、再 UPDATE 写回字面量,两个事务的
+     * SELECT 都可能落在对方提交之前,后提交的那个会把基于旧快照算出的数覆盖掉新值(丢失更新)——
+     * 现场表现为「6 行实盘都是 1,表头却停在已盘 5」,而且重复扫同一个码会被 422 挡在重算之前,
+     * 所以这个错数**不会自愈**。
+     *
+     * 相关子查询在 DML 里是**当前读**(实测:同一事务内普通 SELECT 看不到的并发提交,子查询看得到),
+     * 所以它读到的永远是最新的已提交数据。
+     *
+     * 但**光有这条 SQL 挡不住并发**:它同时会对该单整段明细加范围锁,两个并发事务会各持自己的
+     * 明细锁、再互锁对方那一行 → 死锁。串行化不来自这条 SQL,而来自**调用方在事务开头先锁单头行**
+     * (见 {@link #findCheckByIdForUpdate(int)})。出入库单的 {@code refreshAggregates} 是同一形状,
+     * 但那里是人工节奏、不存在同单并发。
+     *
+     * ⚠️ 三段子查询必须与 {@link #SURPLUS_COND} 保持同源,别只改一处。
+     */
+    public int updateStats(int checkId) {
         return jdbc.update(
-                "UPDATE stock_check SET total_count = ?, counted_count = ?, diff_count = ?, " +
-                "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                totalCount, countedCount, diffCount, checkId);
+                "UPDATE stock_check c SET " +
+                "  total_count = (SELECT COUNT(*) FROM stock_check_item i " +
+                "                 WHERE i.check_id = c.id AND NOT (" + SURPLUS_COND + ")), " +
+                "  counted_count = (SELECT COUNT(*) FROM stock_check_item i " +
+                "                   WHERE i.check_id = c.id AND NOT (" + SURPLUS_COND + ") " +
+                "                     AND i.counted_qty IS NOT NULL), " +
+                "  diff_count = (SELECT COUNT(*) FROM stock_check_item i " +
+                "                WHERE i.check_id = c.id AND NOT (" + SURPLUS_COND + ") " +
+                "                  AND i.counted_qty IS NOT NULL " +
+                "                  AND i.counted_qty <> i.system_qty), " +
+                "  updated_at = CURRENT_TIMESTAMP " +
+                "WHERE c.id = ?",
+                checkId);
     }
 
     public int commit(int checkId) {

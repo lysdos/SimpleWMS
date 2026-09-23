@@ -128,7 +128,13 @@ public class InboundOrderDao {
                 newStatus, orderId, InboundOrder.STATUS_DRAFT);
     }
 
-    /** 重算 total_quantity 和 item_count(明细增删后调用) */
+    /**
+     * 重算 total_quantity 和 item_count(明细增删后调用)。
+     *
+     * ⚠️ 这是 DML 里的相关子查询,属**加锁读**,会锁住 inbound_order_item 上该单的索引范围。
+     * 目前安全:改明细是人工节奏(一张单一个人操作),不存在同单并发。若将来出现同单并发写明细
+     * (批量导入、PDA 齐发等),需先把单头行加锁 —— 做法与原因见 StockCheckDao.findCheckByIdForUpdate。
+     */
     public void refreshAggregates(int orderId) {
         jdbc.update(
                 "UPDATE inbound_order o SET " +
