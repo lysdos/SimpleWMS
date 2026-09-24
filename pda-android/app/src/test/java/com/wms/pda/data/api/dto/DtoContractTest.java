@@ -239,6 +239,26 @@ public class DtoContractTest {
         assertEquals(Integer.valueOf(0), p.quantity);
     }
 
+    /**
+     * 来源:GET /api/products,商品关联多个供应商的情形。
+     * 入库明细按这个数组把「该商品供应商」置顶(默认那个在第一位),所以元素名和顺序都要读对。
+     */
+    @Test
+    public void product_readsRelatedSuppliersInOrder() {
+        String json = "[{\"id\":6,\"sku\":\"SP-006\",\"name\":\"打印机\",\"defaultSupplier\":\"戴尔\","
+                + "\"defaultSupplierId\":1,\"suppliers\":["
+                + "{\"id\":1,\"name\":\"戴尔\",\"isDefault\":true},"
+                + "{\"id\":2,\"name\":\"生物科技\",\"isDefault\":false}]}]";
+
+        List<Dto.Product> list = parse(json, new TypeToken<List<Dto.Product>>(){}.getType());
+        List<Dto.ProductSupplierRef> refs = list.get(0).suppliers;
+        assertEquals(2, refs.size());
+        assertEquals("戴尔", refs.get(0).name);
+        assertEquals(Boolean.TRUE, refs.get(0).isDefault);
+        assertEquals("生物科技", refs.get(1).name);
+        assertEquals(Boolean.FALSE, refs.get(1).isDefault);
+    }
+
     /** 来源:GET /api/suppliers(DTO 只取 3 个字段,其余忽略) */
     @Test
     public void supplier_readsSubset() {

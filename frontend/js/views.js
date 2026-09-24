@@ -83,6 +83,21 @@ function renderLineChart(containerId, points, options) {
     }
 }
 
+/**
+ * 商品的供应商展示:列出**全部**关联供应商,默认那个带标记(如「戴尔(默认)、生物科技」)。
+ * 只显示默认那一个会让"多选的供应商"看着像没保存下来 —— 实际是关联表里存着的,
+ * 只是以前没渲染。顺序沿用后端(`is_default DESC, name ASC`),默认天然在第一个。
+ */
+function productSuppliersHtml(p) {
+    const refs = (p && p.suppliers) || [];
+    if (refs.length === 0) {
+        return `<span style="color:#9ca3af;">${t('product.empty_supplier')}</span>`;
+    }
+    return refs
+        .map(s => escapeHtml(s.name) + (s.isDefault ? t('product.supplier_default_marker') : ''))
+        .join('、');
+}
+
 const Views = {
 
     /* ================== 1. 仪表盘 ================== */
@@ -184,9 +199,7 @@ const Views = {
             : products.map(p => {
                 const lowBadge = p.quantity <= p.lowStock
                     ? `<span class="badge low">${t('product.low_badge')}</span>` : '';
-                const supp = p.defaultSupplier
-                    ? escapeHtml(p.defaultSupplier)
-                    : `<span style="color:#9ca3af;">${t('product.empty_supplier')}</span>`;
+                const supp = productSuppliersHtml(p);
                 return `
                 <tr>
                     <td>${p.id}</td>
@@ -222,7 +235,7 @@ const Views = {
             <div class="toolbar">
                 <input class="input input-sm" id="kw-product" placeholder="${t('product.kw_placeholder')}" value="${escapeHtml(keyword||'')}" style="width:240px;">
                 <select id="product-supplier-filter" class="select" style="width:150px;" onchange="searchProducts()">
-                    <option value="">${t('common.all')} ${t('product.col.default_supplier')}</option>
+                    <option value="">${t('common.all')} ${t('product.col.suppliers')}</option>
                     ${supplierOpts}
                 </select>
                 <button class="btn btn-sm" onclick="searchProducts()">${t('common.search')}</button>
@@ -236,7 +249,7 @@ const Views = {
                         <th>${t('product.col.name')}</th>
                         <th>${t('product.col.category')}</th>
                         <th>${t('product.col.unit')}</th>
-                        <th>${t('product.col.default_supplier')}</th>
+                        <th>${t('product.col.suppliers')}</th>
                         <th class="num">${t('product.col.qty')}</th>
                         <th class="num">${t('product.col.price')}</th>
                         <th class="num">${t('product.col.value')}</th>
@@ -428,7 +441,10 @@ const Views = {
             ? `<option value="">${t('new_order.placeholder.pick_product')}</option>` + products.map(p => {
                 const low = p.quantity <= p.lowStock ? ` [${t('product.low_badge')}]` : '';
                 const dflt = p.defaultSupplier ? ` (${t('new_order.label.supplier')}:${escapeHtml(p.defaultSupplier)})` : '';
-                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-default-id="${p.defaultSupplierId||''}" data-shelf-life="${p.defaultShelfLifeDays ?? ''}" data-loc="${escapeHtml(p.location||'')}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
+                // data-suppliers:选中商品后重排该行供应商候选用(关联的置顶、其余兜底)。
+                // 关联项只有 id/name/isDefault,与 state.suppliers 求交才是完整信息。
+                const refs = JSON.stringify((p.suppliers || []).map(s => ({ id: s.id, name: s.name, isDefault: !!s.isDefault })));
+                return `<option value="${p.id}" data-stock="${p.quantity}" data-default="${escapeHtml(p.defaultSupplier||'')}" data-suppliers="${escapeHtml(refs)}" data-shelf-life="${p.defaultShelfLifeDays ?? ''}" data-loc="${escapeHtml(p.location||'')}">${escapeHtml(p.sku)} - ${escapeHtml(p.name)} (${p.quantity}${escapeHtml(p.unit||'')})${low}${dflt}</option>`;
             }).join('')
             : `<option value="">${t('new_order.placeholder.no_product')}</option>`;
 
@@ -438,15 +454,14 @@ const Views = {
             locations.filter(l => l.enabled !== false),
             l => `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`);
 
-        const supplierOpts = suppliers
-            .filter(s => s.enabled !== false)
-            .map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)}</option>`)
-            .join('');
+        // 空白行还没选商品 → 候选是全量扁平列表;选了商品后由 app.js 的
+        // syncRowSupplier 按该商品的关联供应商重排(见 Views.supplierOptionsHtml)。
+        const supplierOptsFlat = Views.supplierOptionsHtml(null, suppliers, '');
 
         const blankRow = () => {
             const productCell  = `<select class="select nw-product" style="width:185px;">${productOpts}</select>`;
             const supplierCell = isIn
-                ? `<select class="select nw-supplier" style="width:115px;"><option value="">${t('new_order.placeholder.not_set')}</option>${supplierOpts || `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`}</select>`
+                ? `<select class="select nw-supplier" style="width:115px;">${supplierOptsFlat}</select>`
                 : '';
             const prodDateCell = isIn
                 ? `<input type="date" class="input nw-prod-date" style="width:115px;">`
@@ -635,6 +650,42 @@ const Views = {
                             ${x.codes.map(c => `<span class="code-chip">${escapeHtml(c)}</span>`).join('')}
                         </div>`).join('')}
                 </div>`).join('');
+    },
+
+    /**
+     * 入库明细行的供应商候选。
+     *
+     * 选中商品后:该商品关联过的供应商排进「该商品供应商」组(后端按 is_default DESC
+     * 排序,默认供应商在第一位);其余启用供应商放「其他供应商」组兜底 —— 现场临时来的
+     * 新供应商没关联过商品,不能因此选不到。仍单选:一个明细行只记一个供应商,
+     * 同商品的不同供应商是**两行**(合并键含供应商)。
+     * 商品没关联(或还没选商品)时退化成一份扁平的全量列表,与改动前一致。
+     *
+     * @param refs     商品的关联供应商 [{id,name,isDefault}];未选商品时传 null
+     * @param all      全部供应商 [{id,name,enabled}]
+     * @param selected 重建后要选中的供应商名(用户手动选过的那个)
+     */
+    supplierOptionsHtml(refs, all, selected) {
+        const enabled = (all || []).filter(s => s.enabled !== false);
+        const opt = s => `<option value="${escapeHtml(s.name)}"${s.name === selected ? ' selected' : ''}>${escapeHtml(s.name)}</option>`;
+        let html = `<option value="">${t('new_order.placeholder.not_set')}</option>`;
+        if (enabled.length === 0) {
+            return html + `<option value="" disabled>${t('new_order.placeholder.no_supplier')}</option>`;
+        }
+        // 关联组按 refs 的顺序(= 后端的默认优先序),且只留还在启用中的;
+        // refs 的元素只有 {id,name,isDefault},没有启用位,必须拿 id 跟 all 求交。
+        const enabledById = new Map(enabled.map(s => [s.id, s]));
+        const related = (refs || []).map(r => enabledById.get(r.id)).filter(Boolean);
+        const relatedIds = new Set(related.map(s => s.id));
+        const others = enabled.filter(s => !relatedIds.has(s.id));
+        if (related.length === 0) {
+            return html + others.map(opt).join('');
+        }
+        html += `<optgroup label="${escapeHtml(t('new_order.supplier_group.related'))}">${related.map(opt).join('')}</optgroup>`;
+        if (others.length) {
+            html += `<optgroup label="${escapeHtml(t('new_order.supplier_group.others'))}">${others.map(opt).join('')}</optgroup>`;
+        }
+        return html;
     },
 
     /* ================== 出库单详情 Modal ================== */
@@ -922,9 +973,7 @@ const Views = {
     /* ================== 商品详情 Modal 内容 ================== */
     productDetail(p) {
         p = p || {};
-        const supp = p.defaultSupplier
-            ? escapeHtml(p.defaultSupplier)
-            : `<span style="color:#9ca3af;">${t('product.empty_supplier')}</span>`;
+        const supp = productSuppliersHtml(p);
         return `
         <div style="display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;font-size:14px;">
             <div style="color:var(--c-text-3);">ID</div><div>${p.id}</div>
@@ -932,7 +981,7 @@ const Views = {
             <div style="color:var(--c-text-3);">${t('product.col.name')}</div><div>${escapeHtml(p.name)}</div>
             <div style="color:var(--c-text-3);">${t('product.col.category')}</div><div>${escapeHtml(p.category || '-')}</div>
             <div style="color:var(--c-text-3);">${t('product.col.unit')}</div><div>${escapeHtml(p.unit || '-')}</div>
-            <div style="color:var(--c-text-3);">${t('product.col.default_supplier')}</div><div>${supp}</div>
+            <div style="color:var(--c-text-3);">${t('product.col.suppliers')}</div><div>${supp}</div>
             <div style="color:var(--c-text-3);">${t('product.col.qty')}</div><div>${p.quantity}</div>
             <div style="color:var(--c-text-3);">${t('product.col.price')}</div><div>¥${formatMoney(p.unitPrice)}</div>
             <div style="color:var(--c-text-3);">${t('product.col.value')}</div><div>¥${formatMoney((p.unitPrice||0)*p.quantity)}</div>

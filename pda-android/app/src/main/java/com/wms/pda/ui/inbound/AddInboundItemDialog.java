@@ -177,14 +177,26 @@ final class AddInboundItemDialog {
                     y, m, d).show();
         });
 
-        // 供应商下拉:第一项固定"不指定"
-        List<String> supplierLabels = new ArrayList<>();
-        supplierLabels.add(ctx.getString(R.string.supplier_none));
-        for (Supplier s : suppliers) supplierLabels.add(s.name == null ? "?" : s.name);
-        ArrayAdapter<String> supplierAd = new ArrayAdapter<>(ctx,
+        // 供应商下拉:第一项固定"不指定";该商品关联过的排在它后面(默认那个第一),
+        // 其余供应商兜底 —— 现场临时来的新供应商没关联过商品,不能因此选不到。
+        final List<String> supplierLabels = new ArrayList<>();
+        final ArrayAdapter<String> supplierAd = new ArrayAdapter<>(ctx,
                 android.R.layout.simple_spinner_item, supplierLabels);
         supplierAd.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spSupplier.setAdapter(supplierAd);
+        // 按当前商品重排候选;已经选着的那一项若还在候选里就保持不动(编辑模式带出来的原供应商)
+        final Runnable syncSupplier = () -> {
+            int pIdx = spProduct.getSelectedItemPosition();
+            Product cur = (pIdx >= 0 && pIdx < products.size()) ? products.get(pIdx) : null;
+            int keepIdx = spSupplier.getSelectedItemPosition();
+            String keep = (keepIdx > 0 && keepIdx < supplierLabels.size()) ? supplierLabels.get(keepIdx) : null;
+            supplierLabels.clear();
+            supplierLabels.addAll(supplierLabelsFor(cur, suppliers, ctx.getString(R.string.supplier_none)));
+            supplierAd.notifyDataSetChanged();
+            int idx = keep == null ? 0 : supplierLabels.indexOf(keep);
+            spSupplier.setSelection(idx >= 0 ? idx : 0);
+        };
+        syncSupplier.run();
         if (editLine != null && editLine.supplier != null && !editLine.supplier.isEmpty()) {
             int idx = supplierLabels.indexOf(editLine.supplier);
             spSupplier.setSelection(idx >= 0 ? idx : 0);
@@ -193,6 +205,7 @@ final class AddInboundItemDialog {
         // 选商品时带出默认保质期天数(仅添加模式且用户尚未手动填保质期时)
         spProduct.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int pos, long id) {
+                syncSupplier.run();   // 供应商候选跟着商品走
                 if (editLine != null || etShelfLife.getText().length() > 0) return;
                 if (pos >= 0 && pos < products.size()) {
                     Integer dflt = products.get(pos).defaultShelfLifeDays;
@@ -272,5 +285,27 @@ final class AddInboundItemDialog {
             }
         }));
         dialog.show();
+    }
+
+    /**
+     * 供应商候选:首项固定"不指定";该商品关联过的供应商紧跟其后(后端已按"默认在前"排好序),
+     * 其余供应商兜底排在最后 —— 现场临时来的新供应商没关联过商品,不能因此选不到。
+     * 商品没关联(或商品列表拉取失败时的兜底商品)就是一份全量列表,与改动前一致。
+     */
+    static List<String> supplierLabelsFor(Product p, List<Supplier> all, String noneLabel) {
+        List<String> labels = new ArrayList<>();
+        labels.add(noneLabel);
+        java.util.LinkedHashSet<String> related = new java.util.LinkedHashSet<>();
+        if (p != null && p.suppliers != null) {
+            for (String n : p.suppliers) {
+                if (n != null && !n.isEmpty()) related.add(n);
+            }
+        }
+        labels.addAll(related);
+        for (Supplier s : all) {
+            String n = s.name == null ? "?" : s.name;
+            if (!related.contains(n)) labels.add(n);
+        }
+        return labels;
     }
 }

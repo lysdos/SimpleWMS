@@ -118,13 +118,16 @@ const I18N = (() => {
         'product.col.name':    { 'zh-CN': '名称',                          'en-US': 'Name' },
         'product.col.category':{ 'zh-CN': '分类',                          'en-US': 'Category' },
         'product.col.unit':    { 'zh-CN': '单位',                          'en-US': 'Unit' },
-        'product.col.default_supplier':{ 'zh-CN': '默认供应商',              'en-US': 'Default Supplier' },
+        // 列里显示的是该商品的**全部**关联供应商(默认那个带标记),不只是默认那一个
+        'product.col.suppliers':{ 'zh-CN': '供应商',                       'en-US': 'Suppliers' },
         'product.col.qty':     { 'zh-CN': '数量',                          'en-US': 'Qty' },
         'product.col.price':   { 'zh-CN': '单价',                          'en-US': 'Unit Price' },
         'product.col.value':   { 'zh-CN': '库存金额',                      'en-US': 'Stock Value' },
         'product.empty':       { 'zh-CN': '暂无商品,点击右上角"新增商品"开始', 'en-US': 'No products yet. Click "+ New Product" to start' },
         'product.low_badge':   { 'zh-CN': '低库存',                        'en-US': 'Low' },
         'product.empty_supplier':{ 'zh-CN': '未设',                         'en-US': '—' },
+        // 紧跟在供应商名后面,如「戴尔(默认)、生物科技」
+        'product.supplier_default_marker':{ 'zh-CN': '(默认)',              'en-US': '(default)' },
         'product.form.title.new':{ 'zh-CN': '新增商品',                     'en-US': 'New Product' },
         'product.form.title.edit':{ 'zh-CN': '编辑商品',                    'en-US': 'Edit Product' },
         'product.form.title.view':{ 'zh-CN': '查看商品',                    'en-US': 'View Product' },
@@ -312,6 +315,10 @@ const I18N = (() => {
         'new_order.placeholder.no_product':{ 'zh-CN': '暂无商品',           'en-US': 'No products' },
         'new_order.placeholder.no_supplier':{ 'zh-CN': '暂无供应商',         'en-US': 'No suppliers' },
         'new_order.placeholder.not_set':{ 'zh-CN': '(不填)',                 'en-US': '(empty)' },
+        // 行供应商下拉的分组:选中商品后,该商品关联过的供应商排在前面(默认那个第一),
+        // 其余供应商放后面兜底 —— 现场临时来的新供应商不能被挡住。
+        'new_order.supplier_group.related':{ 'zh-CN': '该商品供应商',         'en-US': 'This product\'s suppliers' },
+        'new_order.supplier_group.others':{ 'zh-CN': '其他供应商',           'en-US': 'Other suppliers' },
         'new_order.btn.add_row':{ 'zh-CN': '+ 添加条目',                    'en-US': '+ Add Row' },
         'new_order.merge_tip_in':{ 'zh-CN': '(商品/供应商/批次/库位 全同才会合并 · 每件独立 24 位编码)', 'en-US': '(merged only when product/supplier/batch/location all match · each item gets a 24-digit code)' },
         'new_order.merge_tip_out':{ 'zh-CN': '(同 商品 会自动合并 · 整件出库)', 'en-US': '(same product auto-merge · whole-unit outbound)' },

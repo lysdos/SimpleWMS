@@ -176,6 +176,12 @@ final class Mappers {
         m.defaultSupplier = p.defaultSupplier;
         m.defaultSupplierId = p.defaultSupplierId;
         m.defaultShelfLifeDays = p.defaultShelfLifeDays;
+        if (p.suppliers != null) {
+            m.suppliers = new java.util.ArrayList<>();
+            for (Dto.ProductSupplierRef r : p.suppliers) {
+                if (r != null && r.name != null) m.suppliers.add(r.name);
+            }
+        }
         return m;
     }
 

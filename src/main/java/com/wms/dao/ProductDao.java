@@ -81,7 +81,11 @@ public class ProductDao {
             args.add(like); args.add(like); args.add(like);
         }
         if (supplier != null && !supplier.isBlank()) {
-            sb.append(" AND default_supplier = ?");
+            // 商品↔供应商是多对多(product_supplier),列表里显示的也是这些关联,
+            // 所以筛选按"关联过"匹配 —— 只认默认那一条的话,多选出来的非默认供应商永远搜不到。
+            // (此处原先写的是 product.default_supplier,product 表没有这一列,一用就 500。)
+            sb.append(" AND EXISTS (SELECT 1 FROM product_supplier ps JOIN supplier s ON s.id = ps.supplier_id"
+                    + " WHERE ps.product_id = product.id AND s.name = ?)");
             args.add(supplier);
         }
         sb.append(" ORDER BY id DESC");

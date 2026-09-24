@@ -1421,13 +1421,28 @@ async function openNewOrderModal(type) {
     renumberNewOrderRows();
 }
 
+/**
+ * 按本行已选商品重排供应商候选:该商品关联过的置顶(默认供应商第一),其余供应商兜底。
+ * 重建 innerHTML 会把当前选中一起清掉,所以先取旧值 —— 用户手动选过的必须还原,
+ * 只有原来为空时才用商品的默认供应商顶上(沿用"只在空的时候填"的规矩)。
+ */
+function syncRowSupplier(tr) {
+    const sup = tr.querySelector('.nw-supplier');
+    const prodSel = tr.querySelector('.nw-product');
+    if (!sup || !prodSel) return;
+    const opt = prodSel.selectedOptions[0];
+    const prev = sup.value;
+    let refs = [];
+    try { refs = JSON.parse((opt && opt.getAttribute('data-suppliers')) || '[]'); } catch (e) { refs = []; }
+    const def = (opt && opt.getAttribute('data-default')) || '';
+    sup.innerHTML = Views.supplierOptionsHtml(refs, state.suppliers, prev || def);
+}
+
 function onNewOrderProductChange() {
     const opt = this.selectedOptions[0];
     if (!opt) return;
-    const def = opt.getAttribute('data-default') || '';
     const tr = this.closest('tr');
-    const sup = tr.querySelector('.nw-supplier');
-    if (sup && !sup.value) sup.value = def;
+    syncRowSupplier(tr);
     // 入库行:带出商品默认保质期天数(可改)
     const shelf = tr.querySelector('.nw-shelf-life');
     if (shelf && !shelf.value) {
@@ -1459,6 +1474,9 @@ function addNewOrderRow() {
     const loc = clone.querySelector('.nw-loc');
     if (loc) loc.value = '';
     clone.querySelector('.nw-row-remark').value = '';
+    // 克隆体会连上一行重建过的供应商候选(可能带着那个商品的「该商品供应商」分组)
+    // 一起复制过来;商品下拉在克隆后回到占位项,这里按本行实际的商品状态重排。
+    syncRowSupplier(clone);
     tbody.appendChild(clone);
     clone.querySelector('.nw-product').addEventListener('change', onNewOrderProductChange);
     renumberNewOrderRows();

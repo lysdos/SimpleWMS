@@ -115,13 +115,16 @@
 
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误 |
 |---|---|---|---|---|---|
-| GET | `/?keyword=` | 已登录 | `keyword` 可选模糊匹配 sku/name/category | `[{id, sku, name, ..., suppliers:[]}]` | — |
+| GET | `/?keyword=&supplier=` | 已登录 | `keyword` 可选模糊匹配 sku/name/category;`supplier` 传**供应商名**,匹配该商品**关联过**的供应商(见下) | `[{id, sku, name, ..., suppliers:[]}]` | — |
 | GET | `/{id}` | 已登录 | — | `{...同上 + suppliers:[]}` | 404 |
 | POST | `/` | **ADMIN** | `{sku, name, category?, unit?, location?, quantity?, unitPrice?, lowStock?, remark?, suppliers?:[]}` | 创建后 | 400 |
 | PUT | `/{id}` | **ADMIN** | 同上 | 更新后 | 404 |
 | DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404 |
 
-`suppliers[]` 元素:`{supplierId, isDefault, unitPrice?, remark?}`。
+`suppliers[]` 写入元素:`{supplierId, isDefault, unitPrice?, remark?}`;读取元素(`GET` 返回的):`{id, name, isDefault}`,顺序为**默认供应商在前**(`is_default DESC, name ASC`)。写入时全量替换。
+
+> **`supplier` 筛选按"关联过"匹配(2026-09-24 修正)**:条件是 `EXISTS (SELECT 1 FROM product_supplier …)` —— 一个商品关联多个供应商时,非默认的那几个也搜得到,与列表「供应商」列显示的内容一致。
+> 此前这里的 SQL 写的是 `product.default_supplier = ?`,而 `product` 表**没有**这一列(该列从未在 `sql/mysql-schema.sql` 出现过),一用就 `Unknown column` → 500,生下来就是坏的。默认供应商只是关联集合里的一个标记,不是商品表的列。
 
 ### 2.4 供应商 — `/api/suppliers`
 

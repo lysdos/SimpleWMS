@@ -153,6 +153,14 @@ public class Dto {
         public String defaultSupplier;
         public Integer defaultSupplierId;
         public Integer defaultShelfLifeDays; // 默认保质期天数(可空)
+        public List<ProductSupplierRef> suppliers; // 关联供应商(默认那个排第一,可空)
+    }
+
+    /** 商品关联的供应商(product.suppliers[] 的元素) */
+    public static class ProductSupplierRef {
+        public Integer id;
+        public String name;
+        public Boolean isDefault;
     }
 
     // ---- 供应商(/api/suppliers,下拉选项) ----
