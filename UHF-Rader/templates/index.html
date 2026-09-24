@@ -177,7 +177,9 @@
             transition: border-color .18s, box-shadow .18s;
         }
         .login-card input:focus { outline: none; border-color: var(--c-brand); box-shadow: 0 0 0 3px rgba(37,99,235,.15); }
-        .login-card .btn-primary { width: 100%; margin-top: 4px; padding: 11px 0; font-size: 15px; }
+        /* .btn 是 inline-flex,横向排布看 justify-content(父层的 text-align 管不到 flex 项);
+           这里按钮是全宽,少了它文字就贴着左边 —— 与 WMS 主站的同名规则保持一致。 */
+        .login-card .btn-primary { width: 100%; margin-top: 4px; padding: 11px 0; font-size: 15px; justify-content: center; }
         .login-card .hint {
             margin-top: 16px; text-align: left;
             background: var(--c-bg); border: 1px solid var(--c-border-soft);
