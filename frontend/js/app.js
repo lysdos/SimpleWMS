@@ -1346,6 +1346,11 @@ function viewBarcode(id, btn) {
     freshModalOk(t('common.close')).addEventListener('click', closeModal);
 }
 
+/**
+ * 报废弹窗。后端这条是 ADMIN-only(SCRAPPED 是不可逆终态,误报废只能进 SQL 修),
+ * 所以列表里只对 ADMIN 显示入口 —— 不给操作员一个点了必然 403 的按钮。
+ * 调拨可逆(挪错再挪一次),后端已不设门槛,入口对所有人开放。
+ */
 function scrapInventory(id, btn) {
     const code = btnData(btn, 'code', '#' + id);
     showModal(t('inventory.modal.scrap_title'), `

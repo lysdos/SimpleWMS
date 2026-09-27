@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * 所以这里只钉住切片能管的部分:
  *  - 操作人确实从请求属性传到了 service(这两处以前压根没传,流水里没有"谁干的")
- *  - ADMIN 角色校验还在
+ *  - 角色门槛:报废 ADMIN(无角色 401 / OPERATOR 403),调拨**无门槛**(2026-09-24 起,
+ *    只挪位置可逆,见 transfer_withOperatorRole_reachesService)
  *  - service 抛的异常映射成正确的 HTTP 状态码
  */
 @WebMvcTest(InventoryItemController.class)
@@ -137,15 +138,22 @@ class InventoryItemWriteOpsTest {
            .andExpect(jsonPath("$.code").value(404));
     }
 
+    /**
+     * 调拨**故意不设角色门槛**(2026-09-24):只挪库位、总量不变、留 TRANSFER 流水,
+     * 挪错了再挪一次就是,现场常态作业不该卡操作员。所以带 OPERATOR 角色也必须放行 ——
+     * 这条是那个决策的钉子,不是遗漏。
+     */
     @Test
-    void transfer_withoutRole_is401_andNeverReachesService() throws Exception {
+    void transfer_withOperatorRole_reachesService() throws Exception {
         mvc.perform(post("/api/inventory/items/7/transfer")
+                        .requestAttr("role", "OPERATOR")
+                        .requestAttr("username", "cs")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("A-02-01")))
-           .andExpect(status().isUnauthorized())
-           .andExpect(jsonPath("$.code").value(401));
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.code").value(0));
 
-        verify(service, never()).transfer(any(Integer.class), any(), any());
+        verify(service).transfer(7, "A-02-01", "cs");
     }
 
     // ==================== 报废 ====================
@@ -165,6 +173,23 @@ class InventoryItemWriteOpsTest {
            .andExpect(jsonPath("$.code").value(0));
 
         verify(service).scrap(9, "破损", "admin");
+    }
+
+    /**
+     * 报废**保持 ADMIN**(SCRAPPED 不可逆,不能跟着调拨一起放开):操作员是 403,请求到不了 service。
+     * 与 transfer_withOperatorRole_reachesService 是一对 —— 两者的差别就是这次的决策本身。
+     */
+    @Test
+    void scrap_withOperatorRole_is403_andNeverReachesService() throws Exception {
+        mvc.perform(post("/api/inventory/items/9/scrap")
+                        .requestAttr("role", "OPERATOR")
+                        .requestAttr("username", "cs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+           .andExpect(status().isForbidden())
+           .andExpect(jsonPath("$.code").value(403));
+
+        verify(service, never()).scrap(any(Integer.class), any(), any());
     }
 
     @Test

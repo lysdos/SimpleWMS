@@ -1777,7 +1777,8 @@ const Views = {
                         <button class="btn-link" data-code="${escapeHtml(it.code)}" onclick="viewBarcode(${it.id}, this)">${t('inventory.btn.barcode')}</button>
                         ${it.status === 'IN_STOCK' ? `
                             <button class="btn-link" data-code="${escapeHtml(it.code)}" data-current-loc="${escapeHtml(it.locationCode)}" onclick="transferInventory(${it.id}, this)">${t('inventory.btn.transfer')}</button>
-                            <button class="btn-link danger" data-code="${escapeHtml(it.code)}" onclick="scrapInventory(${it.id}, this)">${t('inventory.btn.scrap')}</button>
+                            ${state.currentRole === 'ADMIN' ? `
+                            <button class="btn-link danger" data-code="${escapeHtml(it.code)}" onclick="scrapInventory(${it.id}, this)">${t('inventory.btn.scrap')}</button>` : ''}
                         ` : `<span style="color:#9ca3af;font-size:12px;">—</span>`}
                     </td>
                 </tr>`).join('');

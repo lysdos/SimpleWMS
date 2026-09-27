@@ -27,8 +27,13 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
 
     private final List<InventoryItem> data = new ArrayList<>();
     private final Callbacks cb;
+    /** 报废入口是否显示:后端那条是 ADMIN-only(不可逆终态),不给操作员一个点了必然 403 的按钮 */
+    private final boolean canScrap;
 
-    InventoryAdapter(Callbacks cb) { this.cb = cb; }
+    InventoryAdapter(Callbacks cb, boolean canScrap) {
+        this.cb = cb;
+        this.canScrap = canScrap;
+    }
 
     void submit(List<InventoryItem> list) {
         data.clear();
@@ -91,6 +96,8 @@ class InventoryAdapter extends RecyclerView.Adapter<InventoryAdapter.VH> {
 
         h.btnTransfer.setOnClickListener(v -> cb.onTransfer(i));
         h.btnScrap.setOnClickListener(v -> cb.onScrap(i));
+        // 行会复用,必须每次显式设置,否则 ADMIN 划过去的可见状态会串到别人的卡上
+        h.btnScrap.setVisibility(canScrap ? View.VISIBLE : View.GONE);
     }
 
     /**

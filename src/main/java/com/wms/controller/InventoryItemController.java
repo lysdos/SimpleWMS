@@ -138,7 +138,13 @@ public class InventoryItemController {
 
     // ====================== 报废 / 调拨 ======================
 
-    /** 报废 */
+    /**
+     * 报废。
+     *
+     * 保持 ADMIN:SCRAPPED 是**终态且不可逆**(见 InventoryItemDao 的终态说明,没有任何接口
+     * 能把状态改回去),而它是唯一一处"能静默减少可用库存"的日常操作 —— 误报废只能进 SQL 修。
+     * 这正是它与调拨的差别:调拨可逆,所以不设门槛。
+     */
     @PostMapping("/{id}/scrap")
     @RequireRole("ADMIN")
     public ApiResponse<Void> scrap(@PathVariable int id,
@@ -149,9 +155,14 @@ public class InventoryItemController {
         return ApiResponse.ok();
     }
 
-    /** 调拨(改库位,状态保持 IN_STOCK) */
+    /**
+     * 调拨(改库位,状态保持 IN_STOCK)。
+     *
+     * 不设角色门槛:只挪库位、总量不变、留 TRANSFER 流水,挪错了再挪一次就是 ——
+     * 这是现场常态作业(货放错架、主仓放不下进副仓),卡住操作员没道理。
+     * 对比 {@link #scrap}:那个不可逆,保持 ADMIN。
+     */
     @PostMapping("/{id}/transfer")
-    @RequireRole("ADMIN")
     public ApiResponse<Void> transfer(@PathVariable int id,
                                       @RequestBody Map<String, String> body,
                                       HttpServletRequest req) {

@@ -253,8 +253,8 @@
 | GET | `/by-epc/{epc}` | 已登录 | EPC 别名(同 by-code) |
 | GET | `/by-code/{code}/product` | 已登录 | code→InventoryItem→Product(PDA 入库扫码解析) |
 | GET | `/{id}/barcode.png` | 已登录 | CODE_128 PNG |
-| POST | `/{id}/scrap` | 已登录 | `{remark?}`,只能 IN_STOCK→SCRAPPED |
-| POST | `/{id}/transfer` | **ADMIN** | `{toLocation}`,仅 IN_STOCK 可调;改 `location_code`、**状态保持 IN_STOCK**,并写一条 `inventory_log(type=TRANSFER)`。目标库位必须存在且启用,否则 400 |
+| POST | `/{id}/scrap` | **ADMIN** | `{remark?}`,只能 IN_STOCK→SCRAPPED。SCRAPPED 是**不可逆终态**(没有接口能改回去),且是唯一能"静默减少可用库存"的日常操作,所以只给 ADMIN |
+| POST | `/{id}/transfer` | 已登录 | `{toLocation}`,仅 IN_STOCK 可调;改 `location_code`、**状态保持 IN_STOCK**,并写一条 `inventory_log(type=TRANSFER)`。目标库位必须存在且启用,否则 400。只挪位置、总量不变、挪错可再挪一次,所以不设角色门槛(2026-09-24 起,此前误标 ADMIN) |
 | GET | `/export.csv?sku&location&warehouseId&status&...` | 已登录 | 单次硬编码 5000 行,大库需分页;列含「仓库」 |
 
 **调拨语义(2026-09-20 修正)**:此前 `transfer` 把单元打成终态 `TRANSFERRED` 且**不改 `location_code`** —— 货从默认库存列表(只看 `IN_STOCK`)里消失、再也不能出库/盘点,而 `product.quantity` 仍统计它。现在调拨=移动位置,状态不变。
@@ -347,7 +347,8 @@ PDA 扫码链路涉及的端点(共 4 个):
 | 创建/删除商品/供应商/库位/仓库 | | | ✓ |
 | 创建/提交/取消盘点单 | | | ✓ |
 | 用户管理 | | | ✓ |
-| scrap / transfer(实物) | | ✓ | |
+| transfer(调拨,实物) | | ✓ | |
+| scrap(报废,不可逆) | | | ✓ |
 | inventory_item.read 类 | | ✓ | |
 
 ## 6. 性能与限流

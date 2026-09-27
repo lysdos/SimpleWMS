@@ -20,6 +20,7 @@ import com.google.android.material.button.MaterialButton;
 import com.wms.pda.R;
 import com.wms.pda.data.model.InventoryItem;
 import com.wms.pda.data.repo.RepositoryProvider;
+import com.wms.pda.data.repo.SessionStore;
 import com.wms.pda.data.repo.WmsCallback;
 import com.wms.pda.ui.stocktake.StocktakeListActivity;
 
@@ -72,6 +73,7 @@ public class InventoryFragment extends Fragment {
                 getString(R.string.inventory_expiry_expired)});
 
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        // 报废入口只给 ADMIN(后端那条是 ADMIN-only 且不可逆);调拨可逆,人人可用
         adapter = new InventoryAdapter(new InventoryAdapter.Callbacks() {
             @Override public void onTransfer(InventoryItem item) {
                 TransferDialog.show(requireContext(), item);
@@ -79,7 +81,7 @@ public class InventoryFragment extends Fragment {
             @Override public void onScrap(InventoryItem item) {
                 ScrapDialog.show(requireContext(), item, () -> reload());
             }
-        });
+        }, "ADMIN".equals(SessionStore.role()));
         list.setAdapter(adapter);
 
         btnSearch.setOnClickListener(x -> reload());
