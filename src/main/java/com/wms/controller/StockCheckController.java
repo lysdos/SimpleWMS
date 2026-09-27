@@ -1,6 +1,5 @@
 package com.wms.controller;
 
-import com.wms.annotation.RequireRole;
 import com.wms.model.ApiResponse;
 import com.wms.model.StockCheck;
 import com.wms.model.StockCheckItem;
@@ -20,6 +19,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 盘点单。
+ *
+ * **整条线不设角色门槛**(2026-09-24 起):盘点在本系统**不动库存** —— 提交只固化差异记录,
+ * 库存校正另行处理(见 StockCheckService.commit),所以它不属于"不可逆改库存"那一类,
+ * 作业员自己发起、盘完、提交即可,不必让管理员先建单再交接。
+ * 对比 InventoryItemController.scrap(不可逆减库存,仍限 ADMIN)。
+ */
 @RestController
 @RequestMapping("/api/stock-checks")
 public class StockCheckController {
@@ -64,7 +71,6 @@ public class StockCheckController {
      *            WAREHOUSE 模式=可选的库位码列表(逗号分隔,空=整个仓库)
      */
     @PostMapping
-    @RequireRole("ADMIN")
     public ApiResponse<StockCheck> create(@RequestBody Map<String, Object> body, HttpServletRequest req) {
         String op = (String) req.getAttribute("username");
         if (op == null || op.isBlank()) op = "操作员";
@@ -79,7 +85,6 @@ public class StockCheckController {
 
     /** 填入某条明细的实盘数 */
     @PostMapping("/{id}/items/{itemId}/count")
-    @RequireRole("ADMIN")
     public ApiResponse<Void> fillCount(@PathVariable int id,
                                        @PathVariable int itemId,
                                        @RequestBody Map<String, Object> body) {
@@ -95,7 +100,6 @@ public class StockCheckController {
 
     /** 删除某条明细行(仅 DRAFT);用于清理盘盈自动追加的多余行 */
     @DeleteMapping("/{id}/items/{itemId}")
-    @RequireRole("ADMIN")
     public ApiResponse<Void> deleteItem(@PathVariable int id, @PathVariable int itemId) {
         service.deleteItem(id, itemId);
         return ApiResponse.ok();
@@ -103,14 +107,12 @@ public class StockCheckController {
 
     /** 提交盘点 */
     @PostMapping("/{id}/commit")
-    @RequireRole("ADMIN")
     public ApiResponse<StockCheck> commit(@PathVariable int id) {
         return ApiResponse.ok(service.commit(id));
     }
 
     /** 取消 */
     @PostMapping("/{id}/cancel")
-    @RequireRole("ADMIN")
     public ApiResponse<Void> cancel(@PathVariable int id) {
         service.cancel(id);
         return ApiResponse.ok();

@@ -230,7 +230,7 @@ PDA 端 (StockCheckActivity)               Backend
 | 库存单元 | 11 | `/api/inventory/items/*` |
 | 盘点 | 8 | `/api/stock-checks/*`(含 `/scan`) |
 
-**鉴权矩阵**:ADMIN 才能写基础数据(含仓库)/ 创建盘点单;查询 / 扫码 / 出库 / 库存 / 提交 PDA 操作单 任意已登录用户可做。
+**鉴权矩阵**:ADMIN 才能写基础数据(商品/供应商/仓库/库位/用户);查询 / 扫码 / 出入库 / 库存 / **盘点** / 提交 PDA 操作单 任意已登录用户可做。库存动作里只有**报废**限 ADMIN(不可逆减库存,SCRAPPED 是终态),调拨与盘点都不限(可逆 / 不动库存)。
 
 **扫码端点**(PDA 主路径):
 - `POST /api/outbound/orders/{id}/scan` — 出库扫码
@@ -354,7 +354,6 @@ UI 层永远只调 `ScanManager.get(ctx).startScan(ScanType, callback)`,不知�
 - ScanManager 单例 Activity 泄漏
 - 摄像头重新绑定竞态
 - 盘点 commit 要求所有明细 counted_qty 非 null(对扫码模式不友好)
-- 盘点端点权限不对称(创建要 ADMIN,扫描不需)
 
 **Spec 过期**:`superpowers/specs/2026-09-07-pda-android-scanner-design.md` 的"本期不做"清单里列着摄像头扫码,但 P4-P6 已经实现,**需更新 spec**。
 

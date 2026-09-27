@@ -278,14 +278,15 @@
 |---|---|---|---|---|---|
 | GET | `/?beginDate&endDate&status&page&pageSize` | 已登录 | — | `[{id, checkNo, scope, ...}]` | — |
 | GET | `/{id}` | 已登录 | — | `StockCheck + items[]` | 404 |
-| POST | `/` | **ADMIN** | `{scope:ALL/SKU/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
-| POST | `/{id}/items/{itemId}/count` | **ADMIN** | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
+| POST | `/` | 已登录 | `{scope:ALL/SKU/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
+| POST | `/{id}/items/{itemId}/count` | 已登录 | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
 | **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新(items[].countedQty+=1) | **404 码不在 / 409 状态非 IN_STOCK / 422 码不在本单** |
-| POST | `/{id}/commit` | **ADMIN** | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
-| POST | `/{id}/cancel` | **ADMIN** | — | `{code:0}` | 409 |
+| POST | `/{id}/commit` | 已登录 | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
+| POST | `/{id}/cancel` | 已登录 | — | `{code:0}` | 409 |
 | GET | `/{id}/export.csv` | 已登录 | 差异报告(每行 system/counted/diff) | — |
 
-> **权限不对称**(已知):`/scan` 不需 ADMIN,`create/commit/cancel` 需要 ADMIN。PDA 操作员角色(OPERATOR 未来支持)可扫码但不能建/提交单。
+> **整条线不设角色门槛(2026-09-24 起)**:此前只有 `/scan` 不限角色,`create/count/commit/cancel` 要 ADMIN —— 而两端界面把「新建盘点」「提交」都摆给了操作员,点了必然 403。现在统一放开:盘点在本系统**不动库存**(提交只固化差异记录,库存校正另行处理),作业员自己发起、盘完、提交即可。
+> 作为对比,`/api/inventory/items/{id}/scrap`(报废,不可逆减库存)**仍限 ADMIN**,`/transfer`(调拨,可逆)不限。
 
 > **`scope=LOCATION` 已不能创建(2026-09-21)**:它与「按仓库 + 多选库位」重叠(按仓库只勾一个库位即等价),创建入口已从 Web 与 PDA 移除。**枚举值与读取标签保留** —— 历史单(若生产库有)仍能正确显示「按库位」,不会退化成裸文本。库内实测 `scope='LOCATION'` 为 0 行。
 
@@ -345,7 +346,7 @@ PDA 扫码链路涉及的端点(共 4 个):
 | 写入单据(批量) | | ✓ | |
 | DRAFT 单据的 scan / commit | | ✓ | |
 | 创建/删除商品/供应商/库位/仓库 | | | ✓ |
-| 创建/提交/取消盘点单 | | | ✓ |
+| 盘点单(创建/计数/删行/提交/取消/扫码) | | ✓ | |
 | 用户管理 | | | ✓ |
 | transfer(调拨,实物) | | ✓ | |
 | scrap(报废,不可逆) | | | ✓ |
@@ -367,7 +368,7 @@ PDA 扫码链路涉及的端点(共 4 个):
 ## 8. 后续待办
 
 - 出库扫码加 SKU 校验(避免错码入错单)— 当前仅校验码 + IN_STOCK
-- 盘点端点权限统一(OPERATOR 角色下应允许 create + commit)
 - 限流中间件(防 PDA 端 bug 触发批量请求)
+- 库存上量后给「全库盘点」加提示/限制(建单会把该范围期望行逐行写进 `stock_check_item`,现在 19 件无所谓)
 - 库存 item 批量报废 / 批量调拨
 - 盘点 commit 支持"扫码模式"自动算 diff(避免要求所有明细填完)

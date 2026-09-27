@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,12 +32,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 参照 OutboundDraftControllerTest 写法:@WebMvcTest + @MockBean mock StockCheckService,
  * + @MockBean JwtService 跳过 JwtAuthFilter,addFilters = false。
  *
- * 覆盖 5 个核心场景:
+ * 覆盖 7 个核心场景:
  *   - scanCode_ok                → 命中 IN_STOCK + 已在明细 + counted_qty + 1
  *   - scanCode_notFound_404      → 码不存在
  *   - scanCode_notInStock_409    → 码已 OUT/SCRAPPED/TRANSFERRED
  *   - scanCode_notInCheck_422    → 码在系统中但不在本盘点单明细
  *   - scanCode_alreadyCommitted_409 → 盘点单已 COMMITTED
+ *   - create_withOperatorRole_isAllowed / commit_withOperatorRole_isAllowed
+ *     → 盘点整条线不限角色(2026-09-24 决策):不动库存,作业员自己发起、盘完、提交
  */
 @WebMvcTest(StockCheckController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -155,5 +158,42 @@ class StockCheckScanControllerTest {
            .andExpect(status().isConflict())
            .andExpect(jsonPath("$.code").value(409))
            .andExpect(jsonPath("$.message").value("仅 DRAFT 状态可扫码,当前: COMMITTED"));
+    }
+
+    // ==================== 角色门槛:整条线不限(2026-09-24 起的决策) ====================
+
+    /**
+     * 盘点**故意不设角色门槛**:它不动库存(提交只固化差异记录),作业员自己发起、盘完、提交即可。
+     * 带 OPERATOR 角色必须能建单 —— 这条是那个决策的钉子,不是遗漏。
+     * 与 InventoryItemWriteOpsTest 里"报废仍限 ADMIN"那两条合起来看,才是完整的权限口径。
+     */
+    @Test
+    void create_withOperatorRole_isAllowed() throws Exception {
+        when(stockCheckService.create(anyString(), any(), any(), any(), anyString()))
+                .thenReturn(sampleAfterScan());
+
+        mvc.perform(post("/api/stock-checks")
+                        .requestAttr("role", "OPERATOR")
+                        .requestAttr("username", "cs")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"scope\":\"ALL\"}"))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.data.id").value(33));
+
+        verify(stockCheckService).create(eq("ALL"), any(), any(), any(), eq("cs"));
+    }
+
+    /** 同理:操作员必须能提交(否则现场盘完卡在最后一步) */
+    @Test
+    void commit_withOperatorRole_isAllowed() throws Exception {
+        when(stockCheckService.commit(33)).thenReturn(sampleAfterScan());
+
+        mvc.perform(post("/api/stock-checks/33/commit")
+                        .requestAttr("role", "OPERATOR")
+                        .requestAttr("username", "cs"))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.code").value(0));
+
+        verify(stockCheckService).commit(33);
     }
 }
