@@ -97,39 +97,21 @@ public class InboundService {
     }
 
     /**
-     * 单条入库(老接口):改为 DRAFT 语义,不再即时写 inventory_log
-     * 调用方(controller)负责后续 commit。返回创建出来的 DRAFT InboundOrder
-     */
-    public InboundOrder doInbound(int productId, int quantity, String remark, String createdBy) {
-        List<BatchItem> items = new ArrayList<>();
-        BatchItem it = new BatchItem();
-        it.productId = productId;
-        it.quantity = quantity;
-        it.rowRemark = remark;
-        items.add(it);
-        return doInboundBatch(items, null, remark, createdBy, null);
-    }
-
-    /**
      * 批量入库(老 batch 接口):统一改为"DRAFT + 提交"语义,确保未正式提交不影响库存
      *   1) 校验 + 合并同 (productId, supplier) 的数量
      *   2) 写主表 status=DRAFT
      *   3) 调 addItemsToDraftInternal 写明细 + 生成 PENDING 单元(不调 adjustQuantity、不写流水)
      * 真实"生效"在 commitDraft() 里完成(PENDING 单元 → IN_STOCK + adjustQuantity + 写 inventory_log)
      *
-     * @param orderId 可选:非 null 时把 items 追加到该 DRAFT 单,主表 externalNo/remark/orderNo 不会被覆盖
+     * 只负责**建新单**;往已有草稿单追加明细走 addItemToDraft。
+     * (原先这里有个 orderId 参数 + "非 null 就追加到该草稿单"的分支,2026-09-24 删除:
+     *  两个调用方——controller 与被删掉的 doInbound——传的都是 null,分支从来不会执行。)
      */
     @Transactional
     public InboundOrder doInboundBatch(List<BatchItem> items,
                                        String externalNo,
                                        String orderRemark,
-                                       String createdBy,
-                                       Integer orderId) {
-        if (orderId != null) {
-            // DRAFT 单追加明细分支
-            return addItemsToDraftInternal(orderId, items, createdBy);
-        }
-
+                                       String createdBy) {
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("入库明细不能为空");
         }
@@ -435,7 +417,7 @@ public class InboundService {
     }
 
     /**
-     * 内部方法:把 items 追加到指定 DRAFT 单(doInboundBatch 非空 orderId 分支 / addItemToDraft 调)。
+     * 内部方法:把 items 追加到指定 DRAFT 单(addItemToDraft 调;新建单时由 doInboundBatch 走另一条路)。
      * 注意:同 (productId, supplier) 仍在本批内合并,但不与单据已有明细合并(简化:PDA 单次 add 一次性就好)。
      */
     private InboundOrder addItemsToDraftInternal(int orderId, List<BatchItem> items, String createdBy) {

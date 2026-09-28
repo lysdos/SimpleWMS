@@ -31,15 +31,17 @@ public class OutboundService {
     private final ProductDao productDao; private final InventoryLogDao logDao; private final OutboundOrderDao orderDao; private final InventoryItemDao itemDao;
     @Autowired public OutboundService(ProductDao p,InventoryLogDao l,OutboundOrderDao o,InventoryItemDao i){productDao=p;logDao=l;orderDao=o;itemDao=i;}
     /**
-     * 单条出库(老接口):改为 DRAFT 语义,不再即时扣库存
-     * 真实生效在 commitDraft() 里完成(adjustQuantity + commitReservations 把 RESERVED → OUT + 写流水)
+     * 批量建单(出/入库同一套 DRAFT 语义:建单不动库存,提交时才扣减)。
+     *
+     * 只负责**建新单**:新建 DRAFT + 写明细 + 按方案 A 立刻锁定 N 个 inventory_item(RESERVED)。
+     * 往已有草稿单追加明细走 addItemToDraft —— 它先锁货再写明细,同一商品并入已有行。
+     *
+     * (原先是 5 参 + 6 参两个重载,6 参那个多一个 orderId、"非 null 就追加到该草稿单"。
+     *  2026-09-24 合并成一个:那个分支从来不会执行(唯一调用方传的都是 null),而且它
+     *  "只写明细、不锁货"的老语义与现在的"建单即锁货"相悖 —— 真被调用会造出"明细在、
+     *  货没锁"的单,扫码与提交都会失败。)
      */
-    @Transactional public OutboundOrder doOutbound(int productId,int quantity,String remark,String createdBy){
-        BatchItem i=new BatchItem();i.productId=productId;i.quantity=quantity;i.rowRemark=remark;
-        return doOutboundBatch(List.of(i),null,null,remark,createdBy,null);
-    }
-    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String createdBy){return doOutboundBatch(items,customer,externalNo,orderRemark,createdBy,null);}
-    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String createdBy,Integer orderId){
+    @Transactional public OutboundOrder doOutboundBatch(List<BatchItem> items,String customer,String externalNo,String orderRemark,String createdBy){
         if(items==null||items.isEmpty())throw new IllegalArgumentException("出库明细不能为空");
         if(createdBy==null||createdBy.isBlank())createdBy="操作员";
         Map<Integer,BatchItem> m=new LinkedHashMap<>();
@@ -48,26 +50,6 @@ public class OutboundService {
             if(r.quantity==null||r.quantity<=0)throw new IllegalArgumentException("出库数量必须大于 0");
             BatchItem a=m.computeIfAbsent(r.productId,k->{BatchItem z=new BatchItem();z.productId=k;z.quantity=0;z.rowRemark=r.rowRemark;return z;});
             a.quantity+=r.quantity;
-        }
-
-        if(orderId!=null){
-            // DRAFT 单追加明细分支:不校验库存、不调 adjustQuantity,只写 DRAFT 明细
-            OutboundOrder o=orderDao.findOrderById(orderId);
-            if(o==null||!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");
-            for(BatchItem b:m.values()){
-                Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
-                OutboundOrderItem it=new OutboundOrderItem();
-                it.setOrderId(orderId);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
-                it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
-                // 取货库位留空 = 自动。不再写商品的默认库位:一个商品可能分散在多个库位,
-                // 写上去反而会印出一张"说去 A 库位、实际从 A+B 取货"的假拣货单
-                it.setRowRemark(blank(b.rowRemark));
-                it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());  // DRAFT 阶段不动库存
-                orderDao.insertItem(it);
-            }
-            orderDao.refreshAggregates(orderId);
-            o=orderDao.findOrderById(orderId);o.setItems(orderDao.findItemsByOrderId(o.getId()));
-            return o;
         }
 
         // 新建 DRAFT 单 + 写 DRAFT 明细 + 按方案 A 立刻锁定 N 个 inventory_item (RESERVED)
@@ -86,7 +68,8 @@ public class OutboundService {
             OutboundOrderItem it=new OutboundOrderItem();
             it.setOrderId(id);it.setProductId(p.getId());it.setSku(p.getSku());it.setProductName(p.getName());
             it.setQuantity(b.quantity);it.setUnitPrice(p.getUnitPrice()==null?BigDecimal.ZERO:p.getUnitPrice());
-            // 取货库位留空 = 自动(见上方分支注释)
+            // 取货库位留空 = 自动。不写商品的默认库位:一个商品可能分散在多个库位,
+            // 写上去反而会印出一张"说去 A 库位、实际从 A+B 取货"的假拣货单
             it.setRowRemark(blank(b.rowRemark));
             it.setBeforeQty(p.getQuantity());it.setAfterQty(p.getQuantity());
             orderDao.insertItem(it);

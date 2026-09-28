@@ -3,8 +3,8 @@ package com.wms.controller;
 import com.wms.model.ApiResponse;
 import com.wms.model.InboundOrder;
 import com.wms.model.InboundOrderItem;
-import com.wms.model.InventoryLog;
 import com.wms.service.InboundService;
+import com.wms.util.Csv;
 import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,20 +32,11 @@ public class InboundController {
         this.inboundService = inboundService;
     }
 
-    /** 老接口:单货入库(兼容,内部走 DRAFT 路径) */
-    @PostMapping
-    public ApiResponse<InboundOrder> inbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
-        Integer productId = asInt(body.get("productId"));
-        Integer quantity  = asInt(body.get("quantity"));
-        String remark    = asString(body.get("remark"));
-        String createdBy  = currentUsername(req);
-
-        if (productId == null) throw new IllegalArgumentException("请选择商品");
-        if (quantity == null)  throw new IllegalArgumentException("请输入入库数量");
-        if (quantity <= 0)     throw new IllegalArgumentException("入库数量必须大于 0");
-
-        return ApiResponse.ok(inboundService.doInbound(productId, quantity, remark, createdBy));
-    }
+    // 早先还有一个 POST /api/inbound(单货入库)的老接口,2026-09-24 删除:
+    // Web 走 /batch、PDA 走 /orders,PDA 早就改过去了,全仓库没有任何调用方(含 UHF 桥接)。
+    // 它内部直接调 doInboundBatch,自调用绕过 Spring 代理 → @Transactional 失效,
+    // 一次写"单头+明细+N 个库存单元+汇总"却**没有事务包着**,中途失败会留下半截单。
+    // 既然没人用,与其补事务不如删掉这个入口(也一并删了只服务它的 doInbound)。
 
     /**
      * 新接口:批量入库
@@ -77,7 +68,7 @@ public class InboundController {
             it.location       = asString(r.get("location"));
             items.add(it);
         }
-        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, createdBy, null);
+        InboundOrder order = inboundService.doInboundBatch(items, externalNo, orderRemark, createdBy);
         return ApiResponse.ok(order);
     }
 
@@ -319,14 +310,9 @@ public class InboundController {
         return sb.toString();
     }
 
+    /** 转义规则统一在 {@link Csv}(原先 4 个 controller 各抄一份),这里只做转发,不动调用点 */
     private static String csv(Object v) {
-        if (v == null) return "";
-        String s = String.valueOf(v);
-        // 含逗号/引号/换行的,用双引号包起来,内部双引号转义
-        if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
-            return "\"" + s.replace("\"", "\"\"") + "\"";
-        }
-        return s;
+        return Csv.esc(v);
     }
 
     private static String currentUsername(HttpServletRequest req) {

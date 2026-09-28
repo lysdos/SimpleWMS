@@ -9,6 +9,7 @@ import com.wms.model.OutboundOrder;
 import com.wms.model.OutboundOrderItem;
 import com.wms.model.ScanResult;
 import com.wms.service.OutboundService;
+import com.wms.util.Csv;
 import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,20 +55,10 @@ public class OutboundController {
         return map;
     }
 
-    /** 老接口:单货出库(兼容,内部走 DRAFT 路径) */
-    @PostMapping
-    public ApiResponse<OutboundOrder> outbound(@RequestBody Map<String, Object> body, HttpServletRequest req) {
-        Integer productId = asInt(body.get("productId"));
-        Integer quantity  = asInt(body.get("quantity"));
-        String remark    = asString(body.get("remark"));
-        String createdBy  = currentUsername(req);
-
-        if (productId == null) throw new IllegalArgumentException("请选择商品");
-        if (quantity == null)  throw new IllegalArgumentException("请输入出库数量");
-        if (quantity <= 0)     throw new IllegalArgumentException("出库数量必须大于 0");
-
-        return ApiResponse.ok(outboundService.doOutbound(productId, quantity, remark, createdBy));
-    }
+    // 早先还有一个 POST /api/outbound(单货出库)的老接口,2026-09-24 删除 —— 与入库侧对称:
+    // 全仓库没有调用方(Web 建单走 /batch,PDA 与 UHF 桥接走 /orders、/dispatches;测试零引用,
+    // nginx 日志也没有它的请求)。要出单件,传单元素数组给 /batch 即可。
+    // 它没有入库那条的事务隐患(doOutbound 自己标了 @Transactional),所以这次纯粹是清死入口。
 
     /**
      * 新接口:批量出库
@@ -384,13 +375,9 @@ public class OutboundController {
         return (wh == null || wh.isBlank()) ? code : wh + " / " + code;
     }
 
+    /** 转义规则统一在 {@link Csv}(原先 4 个 controller 各抄一份),这里只做转发,不动调用点 */
     private static String csv(Object v) {
-        if (v == null) return "";
-        String s = String.valueOf(v);
-        if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
-            return "\"" + s.replace("\"", "\"\"") + "\"";
-        }
-        return s;
+        return Csv.esc(v);
     }
 
     private static String currentUsername(HttpServletRequest req) {

@@ -113,8 +113,6 @@ SimpleWMS/
 | GET  | `/api/products/{id}` | 商品详情 |
 | PUT  | `/api/products/{id}` | 修改商品 |
 | DELETE | `/api/products/{id}` | 删除商品 |
-| POST | `/api/inbound` | 入库 `{productId,quantity,remark,operator}` |
-| POST | `/api/outbound` | 出库,库存不足时返回 409 |
 | GET  | `/api/ledger?type=&keyword=&limit=` | 流水(全部/IN/OUT) |
 
 ## 🔒 出库事务保护

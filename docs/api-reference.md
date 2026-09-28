@@ -177,11 +177,11 @@
 
 ### 2.8 入库 — `/api/inbound`(DRAFT/COMMITTED/CANCELLED)
 
-**老接口**(兼容保留,直接 COMMITTED):
 | 方法 | URL | 请求 | 响应 |
 |---|---|---|---|
-| POST | `/` | `{productId, quantity, remark, operator?}` | `InventoryLog` |
 | POST | `/batch` | `{externalNo?, remark?, items:[{productId, quantity, supplier?, rowRemark?, productionDate?, shelfLifeDays?, location?}]}` | `InboundOrder` + items |
+
+> **`POST /api/inbound`(单条入库)已删除(2026-09-24)**:全仓库没有调用方(Web 建单走上面的 `/batch`、PDA 走 `/orders`,UHF 桥接不涉及),nginx 日志也没有它的请求。而它内部直接调 `doInboundBatch`,**自调用绕过 Spring 代理 → `@Transactional` 失效**,一次写「单头 + 明细 + N 个库存单元 + 汇总」却没有事务包着,中途失败会留下半截单。既然没人用,就删入口而不是补事务(只服务它的 `InboundService.doInbound` 一并删除)。
 
 **明细行的 `location`(2026-09-20 新增,可选)**:指定这批货落在哪个库位;不传则用**商品的默认库位**,商品也没设则落到兜底库位「默认库位」。传了就必须存在且启用,否则 400。
 > 为什么需要它:一个商品的货可能因为主仓库位放不下而分到副仓库位。所以"一个商品只有一个库位"不再成立,同一批次拆到两处时**拆成两行分别指定**。
@@ -204,11 +204,11 @@
 
 ### 2.9 出库 — `/api/outbound`
 
-**老接口**(兼容):
 | 方法 | URL | 备注 |
 |---|---|---|
-| POST | `/` | 单货出库 |
-| POST | `/batch` | 批量,直接 COMMITTED |
+| POST | `/batch` | 批量建单(DRAFT;提交后才动库存) |
+
+> **`POST /api/outbound`(单货出库)已删除(2026-09-24)**:与入库侧对称 —— 全仓库没有调用方(Web 建单走 `/batch`,PDA 与 UHF 桥接走 `/orders`、`/dispatches`,测试零引用,nginx 日志也没有它的请求)。要出单件,传单元素数组给 `/batch`。它**没有**入库那条的事务隐患(`doOutbound` 自己标了 `@Transactional`),所以这次纯粹是清死入口。
 
 **草稿单流(PDA 主流)**:
 | 方法 | URL | 请求 | 响应 | 错误 |

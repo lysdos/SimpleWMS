@@ -7,6 +7,7 @@ import com.wms.model.Product;
 import com.wms.service.BarcodeService;
 import com.wms.service.InventoryItemService;
 import com.wms.service.ProductService;
+import com.wms.util.Csv;
 import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -239,12 +240,8 @@ public class InventoryItemController {
         return (op == null || op.isBlank()) ? "操作员" : op;
     }
 
+    /** 转义规则统一在 {@link Csv}(原先 4 个 controller 各抄一份),这里只做转发,不动调用点 */
     private static String csv(Object v) {
-        if (v == null) return "";
-        String s = String.valueOf(v);
-        if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
-            return "\"" + s.replace("\"", "\"\"") + "\"";
-        }
-        return s;
+        return Csv.esc(v);
     }
 }

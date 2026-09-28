@@ -225,7 +225,7 @@ PDA 端 (StockCheckActivity)               Backend
 | 鉴权 | 4 | `/api/auth/*` |
 | 仪表盘 | 3 | `/api/dashboard/{stats, inventory-trend, outbound-trend}` |
 | 商品 / 供应商 / 仓库 / 库位 / 用户 | 21 | `/api/{products, suppliers, warehouses, locations, users}/*` |
-| 入库 | 7 | `/api/inbound/{, /orders, /orders/{id}/{items, commit, cancel}, /orders/{id}, /orders, /orders/{id}/export.csv}` |
+| 入库 | 6 | `/api/inbound/{batch, /orders, /orders/{id}/{items, commit, cancel}, /orders/{id}, /orders, /orders/{id}/export.csv}` |
 | 出库 | 7 | `/api/outbound/*`(含 `/scan`) |
 | 库存单元 | 11 | `/api/inventory/items/*` |
 | 盘点 | 8 | `/api/stock-checks/*`(含 `/scan`) |
