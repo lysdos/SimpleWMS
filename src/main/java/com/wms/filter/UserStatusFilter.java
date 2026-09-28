@@ -17,6 +17,8 @@ import java.util.Set;
  *
  *   - 已禁用 / 已删除 → 401(等效 token 立即失效,不必等 TTL)
  *   - mustChangePw=true → 除 POST /api/auth/me/change-password 外全 403
+ *   - **role 用库里的当前值覆盖 token 里的快照**(2026-09-28 起):
+ *     改角色不必等 token 过期,降级即时生效
  *
  * 不加 @Component:由 WebConfig.userStatusFilterRegistration 显式注册,
  * 这样 JwtAuthFilter (auto-registered, @Component) 先跑、UserStatusFilter 后跑,
@@ -54,6 +56,12 @@ public class UserStatusFilter extends OncePerRequestFilter {
             writeErr(res, 403, "首次登录必须修改密码");
             return;
         }
+        // 用数据库里的**当前**角色覆盖 token 里那份快照。
+        // token 是无状态的,role 停留在签发那一刻:改角色(尤其降级)后若不覆盖,
+        // 对方会带着旧权限一直用到 token 过期(默认 24h)。这条查询本来每请求都在跑,
+        // 顺带取 role 几乎零成本 —— 停用与 mustChangePw 早就是每次回查的,
+        // 唯独 role 漏了。覆盖后 RoleInterceptor 与 /me 看到的都是当下值。
+        req.setAttribute("role", st.role());
         chain.doFilter(req, res);
     }
 
