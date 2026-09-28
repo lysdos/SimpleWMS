@@ -273,7 +273,15 @@ CREATE TABLE IF NOT EXISTS inventory_item (
     updated_by          VARCHAR(64) DEFAULT NULL COMMENT '更新人(系统自动更新时为空)',
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_inventory_item_code` (`code`)
+    UNIQUE KEY `uk_inventory_item_code` (`code`),
+    -- 本表是**一件一行**,会随库存件数线性增长,所以二级索引不能省(2026-09-24 补;
+    -- 此前只有主键 + code,所有按商品/状态/单据的查询都是全表扫描):
+    KEY `idx_item_product_status` (`product_id`, `status`),  -- 出库预留 FEFO 选货(最热)
+    KEY `idx_item_outbound` (`outbound_order_id`),           -- 出库单详情 / 扫码定位
+    KEY `idx_item_inbound` (`inbound_order_id`),             -- 入库单详情 / 提交 / 导出
+    KEY `idx_item_inbound_item` (`inbound_item_id`),         -- 提交时按明细回填单元
+    KEY `idx_item_status_expiry` (`status`, `expiry_date`),  -- 仪表盘临期 / 状态筛选
+    KEY `idx_item_location` (`location_code`)                -- 库存页按库位/仓库筛
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='库存单元(一物一码;每行 = 1 个实体件/EPC)';
 
 -- ============================================================

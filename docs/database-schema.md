@@ -161,7 +161,8 @@ UNIQUE(product_id, supplier_id)
 | created_by | VARCHAR(64) | 操作员 | |
 | created_at / updated_at | TIMESTAMP | |
 
-索引:`idx_invitem_sku`、`idx_invitem_location`、`idx_invitem_status`、`idx_invitem_inbound`、`idx_invitem_outbound`
+索引:`uk_inventory_item_code`(唯一);二级索引(2026-09-24 补):`idx_item_product_status`(出库预留 FEFO 选货,最热)、`idx_item_outbound`(出库详情/扫码)、`idx_item_inbound`(入库详情/提交/导出)、`idx_item_inbound_item`(提交回填)、`idx_item_status_expiry`(仪表盘临期)、`idx_item_location`(库存页按库位/仓库筛)。
+> **修正**:此前这里列着 `idx_invitem_sku / _location / _status / _inbound / _outbound` —— 那 5 个索引在 `sql/mysql-schema.sql` 和实际库里**都不存在**(文档写了、代码没建),所以这张"一件一行、必然长大"的表长期只有主键 + code,凡按商品/状态/单据查的都是全表扫描。现已按实际用到的查询补齐上面 6 个,`mysql-schema.sql` 与现有库(ALTER)两边都已生效。
 
 ### 2.9 `inbound_order` — 入库单
 
