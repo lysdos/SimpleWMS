@@ -758,7 +758,7 @@ const Views = {
         </div>
         <div class="form-row" style="margin-top:16px;justify-content:flex-end;">
             <button class="btn btn-sm" onclick="printOutboundOrder()">🖨 ${t('common.print')}</button>
-            <a class="btn btn-sm" href="/api/outbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
+            <button class="btn btn-sm" style="margin-left:8px;" onclick="api.download('/api/outbound/orders/${o.id}/export.csv','outbound-${o.id}.csv').catch(e=>toast(e.message,'error'))">⬇ ${t('common.export')} CSV</button>
             ${o.status === 'DRAFT' ? `
                 <button class="btn btn-sm btn-primary" style="margin-left:8px;" onclick="commitOutboundOrder(${o.id})">${t('outbound_order.btn.commit')}</button>
                 <button class="btn btn-sm btn-danger" style="margin-left:8px;" onclick="cancelOutboundOrder(${o.id})">${t('outbound_order.btn.cancel')}</button>
@@ -962,7 +962,7 @@ const Views = {
         <div class="form-row" style="margin-top:16px;justify-content:flex-end;">
             <button class="btn btn-sm" onclick="printInboundOrder()">🖨 ${t('common.print')}</button>
             <button class="btn btn-sm" onclick="printAllInboundBarcodes(${o.id})">${t('inbound_order.btn.print_all')}</button>
-            <a class="btn btn-sm" href="/api/inbound/orders/${o.id}/export.csv" style="margin-left:8px;text-decoration:none;">⬇ ${t('common.export')} CSV</a>
+            <button class="btn btn-sm" style="margin-left:8px;" onclick="api.download('/api/inbound/orders/${o.id}/export.csv','inbound-${o.id}.csv').catch(e=>toast(e.message,'error'))">⬇ ${t('common.export')} CSV</button>
             ${o.status === 'DRAFT' ? `
                 <button class="btn btn-sm btn-primary" style="margin-left:8px;" data-order-no="${escapeHtml(o.orderNo)}" onclick="commitInboundOrder(${o.id}, this)">${t('inbound_order.btn.commit')}</button>
                 <button class="btn btn-sm btn-danger" style="margin-left:8px;" data-order-no="${escapeHtml(o.orderNo)}" onclick="cancelInboundOrder(${o.id}, this)">${t('inbound_order.btn.cancel')}</button>
@@ -997,6 +997,8 @@ const Views = {
         p = p || {};
         suppliers = suppliers || [];
         locations = locations || [];
+        // 编辑态:数量只读(它由出入库/报废维护,不是商品资料的一部分)
+        const editing = !!p.id;
         const selected = (p.suppliers || []).map(s => s.id);
         const defaultId = (p.suppliers || []).find(s => s.isDefault)?.id
                        || p.defaultSupplierId
@@ -1056,7 +1058,9 @@ const Views = {
         <div class="form-row">
             <div class="form-field">
                 <label>${t('product.form.qty')}</label>
-                <input id="pf-qty" type="number" min="0" class="input" value="${p.quantity ?? 0}">
+                ${editing
+                    ? `<div class="input" style="background:var(--c-bg-soft);color:var(--c-text-3);">${p.quantity ?? 0}</div>`
+                    : `<input id="pf-qty" type="number" min="0" class="input" value="${p.quantity ?? 0}">`}
             </div>
             <div class="form-field">
                 <label>${t('product.form.price')}</label>
@@ -1756,7 +1760,7 @@ const Views = {
             const days = Math.round((new Date(it.expiryDate + 'T00:00:00') - new Date(new Date().toISOString().slice(0,10) + 'T00:00:00')) / 86400000);
             if (days < 0)  return `<span class="badge" style="background:#fee2e2;color:#b91c1c;">${t('inventory.expiry.expired')}</span>`;
             if (days <= (it.expiryWarnDays ?? 30)) return `<span class="badge" style="background:#fef3c7;color:#92400e;">${t('inventory.expiry.expiring')} ${days}${t('inventory.expiry.day')}</span>`;
-            return `<span style="color:var(--c-text-3);font-size:12px;">${it.expiryDate}</span>`;
+            return `<span style="color:var(--c-text-3);font-size:12px;">${escapeHtml(it.expiryDate)}</span>`;
         };
 
         const rows = items.length === 0
@@ -1826,8 +1830,8 @@ const Views = {
                 <button class="btn btn-sm btn-primary" onclick="searchInventory()">${t('common.query')}</button>
                 <button class="btn btn-sm" onclick="resetInventoryFilter()">${t('common.reset')}</button>
                 <span style="flex:1;"></span>
-                <a id="inv-export-btn" class="btn btn-sm" href="/api/inventory/items/export.csv"
-                   style="text-decoration:none;">⬇ ${t('common.export')} CSV</a>
+                <button id="inv-export-btn" class="btn btn-sm" data-url="/api/inventory/items/export.csv"
+                        onclick="downloadInventoryCsv(this)">⬇ ${t('common.export')} CSV</button>
             </div>
             <div class="table-wrap">
                 <table class="table">

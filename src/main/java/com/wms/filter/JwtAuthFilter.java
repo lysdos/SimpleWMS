@@ -11,6 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * 由 WebConfig.jwtAuthFilterRegistration 显式登记(带 order=10),确保比
@@ -30,34 +31,26 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     );
 
     /**
-     * 公开访问的路径前缀(GET 请求无需 token):
-     *   - /api/inbound/orders/{id}/export.csv   出入库单 CSV 导出(供邮件附件 / 外部系统集成)
-     *   - /api/outbound/orders/{id}/export.csv
-     *   - /api/stock-checks/{id}/export.csv     盘点单 CSV 导出
-     *   - /api/inventory/items/{id}/barcode.png 条码图(供扫码枪 / 直接扫码读取)
+     * 唯一免登录的 /api 资源:条码图。
      *
-     * 注:这些只读查询接口,不修改数据,免登录可读。注意:
-     *   1) 仅 GET 方法免登录,POST/PUT/DELETE 仍需鉴权
-     *   2) 接口内部如发现非法 id(如负数 / 越界)请按业务规则返回 404/400
+     * 为什么只留它:前端用 `<img src="/api/inventory/items/{id}/barcode.png">` 渲染
+     * (app.js 的条码弹窗与入库单详情),`<img>` 无法携带 Authorization 头,只能放开。
+     *
+     * 为什么改成正则精确匹配:2026-09-28 之前这里按「公开前缀 + `/export.csv` 或
+     * `/barcode.png` 后缀」判断,而 `/api/inventory/items/` 也在前缀列表里 ——
+     * 于是 `GET /api/inventory/items/export.csv` 命中,任何人无需 token 即可下载
+     * 全量库存台账(实测 200 + 数千行 CSV,含 24 位码/SKU/创建人/单据 id)。
+     * 单据导出同理可被枚举 id 匿名读取。
+     *
+     * 现在:export.csv 一律要求登录(前端三个导出入口已改走 api.download,会带 Bearer);
+     * 后缀匹配彻底删除 —— 将来新增任何 `/export.csv` 路由都不会被静默放行。
      */
-    private static final String[] PUBLIC_PREFIXES = {
-        "/api/inbound/orders/",
-        "/api/outbound/orders/",
-        "/api/stock-checks/",
-        "/api/inventory/items/"
-    };
+    private static final Pattern PUBLIC_READONLY =
+            Pattern.compile("^/api/inventory/items/\\d+/barcode\\.png$");
 
-    /** 仅当 GET 请求且路径命中公开前缀时,才返回 true */
+    /** 仅当 GET 请求且路径命中上面那条精确规则时,才免登录 */
     private boolean isPublicReadonly(String method, String path) {
-        if (!"GET".equalsIgnoreCase(method)) return false;
-        // 盘点单:整段 GET 接口(stock-check 详情接口也应免登录,与出入库对称)
-        if (path.startsWith("/api/stock-checks/") && path.endsWith("/export.csv")) return true;
-        for (String prefix : PUBLIC_PREFIXES) {
-            if (path.startsWith(prefix) && (path.endsWith("/export.csv") || path.endsWith("/barcode.png"))) {
-                return true;
-            }
-        }
-        return false;
+        return "GET".equalsIgnoreCase(method) && PUBLIC_READONLY.matcher(path).matches();
     }
 
     private JwtService jwt;   // 由 WebConfig 注入(避免 @Component 双注册)

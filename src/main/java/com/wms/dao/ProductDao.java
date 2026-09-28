@@ -15,7 +15,9 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -53,10 +55,9 @@ public class ProductDao {
         this.supplierDao = supplierDao;
     }
 
-    private void attachSuppliers(Product p) {
-        if (p == null) return;
-        List<ProductSupplier> suppliers = supplierDao.findSuppliersByProduct(p.getId());
-        if (suppliers == null || suppliers.isEmpty()) return;
+    /** 把一组关联行填进一个商品(单商品路径与批量路径共用这段映射逻辑) */
+    private static void fillSuppliers(Product p, List<ProductSupplier> suppliers) {
+        if (p == null || suppliers == null || suppliers.isEmpty()) return;
         List<Product.SupplierRef> refs = new ArrayList<>();
         for (ProductSupplier ps : suppliers) {
             refs.add(new Product.SupplierRef(ps.getSupplierId(), ps.getSupplierName(), ps.getIsDefault()));
@@ -66,6 +67,34 @@ public class ProductDao {
             }
         }
         p.setSuppliers(refs);
+    }
+
+    private void attachSuppliers(Product p) {
+        if (p == null) return;
+        fillSuppliers(p, supplierDao.findSuppliersByProduct(p.getId()));
+    }
+
+    /**
+     * 批量为整页商品填关联供应商 —— **一条 SQL 拿全部**,而不是每行查一次。
+     *
+     * 原来 findAll 是 `for (Product p : list) attachSuppliers(p)`,商品列表页一次
+     * 200 行就是 201 次查询(典型的 N+1)。商家/供应商关联本身是多对多,一行一条关联行,
+     * 所以按 product_id 分组后回填即可,顺序仍由 SQL 保证(默认在前、名称升序)。
+     */
+    private void attachSuppliers(List<Product> products) {
+        if (products == null || products.isEmpty()) return;
+        List<Integer> ids = new ArrayList<>();
+        for (Product p : products) {
+            if (p != null && p.getId() != null) ids.add(p.getId());
+        }
+        if (ids.isEmpty()) return;
+        Map<Integer, List<ProductSupplier>> byProduct = new HashMap<>();
+        for (ProductSupplier ps : supplierDao.findSuppliersByProducts(ids)) {
+            byProduct.computeIfAbsent(ps.getProductId(), k -> new ArrayList<>()).add(ps);
+        }
+        for (Product p : products) {
+            if (p != null) fillSuppliers(p, byProduct.get(p.getId()));
+        }
     }
 
     public List<Product> findAll(String keyword) {
@@ -90,7 +119,7 @@ public class ProductDao {
         }
         sb.append(" ORDER BY id DESC");
         List<Product> list = jdbc.query(sb.toString(), ROW, args.toArray());
-        for (Product p : list) attachSuppliers(p);
+        attachSuppliers(list);   // 一条 SQL 批量回填(原来是每行一次查询)
         return list;
     }
 
@@ -139,14 +168,23 @@ public class ProductDao {
         return GeneratedKeys.id(kh);
     }
 
+    /**
+     * 更新商品资料。**故意不写 quantity** —— 库存数量只能由出入库/报废的
+     * {@link #adjustQuantity} 改动。
+     *
+     * 以前这里带 `quantity=?`,而 controller 的 create/update 共用一个解析方法、把缺失的
+     * quantity 补成 0:只要有人发一个不带 quantity 的 PUT(或编辑弹窗用的是打开时的旧值),
+     * 就会把库存悄悄清零,而 inventory_item 一件没动 —— 仪表盘总量/总值/低库存全跟着错。
+     * 数量不再是"商品资料"的一部分,改资料就不该碰它。
+     */
     public int update(Product p) {
         String sql = "UPDATE product SET sku=?, name=?, category=?, unit=?, location=?, " +
-                "quantity=?, unit_price=?, low_stock=?, default_shelf_life_days=?, expiry_warn_days=?, " +
+                "unit_price=?, low_stock=?, default_shelf_life_days=?, expiry_warn_days=?, " +
                 "remark=? WHERE id=?";
         return jdbc.update(sql,
                 p.getSku(), p.getName(), emptyTo(p.getCategory(), "默认"),
                 emptyTo(p.getUnit(), "件"), emptyTo(p.getLocation(), Location.FALLBACK_CODE),
-                p.getQuantity(), p.getUnitPrice(), p.getLowStock(),
+                p.getUnitPrice(), p.getLowStock(),
                 p.getDefaultShelfLifeDays(), p.getExpiryWarnDays(),
                 p.getRemark(), p.getId());
     }

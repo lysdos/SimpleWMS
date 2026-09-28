@@ -65,20 +65,32 @@ const routes = {
     'stock-checks': loadStockChecks
 };
 
+/**
+ * 路由渲染的唯一出口。
+ * 各 loader 都是 async(内部 await api.get),以前这里没有 catch —— 接口一失败就是
+ * 未处理的 promise rejection:控制台报错、页面停在上一屏,看着像"点了没反应"。
+ */
+async function runRoute(route) {
+    try {
+        await prepareLocMap();
+        await (routes[route] || loadDashboard)();
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+    }
+}
+
 async function go(route) {
     if (location.hash !== '#/' + route) {
         location.hash = '#/' + route;
         return;
     }
-    await prepareLocMap();
-    (routes[route] || loadDashboard)();
+    await runRoute(route);
 }
 
 window.addEventListener('hashchange', async () => {
     const r = (location.hash || '#/dashboard').replace('#/', '');
     setActive(r);
-    await prepareLocMap();
-    (routes[r] || loadDashboard)();
+    await runRoute(r);
 });
 
 function setActive(route) {
@@ -168,7 +180,14 @@ async function renderInboundRecent() {
         const title = document.getElementById('inbound-recent-title');
         if (title) title.textContent = t('inbound.recent_title');
         Views.applyCardTabs('inbound', st);
-    } catch (e) {}
+    } catch (e) {
+        // 「最近单据」是首页的次要区块,但也不能静默失败:以前这个空 catch 会让
+        // 表格留着上一次的行,看着像当前数据。清空 + 提示 + 照样画 tab。
+        toast(e.message || t('err.network'), 'error');
+        const tb = document.getElementById('inbound-recent-tbody');
+        if (tb) tb.innerHTML = Views.inboundRecentRows([]);
+        Views.applyCardTabs('inbound', st);
+    }
 }
 
 async function renderOutboundRecent() {
@@ -188,7 +207,13 @@ async function renderOutboundRecent() {
         const title = document.getElementById('outbound-recent-title');
         if (title) title.textContent = t('outbound.recent_title');
         Views.applyCardTabs('outbound', st);
-    } catch (e) {}
+    } catch (e) {
+        // 同 renderInboundRecent:失败要清空 + 提示,不能留着上一次的行假装成功
+        toast(e.message || t('err.network'), 'error');
+        const tb = document.getElementById('outbound-recent-tbody');
+        if (tb) tb.innerHTML = Views.outboundRecentRows([]);
+        Views.applyCardTabs('outbound', st);
+    }
 }
 
 function setInboundCardStatus(st) {
@@ -230,13 +255,24 @@ async function ensureProducts() {
     }
 }
 
+/**
+ * 供应商列表页。
+ *
+ * 筛选结果**只用于本屏渲染**,不写回 `state.suppliers` —— 那份缓存是各弹窗的
+ * 「供应商下拉」和商品页筛选器的数据源,必须是全量。以前直接赋值,于是在供应商页
+ * 筛一次「停用」,再打开新增商品弹窗,候选里就只剩停用供应商了。
+ * 无筛选时这一次结果本身就是全量,顺手当缓存用;增删改后由调用方清空缓存触发重取。
+ * (与 loadLocations 同一套做法,见那边的注释。)
+ */
 async function loadSuppliers() {
     setActive('suppliers');
     const qs = new URLSearchParams();
     if (state.supplierKw) qs.set('keyword', state.supplierKw);
     if (state.supplierStatus) qs.set('status', state.supplierStatus);
-    state.suppliers = await api.get('/api/suppliers' + (qs.toString() ? '?' + qs.toString() : ''));
-    document.getElementById('view').innerHTML = Views.suppliers(state.suppliers, state.supplierStatus);
+    const query = qs.toString();
+    const list = await api.get('/api/suppliers' + (query ? '?' + query : ''));
+    if (!query) state.suppliers = list;
+    document.getElementById('view').innerHTML = Views.suppliers(list, state.supplierStatus);
 }
 
 async function loadLocations() {
@@ -723,15 +759,19 @@ function getSelectedOrderIds() {
 async function exportSelectedOrders() {
     const ids = getSelectedOrderIds();
     if (ids.length === 0) return;
-    const tt = state.orderType || 'ALL';
-    // 按类型分组导出
+    // 按类型分组导出。以前这里没有 try/catch,而它是 onclick 直接调的:
+    // downloadZip 一抛错就是未处理的 rejection,界面上什么也不会发生。
     const inIds = [], outIds = [];
     document.querySelectorAll('.od-cb:checked').forEach(cb => {
         const id = parseInt(cb.dataset.id, 10);
         if (cb.dataset.type === 'IN') inIds.push(id); else outIds.push(id);
     });
-    if (inIds.length > 0) await downloadZip('/api/inbound/orders/export.zip', inIds, 'inbound_orders.zip');
-    if (outIds.length > 0) await downloadZip('/api/outbound/orders/export.zip', outIds, 'outbound_orders.zip');
+    try {
+        if (inIds.length > 0) await downloadZip('/api/inbound/orders/export.zip', inIds, 'inbound_orders.zip');
+        if (outIds.length > 0) await downloadZip('/api/outbound/orders/export.zip', outIds, 'outbound_orders.zip');
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+    }
 }
 
 async function exportAllOrders() {
@@ -771,7 +811,8 @@ async function downloadZip(url, ids, filename) {
         if (!location.pathname.endsWith('/login.html')) location.href = '/login.html';
         throw new Error('未登录');
     }
-    if (!resp.ok) throw new Error(await resp.text());
+    // 不要把响应体原文塞进错误消息:500 时那是一整段 HTML/堆栈,弹到 toast 里没法看
+    if (!resp.ok) throw new Error(t('orders.export_failed', { code: resp.status }));
     const blob = await resp.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1053,12 +1094,11 @@ function readProductForm() {
 
     const shelfLifeRaw = document.getElementById('pf-shelf-life').value.trim();
     const warnDaysRaw  = document.getElementById('pf-warn-days').value.trim();
-    return {
+    const body = {
         sku, name,
         category : document.getElementById('pf-cat').value.trim(),
         unit     : document.getElementById('pf-unit').value.trim(),
         location,
-        quantity : Number(document.getElementById('pf-qty').value || 0),
         unitPrice: Number(document.getElementById('pf-price').value || 0),
         lowStock : Number(document.getElementById('pf-low').value || 10),
         defaultShelfLifeDays: shelfLifeRaw === '' ? null : Number(shelfLifeRaw),
@@ -1066,6 +1106,11 @@ function readProductForm() {
         remark   : document.getElementById('pf-remark').value.trim(),
         suppliers
     };
+    // 数量只在**新建**时可填:编辑态视图不渲染 #pf-qty(改由出入库/报废维护,
+    // 见 ProductDao.update),所以这里判存在再带上,别把表单打开时的旧值写回去。
+    const qtyEl = document.getElementById('pf-qty');
+    if (qtyEl) body.quantity = Number(qtyEl.value || 0);
+    return body;
 }
 
 /* ---------- 供应商管理 ---------- */
@@ -1081,6 +1126,7 @@ async function newSupplier() {
         try {
             await api.post('/api/suppliers', body);
             toast(t('supplier.toast.created'), 'success');
+            state.suppliers = [];   // 失效缓存:下次 ensureSuppliers 重取全量
             await loadSuppliers();
         } catch (e) { toast(e.message, 'error'); return false; }
     });
@@ -1100,6 +1146,7 @@ async function editSupplier(id) {
             try {
                 await api.put('/api/suppliers/' + id, body);
                 toast(t('common.success.save'), 'success');
+                state.suppliers = [];   // 失效缓存:下次 ensureSuppliers 重取全量
                 await loadSuppliers();
             } catch (e) { toast(e.message, 'error'); return false; }
         });
@@ -1112,6 +1159,7 @@ function delSupplier(id) {
         try {
             await api.del('/api/suppliers/' + id);
             toast(t('common.success.delete'), 'success');
+            state.suppliers = [];   // 失效缓存:下次 ensureSuppliers 重取全量
             await loadSuppliers();
         } catch (e) { toast(e.message, 'error'); }
     });
@@ -1210,13 +1258,21 @@ async function ensureWarehouses() {
     }
 }
 
+/**
+ * 仓库列表页。筛选结果**只渲染、不写回** `state.warehouses`(与 loadSuppliers /
+ * loadLocations 同一套做法):那份缓存是库位表单的「所属仓库」下拉、库位页的仓库筛选器
+ * 以及商品页的数据源,必须是全量。以前筛一次「停用」,后面所有下拉就只剩停用仓库。
+ * 增删改路径已有 `state.warehouses = []` 失效缓存,所以无筛选时才顺手回填。
+ */
 async function loadWarehouses() {
     setActive('warehouses');
     const qs = new URLSearchParams();
     if (state.warehouseKw) qs.set('keyword', state.warehouseKw);
     if (state.warehouseStatus) qs.set('status', state.warehouseStatus);
-    state.warehouses = await api.get('/api/warehouses' + (qs.toString() ? '?' + qs.toString() : ''));
-    document.getElementById('view').innerHTML = Views.warehouses(state.warehouses, state.warehouseStatus);
+    const query = qs.toString();
+    const list = await api.get('/api/warehouses' + (query ? '?' + query : ''));
+    if (!query) state.warehouses = list;
+    document.getElementById('view').innerHTML = Views.warehouses(list, state.warehouseStatus);
 }
 
 function searchWarehouses() {
@@ -1310,6 +1366,12 @@ function resetInventoryFilter() {
     updateInventoryExportHref();
     loadInventory();
 }
+/**
+ * 把当前筛选条件拼成导出 URL,挂在按钮的 data-url 上。
+ *
+ * 这里以前是 `a.href = ...`(靠后端白名单免登录),现在导出接口要求鉴权,
+ * 顶层导航带不了 Authorization,所以改走 api.download(见 downloadInventoryCsv)。
+ */
 function updateInventoryExportHref() {
     const a = document.getElementById('inv-export-btn');
     if (!a) return;
@@ -1322,7 +1384,13 @@ function updateInventoryExportHref() {
     if (state.inventoryExpiryFrom)   qs.set('expiryFrom', state.inventoryExpiryFrom);
     if (state.inventoryExpiryTo)     qs.set('expiryTo', state.inventoryExpiryTo);
     const q = qs.toString();
-    a.href = '/api/inventory/items/export.csv' + (q ? '?' + q : '');
+    a.dataset.url = '/api/inventory/items/export.csv' + (q ? '?' + q : '');
+}
+
+function downloadInventoryCsv(btn) {
+    const url = (btn && btn.dataset.url) || '/api/inventory/items/export.csv';
+    const name = 'inventory-' + new Date().toISOString().slice(0, 10) + '.csv';
+    api.download(url, name).catch(e => toast(e.message || t('err.network'), 'error'));
 }
 function gotoInventoryPage(p) {
     state.inventoryPage = Math.max(1, p);
@@ -1383,7 +1451,7 @@ async function transferInventory(id, btn) {
         l => `<option value="${escapeHtml(l.code)}">${escapeHtml(l.code)}${l.name && l.name !== l.code ? ' / ' + escapeHtml(l.name) : ''}</option>`);
     showModal(t('inventory.modal.transfer_title'), `
         <p style="margin:0 0 12px;font-size:13px;color:var(--c-text-2);">
-            ${t('inventory.modal.transfer_tip', { from: currentLoc })}
+            ${t('inventory.modal.transfer_tip', { from: escapeHtml(currentLoc) })}
         </p>
         <div style="background:var(--c-bg-soft);padding:8px 12px;border-radius:var(--r-sm);font-family:var(--font-mono);margin-bottom:12px;">
             ${escapeHtml(code)}
@@ -1675,12 +1743,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         const r = (location.hash || '#/dashboard').replace('#/', '');
         setActive(r);
-        // 首次进站(以及 F5 刷新)也走一遍路由守卫,否则 state.locMap 是空的,
+        // 首次进站(以及 F5 刷新)也走一遍路由渲染,否则 state.locMap 是空的,
         // 「仓库 / 库位」标签在首屏会退化成光秃秃的库位码 —— 而首屏正是用户最常看到的一屏。
-        // go()/hashchange 那两条路径都调了,这里漏掉的话只有刷新才暴露。
-        await prepareLocMap();
-        (routes[r] || loadDashboard)();
+        // 与 go()/hashchange 共用 runRoute,失败同样会 toast(以前这里被空 catch 吞掉,
+        // 首屏接口一挂就是一片空白,连个提示都没有)。
+        await runRoute(r);
     } catch (e) {
-        // api._handle 已跳 /login
+        // 登录态相关的失败:api._handle 已负责清 token 并跳 /login
     }
 });

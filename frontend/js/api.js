@@ -122,6 +122,12 @@ function showModal(title, bodyHtml, onOk) {
     // 之前只识别同步 false,Promise 一律被吞 → 校验/网络错误时弹窗也关闭、输入丢失。
     newOk.addEventListener('click', async () => {
         if (!onOk) { closeModal(); return; }
+        // 防双击:请求还没回来就不再受理点击。新增商品/供应商/仓库/用户这些确认回调
+        // 都是异步 POST,连点两次就是两条记录。以前只有「新增单据」自己给按钮加了这个
+        // 保护,其余弹窗都是裸的。(freshModalOk 会清掉这两个临时状态,不会带到下个弹窗。)
+        if (newOk._inFlight) return;
+        newOk._inFlight = true;
+        newOk.disabled = true;
         let keep = false;
         let resolved = false;
         try {
@@ -136,6 +142,9 @@ function showModal(title, bodyHtml, onOk) {
             if (!resolved) toast(e.message || t('err.network'), 'error');
             keep = true;   // 出错保留弹窗,展示后续错误
         }
+        // 保留弹窗时必须解禁,否则用户改完输入也没法再点提交
+        newOk._inFlight = false;
+        newOk.disabled = false;
         if (!keep) closeModal();
     });
 }

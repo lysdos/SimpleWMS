@@ -147,19 +147,44 @@ def _auth_headers():
         return {"Authorization": "Bearer " + state.token}
 
 # ==================== 登录 ====================
+# 被限流(429)后的冷却秒数。
+#
+# 后端连续失败会锁定(默认 5 分钟),这段时间继续重试毫无意义;更麻烦的是,
+# 它会把"人在 UHF 登录页手输正确口令"也一起顶掉 —— 那个页面的登录请求是**本容器**
+# 代发的,来源 IP 与后台自动登录完全相同,于是两者共用后端的同一个限流桶
+# ((用户名, IP) 那一把钥匙)。所以一收到 429 就闭嘴等着,冷却期内一次 HTTP 都不发。
+#
+# 取 60 秒(比后端 5 分钟的锁短):既不踩着锁刷,又能在凭据改对后最多 60 秒内自动恢复。
+LOGIN_COOLDOWN_SEC = 60
+_login_cooldown_until = 0.0
+
+
 def login():
-    """登录 WMS 后端,拿 token。失败最多重试 3 次,间隔 2 秒。"""
+    """登录 WMS 后端,拿 token。失败最多重试 3 次,间隔 2 秒;
+    一旦被限流(429)立刻停止本轮并进入冷却。"""
+    global _login_cooldown_until
     with state.login_lock:
+        if time.time() < _login_cooldown_until:
+            # 冷却中:后端此刻必然仍回 429,发了也是白发
+            return False
         for attempt in range(1, 4):
             r = _http_post("/api/auth/login",
                            {"username": WMS_USERNAME, "password": WMS_PASSWORD})
             if r.get("code") == 0 and r.get("data", {}).get("token"):
                 state.token = r["data"]["token"]
+                _login_cooldown_until = 0.0      # 成功即解除冷却
                 log.info("[LOGIN] success, role=%s", r["data"].get("role"))
                 return True
+            state.token = None
+            # 429 是 _http_post 从 HTTPError 分支带回来的(code = HTTP 状态码),
+            # 直接看数字即可 —— 不去猜「请 N 分钟后再试」这类提示文案,
+            # 与仓库里"状态判断不依赖消息文本"的约定一致。
+            if r.get("code") == 429:
+                _login_cooldown_until = time.time() + LOGIN_COOLDOWN_SEC
+                log.warning("[LOGIN] 被后端限流(429),%d 秒内不再尝试登录", LOGIN_COOLDOWN_SEC)
+                return False
             log.warning("[LOGIN] attempt %d/3 failed: %s",
                         attempt, r.get("message") or r.get("code"))
-            state.token = None
             if attempt < 3:
                 time.sleep(2)
         log.error("[LOGIN] all 3 attempts failed")

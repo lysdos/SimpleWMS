@@ -39,6 +39,12 @@ public class RemoteWmsRepository implements WmsRepository {
         this.api = api;
     }
 
+    /** 退出登录时由 RepositoryProvider.reset() 调用:取消在途请求,免得回调回来时 repo 已被清空 */
+    @Override
+    public void shutdown() {
+        api.cancelAll();
+    }
+
     // ---- 鉴权 ----
     @Override
     public void login(String username, String password, WmsCallback<String> cb) {

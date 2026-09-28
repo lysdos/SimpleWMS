@@ -140,18 +140,26 @@ public class OutboundDetailActivity extends AppCompatActivity {
             AddOutboundItemDialog.show(this, dbId, this::render);
         });
 
-        btnComplete.setOnClickListener(v ->
-                RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
-                        new WmsCallback<OutboundOrder>() {
-                            @Override public void onSuccess(OutboundOrder o) {
-                                Toast.makeText(OutboundDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
-                                finish();
-                            }
-                            @Override public void onError(int code, String msg) {
-                                Toast.makeText(OutboundDetailActivity.this,
-                                        getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
-                            }
-                        }));
+        // 提交是"一提交就出货"的动作:请求没回来前把按钮禁掉,连点两次会发两次 /commit
+        // (第二次拿到"单据已不是草稿"的报错,现场只会以为提交失败了)。按钮禁用后不再收点击事件,
+        // 所以置灰本身就是防抖,不需要额外判断。
+        btnComplete.setOnClickListener(v -> {
+            btnComplete.setEnabled(false);
+            RepositoryProvider.get().commitOutbound(String.valueOf(dbId),
+                    new WmsCallback<OutboundOrder>() {
+                        @Override public void onSuccess(OutboundOrder o) {
+                            if (gone()) return;
+                            Toast.makeText(OutboundDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
+                            finish();
+                        }
+                        @Override public void onError(int code, String msg) {
+                            if (gone()) return;
+                            btnComplete.setEnabled(true);
+                            Toast.makeText(OutboundDetailActivity.this,
+                                    getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        });
     }
 
     @Override
@@ -167,6 +175,15 @@ public class OutboundDetailActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         uiHandler.removeCallbacksAndMessages(null);
+    }
+
+    /**
+     * 页面已经关了(用户返回 / 退出登录后系统回收)?回调回来时什么都别做 ——
+     * 既别碰 View(会 NPE 或闪错),也别再取 RepositoryProvider.get():
+     * 退出登录会把它清空,那一步会抛 IllegalStateException 崩在主线程。
+     */
+    private boolean gone() {
+        return isFinishing() || isDestroyed();
     }
 
     // ============================================================
@@ -357,6 +374,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
         RepositoryProvider.get().submitOutboundEpcScan(String.valueOf(dbId), epc,
                 new WmsCallback<EpcScanResult>() {
                     @Override public void onSuccess(EpcScanResult r) {
+                        if (gone()) return;
                         if (r != null && r.matched) {
                             scannedCodes.add(canonical);
                             if (r.alreadyScanned) {
@@ -380,6 +398,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                     @Override public void onError(int code, String msg) {
                         // 网络/服务端瞬时失败:同样放开去重,允许重扫
                         triedCodes.remove(canonical);
+                        if (gone()) return;
                         showScanErrorLimited(getString(R.string.msg_scan_failed, msg));
                     }
                 });
@@ -395,6 +414,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                         RepositoryProvider.get().resetOutboundScans(String.valueOf(dbId),
                                 new WmsCallback<Integer>() {
                                     @Override public void onSuccess(Integer deleted) {
+                                        if (gone()) return;
                                         scannedCodes.clear();
                                         triedCodes.clear();
                                         Toast.makeText(OutboundDetailActivity.this,
@@ -438,16 +458,24 @@ public class OutboundDetailActivity extends AppCompatActivity {
     }
 
     private void submitScan(String code) {
+        // 与 EPC 路径(submitEpcScan)同一套去重:提交中先占位,免得等待响应时同一个码被反复上报
+        // —— 条码只靠硬件侧 1500ms 防抖,摄像头兜底那条路径没有防抖(见 startBarcodeScan)。
+        // 失败后再放开,允许重扫。
+        final String canonical = canonicalCode(code);
+        triedCodes.add(canonical);
         RepositoryProvider.get().submitOutboundScan(String.valueOf(dbId), code,
                 new WmsCallback<OutboundOrder>() {
                     @Override public void onSuccess(OutboundOrder o) {
-                        scannedCodes.add(canonicalCode(code));
+                        if (gone()) return;
+                        scannedCodes.add(canonical);
                         BeepUtil.success();
                         Toast.makeText(OutboundDetailActivity.this,
                                 getString(R.string.scanned_out_fmt, code), Toast.LENGTH_SHORT).show();
                         renderSoon();
                     }
                     @Override public void onError(int code, String msg) {
+                        triedCodes.remove(canonical);
+                        if (gone()) return;
                         handleScanError(code, msg);
                     }
                 });
@@ -485,6 +513,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
         if (warehouseByLoc.isEmpty()) {
             RepositoryProvider.get().listLocations(new WmsCallback<List<Location>>() {
                 @Override public void onSuccess(List<Location> locs) {
+                    if (gone()) return;
                     if (locs != null) {
                         for (Location l : locs) {
                             if (l.code != null) warehouseByLoc.put(l.code, l.warehouseName);
@@ -492,7 +521,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
                     }
                     loadOrder();
                 }
-                @Override public void onError(int code, String msg) { loadOrder(); }
+                @Override public void onError(int code, String msg) { if (!gone()) loadOrder(); }
             });
         } else {
             loadOrder();
@@ -503,10 +532,12 @@ public class OutboundDetailActivity extends AppCompatActivity {
         RepositoryProvider.get().getOutboundOrder(String.valueOf(dbId),
                 new WmsCallback<OutboundOrder>() {
                     @Override public void onSuccess(OutboundOrder o) {
+                        if (gone()) return;
                         if (o == null) { finish(); return; }
                         doRender(o);
                     }
                     @Override public void onError(int code, String msg) {
+                        if (gone()) return;
                         Toast.makeText(OutboundDetailActivity.this,
                                 getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
                     }

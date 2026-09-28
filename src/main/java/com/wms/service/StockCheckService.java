@@ -266,15 +266,21 @@ public class StockCheckService {
 
     /**
      * 取消盘点(DRAFT → CANCELLED),不删除明细,保留追溯。
+     *
+     * 加锁读 + 检查影响行数,与 commit 对齐:以前这里既不取行锁、也**丢掉** dao.cancel 的
+     * 返回值 —— 恰好与一个并发提交错开时,UPDATE 的 WHERE status='DRAFT' 匹配 0 行,
+     * 方法却正常返回,接口报"已取消"而单子实际是 COMMITTED。
      */
     @Transactional
     public void cancel(int checkId) {
-        StockCheck c = dao.findCheckById(checkId);
+        StockCheck c = dao.findCheckByIdForUpdate(checkId);
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可取消");
         }
-        dao.cancel(checkId);
+        if (dao.cancel(checkId) == 0) {
+            throw new IllegalStateException("取消失败,状态已变更");
+        }
     }
 
     /**

@@ -75,7 +75,7 @@ const I18N = (() => {
         'cp.title':            { 'zh-CN': '修改密码 - SimpleWMS',         'en-US': 'Change Password - SimpleWMS' },
         'cp.subtitle':         { 'zh-CN': '首次登录请修改密码',            'en-US': 'Please change your password on first login' },
         'cp.old':              { 'zh-CN': '原密码',                        'en-US': 'Old Password' },
-        'cp.new':              { 'zh-CN': '新密码(至少 6 位)',             'en-US': 'New Password (min 6 chars)' },
+        'cp.new':              { 'zh-CN': '新密码(至少 8 位)',             'en-US': 'New Password (min 8 chars)' },
         'cp.new2':             { 'zh-CN': '确认新密码',                    'en-US': 'Confirm New Password' },
         'cp.submit':           { 'zh-CN': '保存',                          'en-US': 'Save' },
         'cp.error.mismatch':   { 'zh-CN': '两次输入不一致',                'en-US': 'Passwords do not match' },
@@ -229,6 +229,7 @@ const I18N = (() => {
         'orders.export_selected':{ 'zh-CN': '导出选中',                      'en-US': 'Export Selected' },
         'orders.export_all':   { 'zh-CN': '导出筛选全部',                  'en-US': 'Export All Filtered' },
         'orders.export_done':  { 'zh-CN': '导出完成',                      'en-US': 'Export done' },
+        'orders.export_failed':{ 'zh-CN': '导出失败(HTTP {code})',        'en-US': 'Export failed (HTTP {code})' },
         'orders.selected_count':{ 'zh-CN': '已选 {n} 条',                  'en-US': '{n} selected' },
 
         /* ---------- 入库单详情 ---------- */
@@ -562,7 +563,7 @@ const I18N = (() => {
         'user.role.ADMIN':     { 'zh-CN': '管理员',                        'en-US': 'Admin' },
         'user.toast.created':  { 'zh-CN': '创建成功',                      'en-US': 'Created' },
         'user.toast.reset_done':{ 'zh-CN': '已重置',                       'en-US': 'Reset' },
-        'user.prompt.reset_pw':{ 'zh-CN': '为「{n}」设置新密码(至少 6 位):', 'en-US': 'Set new password for "{n}" (min 6 chars):' },
+        'user.prompt.reset_pw':{ 'zh-CN': '为「{n}」设置新密码(至少 8 位):', 'en-US': 'Set new password for "{n}" (min 8 chars):' },
         'user.confirm.del':   { 'zh-CN': '确认删除用户「{n}」?\n\n该用户的库存流水 / 出入库单等业务记录将保留(createdBy 字段保留原用户名)。', 'en-US': 'Delete user "{n}"?\n\nTheir stock logs and orders are kept (createdBy field preserves the original username).' },
         'user.toast.deleted': { 'zh-CN': '已删除',                        'en-US': 'Deleted' },
         'user.toast.enabled':  { 'zh-CN': '已启用',                        'en-US': 'Enabled' },

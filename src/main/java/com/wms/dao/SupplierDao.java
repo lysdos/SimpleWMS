@@ -10,6 +10,8 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 @Repository
@@ -110,6 +112,24 @@ public class SupplierDao {
                 "JOIN supplier s ON ps.supplier_id = s.id " +
                 "WHERE ps.product_id = ? ORDER BY ps.is_default DESC, s.name ASC",
                 PS_ROW, productId);
+    }
+
+    /**
+     * 一次取回多个商品的供应商关联,供商品列表页批量回填(消 N+1)。
+     * 返回顺序:`product_id` 分组、组内**默认在前、名称升序** —— 与单商品版本一致,
+     * 所以调用方按 productId 分组后直接顺序使用即可。
+     *
+     * 占位符按 id **个数**生成(不拼接任何传入字符串),参数走 `?` 绑定。
+     */
+    public List<ProductSupplier> findSuppliersByProducts(Collection<Integer> productIds) {
+        if (productIds == null || productIds.isEmpty()) return List.of();
+        String placeholders = String.join(",", Collections.nCopies(productIds.size(), "?"));
+        return jdbc.query(
+                "SELECT ps.*, s.name AS supplier_name FROM product_supplier ps " +
+                "JOIN supplier s ON ps.supplier_id = s.id " +
+                "WHERE ps.product_id IN (" + placeholders + ") " +
+                "ORDER BY ps.product_id ASC, ps.is_default DESC, s.name ASC",
+                PS_ROW, productIds.toArray());
     }
 
     public ProductSupplier findDefaultSupplier(int productId) {

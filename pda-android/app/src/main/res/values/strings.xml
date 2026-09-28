@@ -50,6 +50,7 @@
     <string name="settings_not_wms">已连接，但不是 WMS 后端</string>
     <string name="settings_reset_done">已恢复默认</string>
     <string name="settings_address_required">地址不能为空</string>
+    <string name="settings_address_invalid">地址格式不对，需以 http:// 或 https:// 开头</string>
     <string name="settings_test_fail">连接失败</string>
     <string name="settings_reset">恢复默认</string>
     <!-- 语言名按惯例用各自的语言显示,不随界面语言变 —— 所以标 translatable="false" -->

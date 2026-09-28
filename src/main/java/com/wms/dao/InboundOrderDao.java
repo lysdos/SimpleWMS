@@ -132,8 +132,9 @@ public class InboundOrderDao {
      * 重算 total_quantity 和 item_count(明细增删后调用)。
      *
      * ⚠️ 这是 DML 里的相关子查询,属**加锁读**,会锁住 inbound_order_item 上该单的索引范围。
-     * 目前安全:改明细是人工节奏(一张单一个人操作),不存在同单并发。若将来出现同单并发写明细
-     * (批量导入、PDA 齐发等),需先把单头行加锁 —— 做法与原因见 StockCheckDao.findCheckByIdForUpdate。
+     * 以前靠"一张单一个人操作"的人工节奏规避;2026-09-28 起改由
+     * {@link #findInboundOrderByIdForUpdate(int)} 在事务开头先锁单头,同单并发在此排成队,
+     * 后面这段范围锁就没人跟它抢(做法与原因见 StockCheckDao.findCheckByIdForUpdate)。
      */
     public void refreshAggregates(int orderId) {
         jdbc.update(
@@ -184,6 +185,25 @@ public class InboundOrderDao {
     public InboundOrder findOrderById(int id) {
         List<InboundOrder> list = jdbc.query(
                 "SELECT * FROM inbound_order WHERE id = ?", ORDER_ROW, id);
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 加锁读入库单头。**凡是要改这张草稿单的写事务,必须以它作为事务里的第一条读。**
+     *
+     * 为什么需要:改明细的 DAO(insertItem / updateItem / deleteItem / refreshAggregates)
+     * 都**不带** {@code AND status='DRAFT'} 守卫,状态守卫只在最后一步 commit/cancel。
+     * 于是一边"PDA 追加明细"、一边"提交"并发时,提交完的单会被继续追加:那些明细行
+     * 永远不会被激活(commit 已经跑完),对应的 PENDING 占位单元就成了孤儿 ——
+     * 既不计入库存,又因为 {@code countActiveByProductId} 认 PENDING 而永远挡住商品删除。
+     * 事务开头先锁单头,后到的那个会排队等锁,拿到锁时状态已不是 DRAFT,直接抛 409。
+     *
+     * ⚠️ 不能"先用普通 findOrderById 再补一条 FOR UPDATE":一致性读视图已经在那之前建立,
+     * 后续的状态判断仍看旧快照。FOR UPDATE 是当前读,一次读到位才不会留这个缝。
+     */
+    public InboundOrder findInboundOrderByIdForUpdate(int id) {
+        List<InboundOrder> list = jdbc.query(
+                "SELECT * FROM inbound_order WHERE id = ? FOR UPDATE", ORDER_ROW, id);
         return list.isEmpty() ? null : list.get(0);
     }
 

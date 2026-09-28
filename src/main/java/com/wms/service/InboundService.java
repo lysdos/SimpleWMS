@@ -136,7 +136,7 @@ public class InboundService {
         order.setStatus(InboundOrder.STATUS_DRAFT);
         order.setTotalQuantity(0);
         order.setItemCount(0);
-        int newOrderId = orderDao.insertOrder(order);
+        int newOrderId = insertOrderWithRetry(order);
         order.setId(newOrderId);
 
         // 3. 写明细 + 生成 PENDING 单元(不调 adjustQuantity、不写 inventory_log)
@@ -184,7 +184,7 @@ public class InboundService {
         order.setStatus(InboundOrder.STATUS_DRAFT);
         order.setTotalQuantity(0);
         order.setItemCount(0);
-        int id = orderDao.insertOrder(order);
+        int id = insertOrderWithRetry(order);
         order.setId(id);
         orderDao.updateStatus(id, InboundOrder.STATUS_DRAFT);
         return getOrder(id);
@@ -332,8 +332,14 @@ public class InboundService {
         return getOrder(orderId);
     }
 
+    /**
+     * 取草稿入库单,**加行锁**(FOR UPDATE)。改明细的三个入口(updateDraftHeader /
+     * updateDraftItem / deleteDraftItem)都以它开头,锁在事务第一条读上拿到,
+     * 于是"改明细"与"提交/取消"在同一张单上串行 —— 详见
+     * {@link com.wms.dao.InboundOrderDao#findInboundOrderByIdForUpdate(int)}。
+     */
     private InboundOrder requireDraftOrder(int orderId) {
-        InboundOrder order = orderDao.findOrderById(orderId);
+        InboundOrder order = orderDao.findInboundOrderByIdForUpdate(orderId);
         if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以修改明细, 当前 status=" + order.getStatus());
@@ -346,7 +352,9 @@ public class InboundService {
      */
     @Transactional
     public InboundOrder commitDraft(int orderId) {
-        InboundOrder order = orderDao.findOrderById(orderId);
+        // 加锁读(事务第一条读):与"追加/修改明细"互斥,否则提交完的单还会被追加明细,
+        // 那些行的 PENDING 占位单元永远不会被激活(见 findInboundOrderByIdForUpdate)
+        InboundOrder order = orderDao.findInboundOrderByIdForUpdate(orderId);
         if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以提交, 当前 status=" + order.getStatus());
@@ -397,7 +405,7 @@ public class InboundService {
      */
     @Transactional
     public void cancelDraft(int orderId) {
-        InboundOrder order = orderDao.findOrderById(orderId);
+        InboundOrder order = orderDao.findInboundOrderByIdForUpdate(orderId);
         if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以取消, 当前 status=" + order.getStatus());
@@ -424,7 +432,9 @@ public class InboundService {
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("入库明细不能为空");
         }
-        InboundOrder order = orderDao.findOrderById(orderId);
+        // 加锁读:追加明细与提交/取消互斥(新建单时 doInboundBatch 会走到这里,
+        // 那行是自己事务刚插入的,拿自己的锁无副作用)
+        InboundOrder order = orderDao.findInboundOrderByIdForUpdate(orderId);
         if (order == null) throw new NotFoundException("入库单不存在, id=" + orderId);
         if (!InboundOrder.STATUS_DRAFT.equals(order.getStatus())) {
             throw new IllegalStateException("只有 DRAFT 单可以追加明细, 当前 status=" + order.getStatus());
@@ -596,6 +606,23 @@ public class InboundService {
         }
         o.setItems(items);
         return o;
+    }
+
+    /**
+     * 建单头:订单号撞 {@code uk(orders.order_no)} 时换个号再试一次。
+     *
+     * 单号 = 秒级时间戳 + 3 位随机(1/900),同一秒内两处同时建单确有概率撞上,而
+     * order_no 是 UNIQUE —— 不重试的话用户看到的是一句原始驱动报错(Duplicate entry ...),
+     * 再点一次多半就好了,但现场只会以为系统坏了。口径与
+     * {@link StockCheckService#create} 的重试一致(盘点单号早就这么做了,订单侧一直没有)。
+     */
+    private int insertOrderWithRetry(InboundOrder order) {
+        try {
+            return orderDao.insertOrder(order);
+        } catch (DuplicateKeyException e) {
+            order.setOrderNo(genOrderNo());
+            return orderDao.insertOrder(order);
+        }
     }
 
     private static String genOrderNo() {

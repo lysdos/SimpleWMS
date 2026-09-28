@@ -28,9 +28,10 @@
 | 404 | 资源不存在:抛 `NotFoundException`(**唯一机制**,状态码与提示语文案无关)。划分口径见 §1.2.2 | 404 |
 | 405 | 路径匹配但 HTTP 方法不支持 | 405 |
 | 406 | 客户端 `Accept` 无法满足(Spring 自身处理,**响应体为空**) | — |
-| 409 | 业务冲突(库存不足 / 状态不对) | 409 |
+| 409 | 业务冲突(库存不足 / 状态不对 / 并发下已被改动)。数据库约束冲突(`DataIntegrityViolationException`)也走这里,但**只回通用文案**,驱动原文(表名/列名/约束名)只记服务端日志 | 409 |
 | 415 | 请求 `Content-Type` 不支持(应为 `application/json`) | 415 |
 | 422 | 不可处理实体(扫码校验失败) | 422 |
+| 429 | 请求过于频繁(登录失败次数超限,`TooManyRequestsException`) | 429 |
 | 500 | 服务器异常 | 500 |
 
 `GlobalExceptionHandler.badArg` 现在**只负责 400**(`IllegalArgumentException` = 请求参数/内容有问题)。404 一律由 `NotFoundException` 给出,不靠消息文案判断。
@@ -69,7 +70,29 @@
 - **登录成功**:后端签发 JWT(默认 24h),返回 `{token, username, role, mustChangePw}`
 - **Authorization 头**:`Authorization: Bearer <token>`
 - **过期**:`JwtAuthFilter` 抛 `AuthenticationException` → 401
-- **PDA 登录后**:token 存 `SessionStore`(SharedPreferences),`ApiClient` 拦截器自动注入
+- **PDA 登录后**:token 存 `SessionStore`(加密的 EncryptedSharedPreferences),`ApiClient` 拦截器自动注入
+- **登录限流(2026-09-28)**:同一 (**用户名 + IP**) 连错 5 次、或同一 **IP** 累计错 20 次 → 该维度锁 5 分钟并返回 **429**。
+  两把尺子是刻意的:只按用户名计数,谁都能拿别人的工号把别人锁在门外;只按 IP 计数,同一个 nginx 出口下的同事会互相连坐。
+  成功后计数清零;计数在**进程内存**里,多实例部署需换成共享存储才有意义。
+  客户端 IP 取 `X-Real-IP` —— nginx 用 `proxy_set_header X-Real-IP $remote_addr` **覆写**该头,伪造无效。
+- **密码下限 8 位(2026-09-28)**:新建用户 / 管理员重置 / 自行改密都按 8 位卡(此前是 6 位,与首个 admin 账号的 8 位口径不一)。
+  存量 6~7 位口令**仍可登录**,这次收紧只作用于新建与改密,不会把现有账号锁在外面。
+
+#### 1.3.1 免登录路径:只有条码图一个(2026-09-28 收紧)
+
+除 `POST /api/auth/login` 外,**唯一**免登录的资源是 `GET /api/inventory/items/{id}/barcode.png` ——
+前端用 `<img src>` 渲染它,而 `<img>` 带不了 Authorization 头。
+
+**所有 `export.csv`(出入库单 / 盘点单 / 库存)一律要求登录。**
+
+> 此前 `JwtAuthFilter` 用「公开前缀 + `/export.csv` 或 `/barcode.png` 后缀」匹配,而
+> `/api/inventory/items/` 也在前缀列表里 —— 于是 `GET /api/inventory/items/export.csv` 被判成公开路径:
+> **任何人无需 token 就能下载全量库存台账**(实测 HTTP 200 + 数千行 CSV,含 24 位码 / SKU / 仓库 / 库位 /
+> 创建人 / 出入库单 id / 报废原因);单据导出还能靠枚举 id 匿名读取。
+> 现在改为一条精确正则 `^/api/inventory/items/\d+/barcode\.png$`,后缀匹配彻底删除 ——
+> 将来新增任何 `/export.csv` 路由都不会被静默放行。
+> 三个导出入口(出入库单详情、库存管理工具栏)已从裸 `<a href>` 改成 `api.download()`(fetch + Bearer + Blob 下载);
+> 盘点单导出本来就是这么做的。
 
 ### 1.4 操作员字段
 
@@ -98,7 +121,7 @@
 
 | 方法 | URL | 鉴权 | 请求 | 响应 | 错误码 |
 |---|---|---|---|---|---|
-| POST | `/login` | 公开 | `{username, password}` | `{token, username, role, mustChangePw}` | 401 用户名密码错 |
+| POST | `/login` | 公开 | `{username, password}` | `{token, username, role, mustChangePw}` | 401 用户名密码错 / 403 账号已禁用 / **429 失败次数超限** |
 | POST | `/logout` | 已登录 | — | `{code:0,message:ok}` | — |
 | GET | `/me` | 已登录 | — | `{userId, username, role}` | 401 |
 | POST | `/me/change-password` | 已登录 | `{oldPassword, newPassword}` | `{code:0,message:ok}` | 400 旧密码错 |
@@ -118,8 +141,14 @@
 | GET | `/?keyword=&supplier=` | 已登录 | `keyword` 可选模糊匹配 sku/name/category;`supplier` 传**供应商名**,匹配该商品**关联过**的供应商(见下) | `[{id, sku, name, ..., suppliers:[]}]` | — |
 | GET | `/{id}` | 已登录 | — | `{...同上 + suppliers:[]}` | 404 |
 | POST | `/` | **ADMIN** | `{sku, name, category?, unit?, location?, quantity?, unitPrice?, lowStock?, remark?, suppliers?:[]}` | 创建后 | 400 |
-| PUT | `/{id}` | **ADMIN** | 同上 | 更新后 | 404 |
+| PUT | `/{id}` | **ADMIN** | 同上去掉 `quantity` | 更新后 | 404 |
 | DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404 |
+
+> **`PUT` 不接受 `quantity`(2026-09-28 起)**:商品数量不是资料的一部分,只由出入库 / 报废的原子增减维护
+> (`ProductDao.adjustQuantity`)。此前 create/update 共用一个解析方法、把缺失的 `quantity` 补成 0,而 DAO 的
+> UPDATE 整行写 `quantity=?` —— 一个不带 `quantity` 的 PUT 就能把库存清零,而 `inventory_item` 一件没动,
+> 仪表盘总量/总值/低库存跟着一起错(编辑弹窗用的是打开时的旧值,并发下同样会覆盖)。
+> 现在编辑路径根本不解析这个字段(传了也忽略),前端编辑弹窗把它渲染成只读;**新建**时仍可填初始数量。
 
 `suppliers[]` 写入元素:`{supplierId, isDefault, unitPrice?, remark?}`;读取元素(`GET` 返回的):`{id, name, isDefault}`,顺序为**默认供应商在前**(`is_default DESC, name ASC`)。写入时全量替换。
 
@@ -195,6 +224,14 @@
 | POST | `/orders/{id}/commit` | — | `InboundOrder`(status=COMMITTED,items[].codes 是生成的 N 个 24 位码) | 409 单子非 DRAFT / 空单 |
 | POST | `/orders/{id}/cancel` | — | `{code:0}` | 409 单子非 DRAFT |
 
+> **同一张草稿单的并发写现在是串行的(2026-09-28)**:`append/update/delete 明细`、`commit`、`cancel`、
+> 扫码确认都会在事务开头对单头取**行锁**(`SELECT ... FOR UPDATE`,与盘点单同一套做法)。
+> 后到的请求拿到锁时状态已经不是 DRAFT,直接 409(如「只有 DRAFT 单可以追加明细,当前 status=COMMITTED」)。
+> 为什么必须这样:改明细的 DAO 写入本身**不带** `AND status='DRAFT'` 守卫,守卫只在最后一步 commit/cancel ——
+> 于是"PDA 正在追加明细"与"另一个人提交同一张单"并发时,提交完的单会被继续追加:那些行永远不会被激活,
+> 对应占位单元变成孤儿 PENDING(不计库存、又挡住商品删除)。出库侧后果对称:刚锁的货再没人释放
+> (状态 RESERVED、所属单却是 COMMITTED),`product.quantity` 一并少算。
+
 **查询**:
 | 方法 | URL | 参数 |
 |---|---|---|
@@ -210,7 +247,7 @@
 
 > **`POST /api/outbound`(单货出库)已删除(2026-09-24)**:与入库侧对称 —— 全仓库没有调用方(Web 建单走 `/batch`,PDA 与 UHF 桥接走 `/orders`、`/dispatches`,测试零引用,nginx 日志也没有它的请求)。要出单件,传单元素数组给 `/batch`。它**没有**入库那条的事务隐患(`doOutbound` 自己标了 `@Transactional`),所以这次纯粹是清死入口。
 
-**草稿单流(PDA 主流)**:
+**草稿单流(PDA 主流)**:同一张草稿单的并发写已串行化(行锁,见 §2.8 的说明,出库侧同理)。
 | 方法 | URL | 请求 | 响应 | 错误 |
 |---|---|---|---|---|
 | POST | `/orders` | `{customer?, externalNo?, remark?}` | `OutboundOrder{status:DRAFT}` | 400 |
@@ -227,12 +264,21 @@
 **出库单明细的 `picks` 字段(2026-09-20 新增)**:`GET /orders/{id}` 的每个明细行带 `picks`,是「库位码 → 件数」的映射(如 `{"A-01-01":6,"B-01-01":2}`),按库位码升序。它由**该行真实锁定的库存单元**统计而来,是 `location` 为空时现场唯一能知道"去哪儿拿货"的依据(PDA 出库详情据此渲染「拣货: 主仓库/A-01-01 × 6 · 副仓库/B-01-01 × 2」)。注意它是**响应字段、不存表**。
 
 **出库单明细的 `codesByLocation` 字段(2026-09-21 新增)**:同一响应里的每个明细行还带 `codesByLocation`,是「库位码 → 该库位取到的 24 位码列表」的映射(如 `{"A-01-01":["...3301","...3302"],"B-01-01":["...3401"]}`)。
+> **已提交的单同样有值(2026-09-28 修复)**:`commitReservations` 置 OUT 时不再清空 `inventory_item.outbound_order_id` —— 那一列正是"这条明细出了哪几件"的唯一线索。此前一提交就清掉,于是订单一 COMMITTED,详情页的条码行变「无条码」、库位列退化成「自动」,`GET /api/inventory/items/by-outbound/{id}` 永远返回空,打印/导出再也看不出实际取货分布。
+> 现在只有"退还在库"的单元(单据被改小、老数据余货)才会清这一列。**历史数据无法追回**:库里已有的 OUT 单元记录里该列已被置空。
 > 补它是因为 `codes` 是**纯字符串列表、不带库位** —— 一个商品同时躺在主仓和副仓时,现场拿着几个码看不出哪个该放哪个仓(跨库位取货之后这是常态)。
 > 它与 `picks` **同源同序**(同一个循环产出、都用 `TreeMap`),所以 `codesByLocation.keySet()` 与 `picks.keySet()` **恒等**:同一个库位,`picks` 给件数、`codesByLocation` 给码。
 > 两者**不能靠推算对应**:`picks` 记的是件数、`codes` 是一单元一码,老数据(`remaining>1`)一个码算多件,切不出块。
 > 同样**不存表**;`codes` 保持原样没动(入库明细也在用它,且 PDA 靠它做扫码 ✓ 标记的身份比对)。
 > 空库位码(`""`)的抬头统一显示「未指定库位」(Web / CSV / PDA 一个说法)。
 > 已知限制:同一张单若存在两行**同商品**的明细,按商品查单元会让两行拿到同一批单元(`codes` 与 `picks` 都会重复)。出库批量建单本身按商品合并,正常不会出现;手工往草稿追加同商品行才会。
+
+**UHF 相关端点**(不在上表,实现在 `OutboundController`):`GET /orders/{id}/expect`(期望扫码清单,取本单 RESERVED 单元)、
+`POST /orders/{id}/scan-epc`(扫码确认,不扣库存)、`POST /orders/{id}/reset-scans`(清本单扫码确认)、
+`POST /orders/{id}/dispatch` 与 `GET /dispatches` / `POST /dispatches/{id}/claim`(派单到设备)。
+> `scan-epc` 的 `createdBy` **可以由请求体给出**,这是有意设计:UHF-Rader 持的是它自己的服务账号 token,
+> 但扫码是**人工**动作,桥接把浏览器会话里那名操作员的名字转发过来(`wms_bridge.py`)。所以这条审计的可信前提是
+> **桥接服务本身可信**;代价是任何已登录用户都能在这个字段上冒名。
 
 **追加明细会并进同商品的行(2026-09-20 起)**:`POST /orders/{id}/items` 若该单已有同商品的行,就**数量相加**到那一行上,不再新插一行(`addItemToDraft`)。这样上面那条"同商品两行"的限制从**入口**上就不可达了 —— 批量建单(`/batch`)本来就按商品合并,这次把 PDA 的追加路径对齐了它。
 > 代价:第二次传的 `rowRemark` 会被丢掉(第一行的备注生效),与批量建单行为一致。
@@ -248,7 +294,7 @@
 | GET | `/?sku&location&warehouseId&status&expiryStatus&expiryFrom&expiryTo&page&pageSize` | 已登录 | 过滤 + 分页;`sku` 是**模糊匹配,同时命中 `sku` 与 24 位 `code`**(2026-09-21 起 —— 同一个搜索框既能搜 SKU 也能搜实物码);`warehouseId` 按仓库筛(经 `location.warehouse_id`),一个商品分散多仓时用它分别看数 |
 | GET | `/{id}` | 已登录 | |
 | GET | `/by-inbound/{orderId}` | 已登录 | 入库单下所有单元 |
-| GET | `/by-outbound/{orderId}` | 已登录 | 出库单消耗的所有单元 |
+| GET | `/by-outbound/{orderId}` | 已登录 | 出库单消耗的所有单元(RESERVED + OUT;**2026-09-28 起已提交的单同样有值**,见 §2.9) |
 | GET | `/by-code/{code}` | 已登录 | PDA 扫码查询;code→InventoryItem |
 | GET | `/by-epc/{epc}` | 已登录 | EPC 别名(同 by-code) |
 | GET | `/by-code/{code}/product` | 已登录 | code→InventoryItem→Product(PDA 入库扫码解析) |
@@ -368,7 +414,18 @@ PDA 扫码链路涉及的端点(共 4 个):
 ## 8. 后续待办
 
 - 出库扫码加 SKU 校验(避免错码入错单)— 当前仅校验码 + IN_STOCK
-- 限流中间件(防 PDA 端 bug 触发批量请求)
+- 接口限流(防 PDA 端 bug 触发批量请求)。登录入口已有失败限流(§1.3),其余接口仍无
 - 库存上量后给「全库盘点」加提示/限制(建单会把该范围期望行逐行写进 `stock_check_item`,现在 19 件无所谓)
 - 库存 item 批量报废 / 批量调拨
 - 盘点 commit 支持"扫码模式"自动算 diff(避免要求所有明细填完)
+
+### 8.1 已评审但**本轮明确不做**(2026-09-28,避免后人重复排查)
+
+- **`RIGHT(code, ?)` 尾匹配用不上索引**:扫码兜底(条码前导零丢失兼容,见 `InventoryItemDao.findByCode`)在**增长最快的表**上不可走 `uk_inventory_item_code`。当前表内只有几十行,且精确匹配是快路径、只有落空才走兜底,所以收益要到千行级才显现。届时的做法是加一个生成列 `RIGHT(code, 24)` + 索引,或干脆存一列规范化码。
+- **`GET /api/inventory/items/export.csv` 单次 5000 行、无分页**:行数由 controller 传的 `pageSize` 决定,DAO 不额外封顶;库存上量后要改成分页或流式。
+- **导出的分页语义**:DAO 里 `pageSize > 200` 即视为"导出/批量"并强制 `OFFSET 0`,任何调用方传大 `pageSize` 都会忽略 `page` 参数 —— 当前唯一调用方就是导出,行为正确,但别拿它当分页接口。
+- **未分页渲染**:Web 的商品 / 供应商 / 库位 / 仓库列表与盘点详情一次性渲染全部行(库存与单据列表已分页)。数据量小,先不动。
+- **`GeneratedKeys.id` 失败时返回 0**:MySQL 驱动稳定返回 `GENERATED_KEY`,只有 `UserDao.insert` 与库存单元插入做了 0 值防护;其余调用方会把 0 当真实 id。属防御性加固。
+- **`RoleInterceptor` 默认放行**(没写 `@RequireRole` 就对所有已登录用户开放):这是既定姿态(见 §5 矩阵),代价是新增 controller 忘写注解即默认开放。
+- **`barcode.png` 的 404 是空响应体**(`ResponseEntity.status(404).build()`),与其余 404 的 JSON 壳不一致;二进制端点,暂不动。
+- **i18n `t(key, {default})` 不支持 `default` 参数**、`confirmModal` 硬编码中文「确认」:`views.js` 的 `statusLabel`/`docStatusLabel` 是死代码,一旦被调用会吐裸 key。低危。

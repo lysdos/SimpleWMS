@@ -13,6 +13,7 @@ import com.wms.model.OutboundOrderItem;
 import com.wms.model.Product;
 import com.wms.model.ScanResult;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,7 +63,7 @@ public class OutboundService {
         o.setStatus(OutboundOrder.STATUS_DRAFT);  // INSERT SQL 已写 status 列
         o.setTotalQuantity(m.values().stream().mapToInt(x->x.quantity).sum());
         o.setItemCount(m.size());
-        int id=orderDao.insertOrder(o);o.setId(id);
+        int id=insertOrderWithRetry(o);o.setId(id);
         for(BatchItem b:m.values()){
             Product p=productDao.findById(b.productId).orElseThrow(()->new IllegalArgumentException("商品不存在, id="+b.productId));
             OutboundOrderItem it=new OutboundOrderItem();
@@ -82,7 +83,7 @@ public class OutboundService {
         o=orderDao.findOrderById(id);o.setItems(orderDao.findItemsByOrderId(id));
         return o;
     }
-    @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String createdBy){if(createdBy==null||createdBy.isBlank())createdBy="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setCreatedBy(createdBy);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=orderDao.insertOrder(o);o.setId(id);return getOrder(id);}
+    @Transactional public OutboundOrder createDraft(String customer,String externalNo,String remark,String createdBy){if(createdBy==null||createdBy.isBlank())createdBy="操作员";OutboundOrder o=new OutboundOrder();o.setOrderNo(genOrderNo());o.setCustomer(blank(customer));o.setExternalNo(blank(externalNo));o.setRemark(blank(remark));o.setCreatedBy(createdBy);o.setTotalQuantity(0);o.setItemCount(0);o.setStatus(OutboundOrder.STATUS_DRAFT);int id=insertOrderWithRetry(o);o.setId(id);return getOrder(id);}
     @Transactional public OutboundOrder scanCodeToDraft(int orderId, String code) {
         OutboundOrder o = requireDraft(orderId);
         InventoryItem inv = itemDao.findByCode(code);
@@ -378,7 +379,19 @@ public class OutboundService {
         return logDao.deleteScansForOutbound(orderId);
     }
 
-    private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderById(id);if(o==null)throw new NotFoundException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
+    /**
+     * 取草稿单,**加行锁**(FOR UPDATE)。
+     *
+     * 为什么必须加锁:改明细的 DAO 写入都没有 {@code AND status='DRAFT'} 守卫(守卫只在
+     * commit/cancel 的最后一步),所以并发下"追加明细"能穿过已提交的单 —— 见
+     * {@link com.wms.dao.OutboundOrderDao#findOrderByIdForUpdate(int)} 的说明。
+     * 锁在事务第一条读上拿到,同单的写操作就从此排队,后到者看到的状态已经变了。
+     *
+     * 必须是**第一条读**:本方法在 commitDraft / addItemToDraft / updateDraftHeader /
+     * cancelDraft / reserveDraft / scanCodeToDraft / scanEpc / resetScans 开头调用,
+     * 都早于任何写入。
+     */
+    private OutboundOrder requireDraft(int id){OutboundOrder o=orderDao.findOrderByIdForUpdate(id);if(o==null)throw new NotFoundException("出库单不存在, id="+id);if(!OutboundOrder.STATUS_DRAFT.equals(o.getStatus()))throw new IllegalStateException("出库单不是草稿");return o;}
 
     @Transactional(readOnly=true)
     public OutboundOrder getOrder(int id) {
@@ -490,6 +503,15 @@ public class OutboundService {
         return getOrder(orderId);
     }
 
+    /**
+     * 建单头:订单号撞 uk(outbound_order.order_no) 时换个号再试一次。
+     * 单号 = 秒级时间戳 + 3 位随机(1/900),同秒并发建单有概率撞上,而 order_no 是 UNIQUE;
+     * 不重试就是一句原始驱动报错。口径与 {@link StockCheckService#create} 的重试一致。
+     */
+    private int insertOrderWithRetry(OutboundOrder o){
+        try{ return orderDao.insertOrder(o); }
+        catch(DuplicateKeyException e){ o.setOrderNo(genOrderNo()); return orderDao.insertOrder(o); }
+    }
     private static String genOrderNo(){return "OUT-"+LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))+"-"+(int)(Math.random()*900+100);}private static String blank(String s){return s==null||s.trim().isEmpty()?null:s.trim();}
     public static class BatchItem{public Integer productId;public Integer quantity;public String rowRemark;}
 }

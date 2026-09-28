@@ -10,6 +10,7 @@ import com.wms.model.Product;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -22,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -84,7 +86,7 @@ class OutboundServiceAddItemTest {
     /** 该单已有同商品的行(5 件),再追加 3 件 → 并进那一行变 8 件,且不新插行 */
     @Test
     void existingSameProductLine_mergesIntoIt_andDoesNotInsert() {
-        when(orderDao.findOrderById(ORDER_ID)).thenReturn(draft());
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(draft());
         when(productDao.findById(2)).thenReturn(Optional.of(product(2)));
         when(orderDao.findItemsByOrderId(ORDER_ID)).thenReturn(new ArrayList<>(List.of(line(11, 2, 5))));
 
@@ -99,7 +101,7 @@ class OutboundServiceAddItemTest {
     /** 该单只有别的商品的行 → 正常新插一行(不能误并到别的商品上) */
     @Test
     void onlyOtherProductLines_insertsNewLine() {
-        when(orderDao.findOrderById(ORDER_ID)).thenReturn(draft());
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(draft());
         when(productDao.findById(2)).thenReturn(Optional.of(product(2)));
         when(orderDao.findItemsByOrderId(ORDER_ID)).thenReturn(new ArrayList<>(List.of(line(11, 99, 5))));
 
@@ -112,7 +114,7 @@ class OutboundServiceAddItemTest {
     /** 空单 → 新插一行 */
     @Test
     void emptyOrder_insertsNewLine() {
-        when(orderDao.findOrderById(ORDER_ID)).thenReturn(draft());
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(draft());
         when(productDao.findById(2)).thenReturn(Optional.of(product(2)));
         when(orderDao.findItemsByOrderId(ORDER_ID)).thenReturn(new ArrayList<>());
 
@@ -128,7 +130,7 @@ class OutboundServiceAddItemTest {
      */
     @Test
     void insufficientStock_leavesNoLineChange() {
-        when(orderDao.findOrderById(ORDER_ID)).thenReturn(draft());
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(draft());
         when(productDao.findById(2)).thenReturn(Optional.of(product(2)));
         when(orderDao.findItemsByOrderId(ORDER_ID)).thenReturn(new ArrayList<>(List.of(line(11, 2, 5))));
         when(itemDao.reserveForOutbound(eq(2), eq(null), eq(3), eq(ORDER_ID)))
@@ -145,12 +147,37 @@ class OutboundServiceAddItemTest {
     void nonDraftOrder_isRejected() {
         OutboundOrder committed = draft();
         committed.setStatus(OutboundOrder.STATUS_COMMITTED);
-        when(orderDao.findOrderById(ORDER_ID)).thenReturn(committed);
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(committed);
 
         assertThrows(IllegalStateException.class, () -> service.addItemToDraft(ORDER_ID, batchItem(2, 3)));
 
         verify(orderDao, never()).insertItem(any());
         verify(orderDao, never()).updateItemQuantity(anyInt(), anyInt());
+    }
+
+    /**
+     * 单头必须走**加锁读**(FOR UPDATE),而且必须是这条事务里早于一切写入的那次读。
+     *
+     * 改明细的 DAO 写入都不带 `AND status='DRAFT'` 守卫(守卫只在 commit/cancel 的最后一步),
+     * 所以并发下"追加明细"能穿过已提交的单 —— 那几件刚锁的货再没人释放(状态 RESERVED、
+     * 所属单却是 COMMITTED),product.quantity 也跟着少算。锁只有落在事务的第一条读上,
+     * 后到者排队拿到锁时才会看到状态已变,走上面那条 409 分支。
+     *
+     * 注:方法末尾 getOrder 回读单头走的是普通 findOrderById(只读、不参与加锁),那是正常的,
+     * 所以这里用 InOrder 钉"加锁读在最前",而不是"从不用普通读"。
+     */
+    @Test
+    void headerIsReadWithRowLock_beforeAnyWrite() {
+        when(orderDao.findOrderByIdForUpdate(ORDER_ID)).thenReturn(draft());
+        when(productDao.findById(2)).thenReturn(Optional.of(product(2)));
+        when(orderDao.findItemsByOrderId(ORDER_ID)).thenReturn(new ArrayList<>(List.of(line(11, 2, 5))));
+
+        service.addItemToDraft(ORDER_ID, batchItem(2, 3));
+
+        InOrder inOrder = inOrder(orderDao, itemDao);
+        inOrder.verify(orderDao).findOrderByIdForUpdate(ORDER_ID);
+        inOrder.verify(itemDao).reserveForOutbound(eq(2), eq(null), eq(3), eq(ORDER_ID));
+        inOrder.verify(orderDao).updateItemQuantity(eq(11), eq(8));
     }
 
     private OutboundService.BatchItem batchItem(int productId, int qty) {

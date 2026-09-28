@@ -60,6 +60,8 @@ def api_wms_session():
 # 读卡器 TCP 目标(从环境读,docker-compose 已注入)
 READER_HOST = os.getenv("READER_HOST", "192.168.1.209")
 READER_PORT = int(os.getenv("READER_PORT", "5000"))
+# 断线后重连前的等待秒数(见 tcp_client_thread 末尾的说明)
+RECONNECT_DELAY = 5
 
 # WMS 后端地址(容器内是 http://backend:8080)
 WMS_BASE_URL = os.getenv("WMS_BASE_URL", "http://127.0.0.1:8080")
@@ -343,14 +345,19 @@ def tcp_client_thread():
 
         except Exception as e:
             print(f"[TCP] Connection error: {e}")
-            is_connected = False
 
-        if not is_connected:
-            print("[TCP] Retrying in 5 seconds...")
-            time.sleep(5)
-
+        # 走到这里 = 连接已经断了:可能压根连不上(上面 except),也可能是连上之后
+        # 被读卡器关闭、或 recv 出错(内层 while 的两处 break)。
+        # **必须无条件等一会儿再重连**。原来的写法是:
+        #     if not is_connected: time.sleep(5)
+        #     is_connected = False
+        # 而 is_connected 只在"连接失败"那条分支被置 False;内层 break 出来时它还是 True,
+        # 于是"连上→被立刻关闭"这条路径会跳过 sleep,变成 连接→断开→立刻重连 的紧循环:
+        # 空转烧一个核,同时把读卡器的连接数刷满(现场表现为读卡器越来越不响应)。
         is_connected = False
         is_reading = False
+        print(f"[TCP] Retrying in {RECONNECT_DELAY} seconds...")
+        time.sleep(RECONNECT_DELAY)
 
 @app.route('/')
 def index():

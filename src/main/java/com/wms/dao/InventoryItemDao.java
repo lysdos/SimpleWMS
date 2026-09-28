@@ -254,8 +254,10 @@ public class InventoryItemDao {
         List<Object> args = new ArrayList<>();
         appendItemFilters(sb, args, sku, location, status, expiryStatus, expiryFrom, expiryTo, warehouseId);
         sb.append(" ORDER BY i.id DESC");
-        // 导出场景:controller 传 pageSize=5000(导出全部),被 cap 成 20 = 漏数据。
-        // 把上限放到 100000(只对导出生效,UI 列表仍走 pageSize=20),确保 export.csv 拿到全集。
+        // 导出场景:controller 传 pageSize=5000,若按 UI 的 200 硬上限截断就会漏数据。
+        // 所以 pageSize>200 时视为"导出/批量",原样使用调用方给的值(即**上限由调用方决定**,
+        // 本方法不额外设封顶),并忽略 page、强制从头开始 —— 导出没有"翻页"语义。
+        // 现状唯一调用方是 InventoryItemController.export.csv(5000 行,见 docs/api-reference §6)。
         int lim;
         int offset;
         if (pageSize > 200) {
@@ -461,8 +463,13 @@ public class InventoryItemDao {
                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?", u.getId());
                 continue;
             }
+            // 这里**不清** outbound_order_id:它正是"这单出了哪几件"的唯一线索 ——
+            // getOrder 的逐件码 / 拣货分布、GET by-outbound 的审计都按它查。
+            // (以前提交时清掉,于是订单一提交,详情页条码行就变「无条码」、库位退化成「自动」,
+            //  实物码与单据的关联永久丢失 —— 那些单元此后谁也追溯不到是从哪张单走的。)
+            // 只有"退回在库"的分支才清空:那些行真的变回自由库存了。
             jdbc.update(
-                    "UPDATE inventory_item SET status = ?, remaining = 0, outbound_order_id = NULL, " +
+                    "UPDATE inventory_item SET status = ?, remaining = 0, " +
                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     InventoryItem.STATUS_OUT, u.getId());
             out.add(new ConsumeRecord(u.getId(), 1));
@@ -484,8 +491,9 @@ public class InventoryItemDao {
                 continue;
             }
             if (take >= u.getRemaining()) {
+                // 同上:整行消耗掉,保留 outbound_order_id(线索);部分消耗那条走的是"退回在库",要清
                 jdbc.update(
-                        "UPDATE inventory_item SET status = ?, remaining = 0, outbound_order_id = NULL, " +
+                        "UPDATE inventory_item SET status = ?, remaining = 0, " +
                         "updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                         InventoryItem.STATUS_OUT, u.getId());
                 out.add(new ConsumeRecord(u.getId(), u.getRemaining()));
@@ -561,13 +569,20 @@ public class InventoryItemDao {
      * transferred_from 由调用方传入,不用 `SET transferred_from = location_code,
      * location_code = ?` 那种写法取旧值 —— 那依赖 MySQL 非标准的 UPDATE 求值顺序,
      * 太隐晦,后人一改顺序就静默写错。
+     *
+     * WHERE 里那句 `location_code = ?`(2026-09-28 加)是给 transferred_from 兜底的:
+     * 以前只守卫 status,同一单元被连续/并发调拨两次时,第二次仍会命中,于是流水把
+     * 起点记成第一次读到的旧值(A → C),而实物其实是从 B 挪到 C 的。
+     * 现在带上原库位做条件,行数 0 就说明中途已被改过,由调用方报错而不是写假账。
+     * (location_code 是 NOT NULL,可以直接等值比较。)
      */
     public int transfer(int id, String fromLocation, String toLocation) {
         return jdbc.update(
                 "UPDATE inventory_item SET location_code = ?, transferred_at = CURRENT_TIMESTAMP, " +
                 "transferred_from = ?, transferred_to = ?, " +
-                "updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'IN_STOCK'",
-                toLocation, fromLocation, toLocation, id);
+                "updated_at = CURRENT_TIMESTAMP " +
+                "WHERE id = ? AND status = 'IN_STOCK' AND location_code = ?",
+                toLocation, fromLocation, toLocation, id, fromLocation);
     }
 
     /**

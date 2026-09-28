@@ -135,7 +135,9 @@ public class InventoryItemService {
         String from = it.getLocationCode();
         int rows = itemDao.transfer(id, from, target);
         if (rows == 0) {
-            throw new IllegalStateException("调拨失败,状态已变更");
+            // DAO 的 WHERE 同时守着 status 与 location_code:两种情况都说明这条读已经过期
+            // (并发调拨/出库/报废),此时不能写流水,否则 transferred_from 会是假值
+            throw new IllegalStateException("调拨失败:单元状态或库位已被改动,请刷新后重试");
         }
         // 留痕:调拨不改变全局总量,所以 quantity=0(照 SCAN 标记的先例),
         // 挪到哪儿写在 remark 里

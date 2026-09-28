@@ -42,7 +42,7 @@ public class ProductController {
     @RequireRole("ADMIN")
     @SuppressWarnings("unchecked")
     public ApiResponse<Product> create(@RequestBody Map<String, Object> body) {
-        Product p = parseProduct(body);
+        Product p = parseProduct(body, true);
         return ApiResponse.ok(productService.create(p));
     }
 
@@ -50,7 +50,7 @@ public class ProductController {
     @RequireRole("ADMIN")
     @SuppressWarnings("unchecked")
     public ApiResponse<Product> update(@PathVariable int id, @RequestBody Map<String, Object> body) {
-        Product p = parseProduct(body);
+        Product p = parseProduct(body, false);
         p.setId(id);
         return ApiResponse.ok(productService.update(p));
     }
@@ -62,8 +62,15 @@ public class ProductController {
         return ApiResponse.ok();
     }
 
-    /** 从请求 Map 解析出 Product + 关联的供应商(可空) */
-    private static Product parseProduct(Map<String, Object> body) {
+    /**
+     * 从请求 Map 解析出 Product + 关联的供应商(可空)。
+     *
+     * `creating=false`(更新)时**不读 quantity**:数量不是商品资料的一部分,
+     * 只能由出入库/报废改动。原因见 {@link com.wms.dao.ProductDao#update(Product)} ——
+     * 共用一个解析方法 + 缺省补 0,会让一个不带 quantity 的 PUT 把库存清零。
+     * 新建时仍可填初始数量,所以只有创建路径读它。
+     */
+    private static Product parseProduct(Map<String, Object> body, boolean creating) {
         Product p = new Product();
         p.setSku((String) body.get("sku"));
         p.setName((String) body.get("name"));
@@ -75,8 +82,10 @@ public class ProductController {
         p.setDefaultShelfLifeDays(asInt(body.get("defaultShelfLifeDays")));
         p.setExpiryWarnDays(asInt(body.get("expiryWarnDays")));
         p.setUnitPrice(asBigDecimal(body.get("unitPrice")));
-        p.setQuantity(asInt(body.get("quantity")));
-        if (p.getQuantity() == null) p.setQuantity(0);
+        if (creating) {
+            p.setQuantity(asInt(body.get("quantity")));
+            if (p.getQuantity() == null) p.setQuantity(0);
+        }
         if (p.getUnitPrice() == null) p.setUnitPrice(BigDecimal.ZERO);
         if (p.getLowStock() == null) p.setLowStock(10);
 

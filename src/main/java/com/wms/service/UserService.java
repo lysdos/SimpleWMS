@@ -91,7 +91,7 @@ public class UserService {
     @Transactional
     public AppUser create(String username, String rawPassword, String role) {
         if (username == null || username.isBlank()) throw new IllegalArgumentException("用户名不能为空");
-        if (rawPassword == null || rawPassword.length() < 6) throw new IllegalArgumentException("密码至少 6 位");
+        if (rawPassword == null || rawPassword.length() < 8) throw new IllegalArgumentException("密码至少 8 位");
         if (!"ADMIN".equals(role) && !"OPERATOR".equals(role)) throw new IllegalArgumentException("角色必须为 ADMIN / OPERATOR");
         if (userDao.findByUsername(username).isPresent()) throw new IllegalArgumentException("用户名已存在");
         AppUser u = new AppUser();
@@ -111,7 +111,7 @@ public class UserService {
 
     @Transactional
     public void resetPassword(int id, String newRaw) {
-        if (newRaw == null || newRaw.length() < 6) throw new IllegalArgumentException("密码至少 6 位");
+        if (newRaw == null || newRaw.length() < 8) throw new IllegalArgumentException("密码至少 8 位");
         // 不校验存在性的话,对不存在的 id 会静默更新 0 行并返回成功,
         // 前端弹"重置成功"但实际什么都没做
         if (userDao.findById(id).isEmpty()) throw new NotFoundException("用户不存在");
@@ -136,7 +136,7 @@ public class UserService {
         if (!passwordService.verify(oldRaw, u.getPasswordHash())) {
             throw new IllegalArgumentException("原密码错误");
         }
-        if (newRaw == null || newRaw.length() < 6) throw new IllegalArgumentException("新密码至少 6 位");
+        if (newRaw == null || newRaw.length() < 8) throw new IllegalArgumentException("新密码至少 8 位");
         userDao.updatePassword(id, passwordService.hash(newRaw), false);
     }
 

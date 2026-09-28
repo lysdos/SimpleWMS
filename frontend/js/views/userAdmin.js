@@ -17,7 +17,7 @@ window.UserAdminView = {
                 <tr>
                     <td>${u.id}</td>
                     <td>${escapeHtml(u.username)}${isSelf ? ` <span class="badge ok">${t('user.badge.me')}</span>` : ''}</td>
-                    <td>${u.role}</td>
+                    <td>${escapeHtml(u.role)}</td>
                     <td>${u.enabled ? `<span class="badge ok">${t('user.status.enabled')}</span>` : `<span class="badge low">${t('user.status.disabled')}</span>`}</td>
                     <td>${u.mustChangePw ? '⚠️' : ''}</td>
                     <td>${escapeHtml(u.createdBy || '-')}</td>
@@ -117,7 +117,7 @@ window.UserAdminView = {
         <div style="display:grid;grid-template-columns:120px 1fr;gap:8px 16px;font-size:14px;">
             <div style="color:var(--c-text-3);">ID</div><div>${u.id}</div>
             <div style="color:var(--c-text-3);">${t('user.col.username')}</div><div><strong>${escapeHtml(u.username)}</strong></div>
-            <div style="color:var(--c-text-3);">${t('user.col.role')}</div><div>${u.role}</div>
+            <div style="color:var(--c-text-3);">${t('user.col.role')}</div><div>${escapeHtml(u.role)}</div>
             <div style="color:var(--c-text-3);">${t('user.col.enabled')}</div><div>${u.enabled ? `<span class="badge ok">${t('user.status.enabled')}</span>` : `<span class="badge low">${t('user.status.disabled')}</span>`}</div>
             <div style="color:var(--c-text-3);">${t('user.col.createdBy')}</div><div>${escapeHtml(u.createdBy || '-')}</div>
             <div style="color:var(--c-text-3);">${t('user.col.created_at')}</div><div>${formatDate(u.createdAt)}</div>

@@ -56,6 +56,7 @@
     <string name="settings_not_wms">Connected, but not the WMS backend</string>
     <string name="settings_reset_done">Defaults restored</string>
     <string name="settings_address_required">Address is required</string>
+    <string name="settings_address_invalid">Invalid address — it must start with http:// or https://</string>
     <string name="settings_test_fail">Connection failed</string>
     <string name="settings_reset">Restore default</string>
     <string name="settings_language">Language</string>

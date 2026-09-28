@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    明文 HTTP 策略(替代原来 AndroidManifest 上的 android:usesCleartextTraffic="true")。
+
+    ## 为什么仍然全量允许明文
+    WMS 后端在现场就是 `http://<局域网 IP>:9080`,PDA 必须在明文下工作;而且服务器地址
+    由用户在「设置」里填、可能是 DHCP 换过的地址,所以没法把它写进下面的 domain 白名单
+    (Android 的 domain-config 只认主机名,不接受 IP 段/通配)。
+    硬写死某台机器的 IP 会让"改地址"这个功能失效 —— 那是拿可用性换一个挡不住内网抓包的假安全。
+
+    ## 这里实际收紧的是什么
+    trust-anchors 只列 system:应用不信任**用户自行安装的 CA**。这条在 API 24+ 本来也是默认值,
+    写出来是为了明确表态 —— 如果将来现场上了自签证书的 HTTPS,加 `<certificates src="user" />`
+    会是一个**有意的决定**,而不是顺手打开。
+
+    ## 想真正收紧怎么办
+    如果哪天决定"内网也必须 HTTPS",把 base-config 换成一条 domain-config 白名单即可
+    (域名需要固定,或给现场上一台内网 DNS),并同步把「设置」页的地址校验改成只收 https。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

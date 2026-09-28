@@ -39,11 +39,24 @@ public class OutboundOrderDao {
             customer, externalNo, remark, id, OutboundOrder.STATUS_DRAFT);
     }
     // ⚠️ 与 InboundOrderDao.refreshAggregates 同形状(DML 里的相关子查询 = 加锁读,会锁住该单明细的
-    // 索引范围)。目前靠"一张单一个人操作"的人工节奏安全;若出现同单并发写明细,需先把单头行加锁 ——
-    // 做法与原因见 StockCheckDao.findCheckByIdForUpdate。
+    // 索引范围)。以前靠"一张单一个人操作"的人工节奏规避;2026-09-28 起由
+    // findOrderByIdForUpdate 在事务开头先锁单头,同单并发在此排队(做法与原因见 StockCheckDao.findCheckByIdForUpdate)。
     public void refreshAggregates(int id){jdbc.update("UPDATE outbound_order o SET total_quantity=COALESCE((SELECT SUM(quantity) FROM outbound_order_item WHERE order_id=o.id),0),item_count=COALESCE((SELECT COUNT(*) FROM outbound_order_item WHERE order_id=o.id),0) WHERE o.id=?",id);}
     public int deleteItemsByOrderId(int id){return jdbc.update("DELETE FROM outbound_order_item WHERE order_id=?",id);}
     public OutboundOrder findOrderById(int id){List<OutboundOrder>l=jdbc.query("SELECT * FROM outbound_order WHERE id=?",ORDER_ROW,id);return l.isEmpty()?null:l.get(0);}
+
+    /**
+     * 加锁读出库单头。**凡是要改这张草稿单的写事务,必须以它作为事务里的第一条读。**
+     *
+     * 与 {@link InboundOrderDao#findInboundOrderByIdForUpdate(int)} 同一个理由:追加明细/改数量/
+     * 锁货这些写入都没有 {@code AND status='DRAFT'} 守卫,状态守卫只在最后一步 commit/cancel。
+     * 一边"PDA 追加明细"、一边"提交"并发时,已提交的单会被继续追加 —— reserveForOutbound 锁走
+     * 的那几件货再也没人释放(状态 RESERVED,所属单却是 COMMITTED),product.quantity 也跟着少算。
+     * 事务开头先锁单头,后到者排队拿锁时状态已变,直接抛 409。
+     *
+     * ⚠️ 必须是**第一条读**(替换而不是补一条):否则一致性读视图先建立,状态判断仍看旧快照。
+     */
+    public OutboundOrder findOrderByIdForUpdate(int id){List<OutboundOrder>l=jdbc.query("SELECT * FROM outbound_order WHERE id=? FOR UPDATE",ORDER_ROW,id);return l.isEmpty()?null:l.get(0);}
     public List<OutboundOrderItem> findItemsByOrderId(int id){return jdbc.query("SELECT * FROM outbound_order_item WHERE order_id=? ORDER BY id ASC",ITEM_ROW,id);}
     private void filters(StringBuilder s,List<Object>a,String b,String e,String k,String op,String st){if(b!=null&&!b.isBlank()&&!"all".equalsIgnoreCase(b)){s.append(" AND created_at>=?");a.add(b+" 00:00:00");}if(e!=null&&!e.isBlank()&&!"all".equalsIgnoreCase(e)){s.append(" AND created_at<=?");a.add(e+" 23:59:59");}if(k!=null&&!k.isBlank()){s.append(" AND (order_no LIKE ? OR customer LIKE ? OR external_no LIKE ? OR remark LIKE ?)");String x="%"+k.trim()+"%";a.add(x);a.add(x);a.add(x);a.add(x);}if(op!=null&&!op.isBlank()){s.append(" AND created_by=?");a.add(op);}if(st!=null&&!st.isBlank()&&!"ALL".equalsIgnoreCase(st)){s.append(" AND status=?");a.add(st);}}
     public List<OutboundOrder> findOrders(String b,String e,String k,String op,String st,int page,int size){StringBuilder s=new StringBuilder("SELECT * FROM outbound_order WHERE 1=1");List<Object>a=new ArrayList<>();filters(s,a,b,e,k,op,st);s.append(" ORDER BY id DESC");int lim=size<=0||size>200?20:size;int off=page<=0?0:(page-1)*lim;s.append(" LIMIT ").append(lim).append(" OFFSET ").append(off);return jdbc.query(s.toString(),ORDER_ROW,a.toArray());}

@@ -26,9 +26,14 @@ const Auth = {
 
     async logout() {
         const t = this.getToken();
-        if (t) {
-            await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } });
-        }
+        // 通知后端只是礼节(JWT 无状态,后端就回个 200):它失败不该挡住登出本身。
+        // 以前这里是裸 await —— 断网/服务没起时 fetch 抛错,后面的清 token 与跳转全被跳过,
+        // 用户点「退出」反而退不出去。
+        try {
+            if (t) {
+                await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + t } });
+            }
+        } catch (e) { /* 忽略:本地清干净才是登出的实质 */ }
         this.clearToken();
         location.href = '/login.html';
     },

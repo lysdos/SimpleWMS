@@ -12,7 +12,9 @@ android {
 
     defaultConfig {
         applicationId "com.wms.pda"
-        minSdk 21
+        // minSdk 21 → 23(2026-09-28):androidx.security:security-crypto 的硬性下限就是 23。
+        // 现场手持机是 Android 11(API 30,adb 实测),抬地板不影响装机。
+        minSdk 23
         targetSdk 34
         versionCode 1
         versionName "1.0.0"
@@ -61,6 +63,8 @@ android {
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
+    // 会话 token 加密存储(EncryptedSharedPreferences,密钥存在 Android Keystore)
+    implementation 'androidx.security:security-crypto:1.0.0'
     implementation 'com.google.android.material:material:1.10.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'

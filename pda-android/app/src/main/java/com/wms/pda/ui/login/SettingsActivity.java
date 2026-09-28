@@ -22,6 +22,8 @@ import com.wms.pda.data.repo.SettingsStore;
 import java.util.Locale;
 import java.util.Map;
 
+import okhttp3.HttpUrl;
+
 /**
  * 服务器设置:输入 baseUrl,测试连接(真正发请求),保存;外加界面语言切换。
  * 进入入口: 登录页右上角齿轮 / 主界面右上角齿轮。
@@ -93,18 +95,39 @@ public class SettingsActivity extends AppCompatActivity {
         return (tag != null && tag.startsWith("en")) ? LANG_EN : LANG_ZH;
     }
 
+    /**
+     * 地址是否可用:http(s):// 前缀 + okhttp 能解析出 Host。
+     *
+     * 为什么必须校验:地址是要**持久化**的,而少一个 `http://` 会让
+     * `Request.Builder.url()` 在主线程抛 IllegalArgumentException ——
+     * 存进去一次,之后每次启动、每次请求都崩,只能靠进设置页改回来。
+     */
+    private static String normalizeUrl(String raw) {
+        if (raw == null) return null;
+        String url = raw.trim();
+        if (url.isEmpty()) return null;
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+        try {
+            return HttpUrl.parse(url) == null ? null : url;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private void test() {
-        String url = et.getText().toString().trim();
-        if (url.isEmpty() || (!url.startsWith("http://") && !url.startsWith("https://"))) {
-            Toast.makeText(this, R.string.settings_test_fail, Toast.LENGTH_SHORT).show();
+        String url = normalizeUrl(et.getText().toString());
+        if (url == null) {
+            Toast.makeText(this, R.string.settings_address_invalid, Toast.LENGTH_SHORT).show();
             return;
         }
 
         btnTest.setEnabled(false);
         btnTest.setText(R.string.settings_testing);
 
-        ApiClient probe = new ApiClient();
-        probe.refreshBaseUrl();
+        // 用**输入框里**的地址建探针。以前是 new ApiClient() + refreshBaseUrl(),
+        // 那读的是 SettingsStore 里的旧值 —— 输入新地址点「测试连接」测的却是老地址,
+        // 显示"连接成功"之后把错的地址存进去。
+        ApiClient probe = ApiClient.forBaseUrl(url);
         // 发 GET /api/auth/me 验证:
         // - 200(onSuccess): WMS 后端可达且 token 有效
         // - HTTP 非2xx + body 含 "未登录": WMS 后端可达(未登录,正常)
@@ -146,9 +169,16 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     private void save() {
-        String url = et.getText().toString().trim();
-        if (url.isEmpty()) {
+        String raw = et.getText().toString().trim();
+        if (raw.isEmpty()) {
             et.setError(getString(R.string.settings_address_required));
+            return;
+        }
+        // save() 以前只判空:「192.168.1.5:9080」这种漏了 http:// 的地址会被照存,
+        // 下次任何请求都会在主线程 url() 上抛异常直接崩(且地址已持久化,重启照样崩)。
+        String url = normalizeUrl(raw);
+        if (url == null) {
+            et.setError(getString(R.string.settings_address_invalid));
             return;
         }
         SettingsStore.setBaseUrl(url);

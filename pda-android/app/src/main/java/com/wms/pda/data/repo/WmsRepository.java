@@ -91,4 +91,13 @@ public interface WmsRepository {
     void commitStocktake(String orderId, WmsCallback<StocktakeOrder> cb);
 
     // ---- 商品下拉:复用 searchInventory("") 拿到所有 InventoryItem,字段已够用(sku/name/barcode) ----
+
+    /**
+     * 丢弃本实例并取消所有在途请求。
+     *
+     * 退出登录时由 {@link RepositoryProvider#reset()} 调用:此时 repo 引用要被清空,
+     * 而已经发出去、还没回来的请求,其回调往往还要再取一次 RepositoryProvider(取详情、刷新列表),
+     * 那会撞上 "Repository not initialized" 直接崩在主线程。掐掉比让回调撞空干净。
+     */
+    void shutdown();
 }

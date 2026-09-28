@@ -1,6 +1,8 @@
 package com.wms.controller;
 
 import com.wms.model.ApiResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * 参数错误 → 400。
@@ -36,6 +40,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(409, e.getMessage()));
     }
 
+    /** 请求过于频繁(登录失败次数超限) → 429。单独一个状态码,才不会被客户端当成"密码错"或"账号禁用" */
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ApiResponse<Void>> tooMany(TooManyRequestsException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.fail(429, e.getMessage()));
+    }
+
     /** 资源不存在 → 404。此前 controller 直接 return ApiResponse.fail(404,..) 会落成 HTTP 200,见 NotFoundException */
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> notFound(NotFoundException e) {
@@ -50,14 +61,20 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(422, e.getMessage()));
     }
 
-    /** 数据库约束冲突(SKU 重复等) */
+    /**
+     * 数据库约束冲突(SKU 重复、字段超长等)。
+     *
+     * 只回一句通用文案:驱动原文形如 `Data too long for column 'sku' at row 1` /
+     * `Duplicate entry 'X' for key 'uk_product_sku'`,带着表名、列名、约束名 ——
+     * 那是给运维看的,不该出现在任何调用方能拿到的响应里(导出类接口此前还是匿名可读)。
+     * 原文记日志。
+     */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> dataIntegrity(DataIntegrityViolationException e) {
-        String msg = e.getMostSpecificCause() != null
-                ? e.getMostSpecificCause().getMessage()
-                : e.getMessage();
+        log.warn("数据约束冲突: {}", e.getMostSpecificCause() != null
+                ? e.getMostSpecificCause().getMessage() : e.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiResponse.fail(409, "数据冲突: " + (msg == null ? "" : msg)));
+                .body(ApiResponse.fail(409, "数据冲突,请检查字段长度或唯一性约束"));
     }
 
     /** 请求体格式错 */

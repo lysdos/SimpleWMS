@@ -1,9 +1,8 @@
 Flask==2.3.0
 Werkzeug==2.3.7
-Flask-SocketIO==5.3.6
-python-socketio==5.11.0
-python-engineio==4.8.0
-paho-mqtt==1.6.1
-# 注意:故意不带 eventlet/gevent。Flask-SocketIO 检测不到时自动用 threading 模式,
-# 不会出现 eventlet monkey-patch + 多线程死锁的问题。代价是 SocketIO 走 long-polling,
-# 演示场景够用。
+# 2026-09-28 清理:删掉 Flask-SocketIO / python-socketio / python-engineio / paho-mqtt。
+# 它们都已不再被引用 ——
+#   - SocketIO:早就换成 REST 轮询(app.py 里只剩 `socketio = None` 占位与注释掉的 handler,
+#     前端 templates/index.html 也写明"不用 SocketIO,改用 JS 轮询");
+#   - paho-mqtt:桥接改为直连 REST(wms_bridge.py 开头即"取代旧版 MQTT")。
+# 留着只会让镜像多装几十 MB,并造成"MQTT 还在用"的错觉。

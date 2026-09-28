@@ -84,6 +84,14 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         btnSubmit.setOnClickListener(v -> confirmAndSubmit());
     }
 
+    /**
+     * 页面已经关了(用户返回 / 退出登录后系统回收)?回调回来时什么都别做 ——
+     * 既别碰 View,也别再取 RepositoryProvider.get()(退出登录会把它清空,那一步会崩在主线程)。
+     */
+    private boolean gone() {
+        return isFinishing() || isDestroyed();
+    }
+
     @Override
     protected void onResume() { super.onResume(); render(); }
 
@@ -216,6 +224,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         RepositoryProvider.get().submitStocktakeScan(String.valueOf(dbId), canon,
                 new WmsCallback<StocktakeOrder>() {
                     @Override public void onSuccess(StocktakeOrder o) {
+                        if (gone()) return;
                         scannedCodes.add(canon);
                         boolean overage = false;
                         if (o != null && o.lines != null) {
@@ -316,18 +325,25 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.btn_complete_stocktake)
                 .setMessage(msg)
-                .setPositiveButton(R.string.action_confirm, (d, w) ->
-                        RepositoryProvider.get().commitStocktake(String.valueOf(dbId),
-                                new WmsCallback<StocktakeOrder>() {
-                                    @Override public void onSuccess(StocktakeOrder o) {
-                                        Toast.makeText(StocktakeDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
-                                        finish();
-                                    }
-                                    @Override public void onError(int code, String msg) {
-                                        Toast.makeText(StocktakeDetailActivity.this,
-                                                getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
-                                    }
-                                }))
+                .setPositiveButton(R.string.action_confirm, (d, w) -> {
+                    // 提交中禁掉按钮:连点两次会发两次 /commit,第二次拿到"仅 DRAFT 可提交"的报错,
+                    // 现场只会以为提交失败(与出库详情页同一处理)
+                    btnSubmit.setEnabled(false);
+                    RepositoryProvider.get().commitStocktake(String.valueOf(dbId),
+                            new WmsCallback<StocktakeOrder>() {
+                                @Override public void onSuccess(StocktakeOrder o) {
+                                    if (gone()) return;
+                                    Toast.makeText(StocktakeDetailActivity.this, R.string.msg_submitted, Toast.LENGTH_SHORT).show();
+                                    finish();
+                                }
+                                @Override public void onError(int code, String msg) {
+                                    if (gone()) return;
+                                    btnSubmit.setEnabled(true);
+                                    Toast.makeText(StocktakeDetailActivity.this,
+                                            getString(R.string.msg_submit_failed, msg), Toast.LENGTH_SHORT).show();
+                                }
+                            });
+                })
                 .setNegativeButton(R.string.action_cancel, null)
                 .show();
     }
@@ -359,10 +375,12 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         RepositoryProvider.get().getStocktake(String.valueOf(dbId),
                 new WmsCallback<StocktakeOrder>() {
                     @Override public void onSuccess(StocktakeOrder o) {
+                        if (gone()) return;
                         if (o == null) { finish(); return; }
                         doRender(o);
                     }
                     @Override public void onError(int code, String msg) {
+                        if (gone()) return;
                         Toast.makeText(StocktakeDetailActivity.this,
                                 getString(R.string.msg_load_failed, msg), Toast.LENGTH_SHORT).show();
                     }

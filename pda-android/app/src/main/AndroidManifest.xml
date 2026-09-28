@@ -10,12 +10,19 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!--
+        明文 HTTP 策略统一放进 res/xml/network_security_config.xml(原来的
+        android:usesCleartextTraffic="true" 换个地方表达,顺便写清为什么必须留明文)。
+        allowBackup=false:会话 token 现在虽然加密了,但也没必要进 adb backup / 云备份快照 ——
+        手持机不需要 App 数据备份这个能力。
+    -->
     <application
         android:name=".PdaApp"
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
         android:theme="@style/Theme.SimpleWmsPda"
-        android:usesCleartextTraffic="true">
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <activity
             android:name=".ui.login.LoginActivity"
