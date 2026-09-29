@@ -32,6 +32,16 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
                 style="@style/Text.Caption" />
+
+            <!-- 行备注(如「来自其他仓库,记录库位 X」)。默认不占位,有值才显示 -->
+            <TextView
+                android:id="@+id/tv_remark"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:visibility="gone"
+                style="@style/Text.Caption"
+                android:textColor="@color/warning" />
         </LinearLayout>
 
         <TextView

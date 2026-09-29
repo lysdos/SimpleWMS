@@ -398,6 +398,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         View row = li.inflate(R.layout.item_stocktake_row, llLines, false);
         TextView tvSku = row.findViewById(R.id.tv_sku);
         TextView tvSub = row.findViewById(R.id.tv_sub);
+        TextView tvRemark = row.findViewById(R.id.tv_remark);
         TextView tvBook = row.findViewById(R.id.tv_book);
         TextView etActual = row.findViewById(R.id.et_actual);
         TextView tvDiff = row.findViewById(R.id.tv_diff);
@@ -415,6 +416,13 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 l.productName == null ? "" : l.productName,
                 l.code == null ? "—" : l.code,
                 l.locationCode == null ? "—" : l.locationCode));
+        // 行备注(跨仓盘盈时后端写的是「来自其他仓库,记录库位 X」)。
+        // 行是每次 buildLineRow 新 inflate 的,不写就是布局默认的 gone —— 将来若改成复用
+        // ViewHolder,这里必须补一个 else 显式 GONE。
+        if (l.rowRemark != null && !l.rowRemark.isEmpty()) {
+            tvRemark.setText(l.rowRemark);
+            tvRemark.setVisibility(View.VISIBLE);
+        }
         tvBook.setText(l.systemQty == null ? "—" : String.valueOf(l.systemQty));
         etActual.setText(l.countedQty == null ? "" : String.valueOf(l.countedQty));
         etActual.setEnabled(false);

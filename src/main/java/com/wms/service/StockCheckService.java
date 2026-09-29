@@ -291,11 +291,14 @@ public class StockCheckService {
      * 盘盈处理(只记账,不调整库存/单元状态):
      *   - 在库但不在本单快照范围内的码 → 自动追加一行(应盘 0 / 实盘 1)
      *   - 非在库(OUT/SCRAPPED/TRANSFERRED)的码 → 同样追加一行记盘盈
+     *   - **按仓库**盘点时,来自其他仓库(或未挂仓库)库位的码:在库的记盘盈并把来源写进
+     *     行备注(货串仓要能当场留痕);非在库的 422 拒绝(这类不在任何快照里,放行会双记)
      *
      * 错误码(由 GlobalExceptionHandler 映射):
      *   - 盘点单不存在 → 404;盘点单已 COMMITTED/CANCELLED → 409
      *   - 码不存在(inventory_item 无此码) → 404
      *   - 该码已盘过 → 422
+     *   - 按仓库盘点时,非在库的跨仓库码 → 422
      */
     @Transactional
     public StockCheck scanCodeToCheck(int checkId, String code) {
@@ -326,18 +329,25 @@ public class StockCheckService {
         } else {
             // 4b) 不在快照中(单外码 / 非在库码):追加盘盈行(应盘 0 / 实盘 1)
             //
-            // 按仓库盘点时先挡住来自其他仓库的码:否则误扫的货会直接变成这张单的
-            // 盘盈,而那张真正管着它仓库的盘点单可能也把它记成自己的盘盈 ——
-            // 同一个实物被两张单各算一次。盘点范围是"这仓的货",不是"随便扫什么"。
+            // 按仓库盘点时,来自其他仓库的码分两种处理:
+            //   - **在库**的:放行,记盘盈,行备注写明来源。货串仓(别仓的货落在本仓)现场
+            //     真会发生,不放行的话这次发现就没处留痕。而它在**自己仓库**的快照里,
+            //     那边扫到会算「已盘」,所以不会两边各记一次盘盈。
+            //   - **非在库**(已出/已报废/已调拨/已锁定/待入库)的:继续拒绝。这类单元不在
+            //     **任何**盘点的快照里,放行会让同一实物被两张单各记一次盘盈。
+            String originRemark = null;
             if (c.getWarehouseId() != null) {
-                List<Integer> unitWh = jdbc.queryForList(
-                        "SELECT warehouse_id FROM location WHERE code = ?",
-                        Integer.class, inv.getLocationCode());
-                Integer whId = unitWh.isEmpty() ? null : unitWh.get(0);
+                Integer whId = unitWarehouse(inv.getLocationCode());
                 if (!c.getWarehouseId().equals(whId)) {
-                    throw new UnprocessableException(
-                            "该码不在本次盘点的仓库范围内(它在库位 " + inv.getLocationCode()
-                                    + (whId == null ? ",未挂到任何仓库" : ",属于其他仓库") + "),请确认是否扫错");
+                    if (!InventoryItem.STATUS_IN_STOCK.equals(inv.getStatus())) {
+                        throw new UnprocessableException(
+                                "该码不在本次盘点的仓库范围内(库位 " + inv.getLocationCode()
+                                        + (whId == null ? ",未挂到任何仓库" : ",属于其他仓库")
+                                        + "),且该单元已不在库,不能记盘盈");
+                    }
+                    originRemark = whId == null
+                            ? "记录库位 " + inv.getLocationCode() + " 未挂到任何仓库"
+                            : "来自其他仓库,记录库位 " + inv.getLocationCode();
                 }
             }
             StockCheckItem it = new StockCheckItem();
@@ -349,6 +359,7 @@ public class StockCheckService {
             it.setLocationCode(inv.getLocationCode());
             it.setSystemQty(0);
             it.setCountedQty(1);
+            it.setRowRemark(originRemark);
             try {
                 dao.insertItem(it);
             } catch (org.springframework.dao.DuplicateKeyException e) {
@@ -360,6 +371,16 @@ public class StockCheckService {
         // 5) 重算盘点单统计
         recalcStats(checkId);
         return get(checkId);
+    }
+
+    /**
+     * 该库位所属仓库 → warehouse.id。
+     * 库位不在 location 表里、或该库位未挂仓库(warehouse_id 可空)→ null。
+     */
+    private Integer unitWarehouse(String locationCode) {
+        List<Integer> wh = jdbc.queryForList(
+                "SELECT warehouse_id FROM location WHERE code = ?", Integer.class, locationCode);
+        return wh.isEmpty() ? null : wh.get(0);
     }
 
     /** 单次盘点允许的最大条目数(防 IN 列表过长);SKU 列表与 WAREHOUSE 模式的库位列表共用 */

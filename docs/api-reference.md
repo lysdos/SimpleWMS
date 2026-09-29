@@ -331,10 +331,16 @@
 | GET | `/{id}` | 已登录 | — | `StockCheck + items[]` | 404 |
 | POST | `/` | 已登录 | `{scope:ALL/SKU/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
 | POST | `/{id}/items/{itemId}/count` | 已登录 | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
-| **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新(items[].countedQty+=1) | **404 码不在 / 409 状态非 IN_STOCK / 422 码不在本单** |
+| **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新:命中快照 → 记已盘;快照外 → 追加盘盈行(应盘 0 / 实盘 1) | **404 码不存在 / 409 盘点单非 DRAFT / 422 该码已盘过(含并发重复)、或按仓库盘点扫到非在库的跨仓库码** |
 | POST | `/{id}/commit` | 已登录 | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
 | POST | `/{id}/cancel` | 已登录 | — | `{code:0}` | 409 |
 | GET | `/{id}/export.csv` | 已登录 | 差异报告(每行 system/counted/diff) | — |
+
+> **盘盈行(2026-09-29)**:扫到的码不在本单快照里,就自动追加一行 `应盘 0 / 实盘 1`(非在库的码也一样)。
+> **按仓库盘点**时,来自其他仓库(或库位未挂仓库)的码分两种:单元**在库** → 照记盘盈,并把来源写进行备注
+> (`来自其他仓库,记录库位 X` / `记录库位 X 未挂到任何仓库`);**非在库** → 422。
+> 分界理由:非在库单元不在**任何**盘点的快照里,放行会让同一实物被两张单各记一次盘盈;而在库单元在它**自己仓库**的快照里,那边扫到算「已盘」,不会双记。
+> 盘盈行**不计入** `totalCount / countedCount / diffCount` 三个汇总(口径见 `StockCheckDao.SURPLUS_COND`),只在详情页单独成区、导出 CSV 里按「盘盈数 / 盘亏数」两行体现。
 
 > **整条线不设角色门槛(2026-09-24 起)**:此前只有 `/scan` 不限角色,`create/count/commit/cancel` 要 ADMIN —— 而两端界面把「新建盘点」「提交」都摆给了操作员,点了必然 403。现在统一放开:盘点在本系统**不动库存**(提交只固化差异记录,库存校正另行处理),作业员自己发起、盘完、提交即可。
 > 作为对比,`/api/inventory/items/{id}/scrap`(报废,不可逆减库存)**仍限 ADMIN**,`/transfer`(调拨,可逆)不限。
@@ -370,10 +376,13 @@ $ curl -X POST ... -d '{"code":"ALREADY_OUT"}'
 HTTP/1.1 409
 {"code":409,"message":"该码已出库","data":null}
 
-# 盘点单码不在本单
-$ curl -X POST http://localhost:9090/api/stock-checks/5/scan -H "Authorization: Bearer ..." -d '{"code":"OTHER_CHECK_CODE"}'
+# 盘点扫码被拒(422 的两种来源)
+$ curl -X POST http://localhost:9090/api/stock-checks/5/scan -H "Authorization: Bearer ..." -d '{"code":"000000003500302029039358"}'
 HTTP/1.1 422
-{"code":422,"message":"该码不在本盘点单中","data":null}
+{"code":422,"message":"该码已盘过,无需重复扫描","data":null}
+
+# 按仓库盘点,且该码是**别的仓库**的「非在库」单元(在库的会记成盘盈,不拒)
+{"code":422,"message":"该码不在本次盘点的仓库范围内(库位 B-02-02,属于其他仓库),且该单元已不在库,不能记盘盈","data":null}
 ```
 
 ## 4. 24 位 inventory_item.code 校验端点
@@ -386,7 +395,7 @@ PDA 扫码链路涉及的端点(共 4 个):
 | `GET /api/inventory/items/by-epc/{epc}` | epc | EPC 别名 | 同上 |
 | `GET /api/inventory/items/by-code/{code}/product` | code | 实物码反查商品(PDA 入库扫码辅助) | `Product` 或 404 |
 | `POST /api/outbound/orders/{id}/scan` | code | 出库单扫码加入 | 200 / 404 / 409 |
-| `POST /api/stock-checks/{id}/scan` | code | 盘点单扫码累加 countedQty | 200 / 404 / 409 / 422 |
+| `POST /api/stock-checks/{id}/scan` | code | 盘点单扫码(命中快照记已盘;快照外追加盘盈) | 200 / 404 / 409 / 422 |
 
 ## 5. 鉴权矩阵
 
