@@ -245,8 +245,7 @@ public class OutboundDetailActivity extends AppCompatActivity {
 
         // 没有硬件扫把头(手机)→ 开摄像头面板(见 ui/common/BarcodeScanDialog):
         // 它自带权限申请与手动输入兜底,也有自己的取景与取消,所以这里不切本页的按钮状态。
-        ScanManager.get(this).ensureReady(ScanType.BARCODE);
-        if (!ScanManager.get(this).isBarcodeHwReady()) {
+        if (ScanManager.get(this).usesCameraBarcode()) {
             BarcodeScanDialog.show(getSupportFragmentManager());
             return;
         }
@@ -473,6 +472,8 @@ public class OutboundDetailActivity extends AppCompatActivity {
         // —— 条码只靠硬件侧 1500ms 防抖,摄像头兜底那条路径没有防抖(见 startBarcodeScan)。
         // 失败后再放开,允许重扫。
         final String canonical = canonicalCode(code);
+        // 回调里的 int 参数会遮蔽外层的 code,先留一份**原文**给失败提示用
+        final String rawCode = code;
         triedCodes.add(canonical);
         RepositoryProvider.get().submitOutboundScan(String.valueOf(dbId), code,
                 new WmsCallback<OutboundOrder>() {
@@ -487,17 +488,18 @@ public class OutboundDetailActivity extends AppCompatActivity {
                     @Override public void onError(int code, String msg) {
                         triedCodes.remove(canonical);
                         if (gone()) return;
-                        handleScanError(code, msg);
+                        handleScanError(rawCode, code, msg);
                     }
                 });
     }
 
     /** 扫码被拒时按**后端提示语**分流(为什么只能认字、不能翻译,见 BackendMessages 的类注释)。 */
-    private void handleScanError(int code, String msg) {
+    private void handleScanError(String scanned, int code, String msg) {
         BeepUtil.error();
         if (msg == null) msg = "";
         if (msg.contains(BackendMessages.CODE_NOT_FOUND)) {
-            Toast.makeText(this, R.string.scan_code_not_in_stock, Toast.LENGTH_SHORT).show();
+            // 带上扫到的**原文**:摄像头会读错,只写"该码未入库"就分不清是读错了还是瞄错了标签
+            Toast.makeText(this, getString(R.string.scan_code_not_in_stock, scanned), Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.ALREADY_OUT)) {
             Toast.makeText(this, R.string.scan_already_out, Toast.LENGTH_SHORT).show();
         } else if (msg.contains(BackendMessages.SCRAPPED)) {

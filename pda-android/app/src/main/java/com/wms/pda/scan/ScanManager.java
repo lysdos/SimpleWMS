@@ -21,6 +21,9 @@ public class ScanManager {
     private final BarcodeScannerImpl barcodeCamera;
     private final BarcodeHardwareScannerImpl barcodeHw;
 
+    /** 条码是否只能走摄像头兜底。null = 还没探测,见 {@link #usesCameraBarcode()}。 */
+    private Boolean cameraBarcode;
+
     private ScanManager(Context ctx) {
         this.appCtx = ctx.getApplicationContext();
         this.uhf = new UhfScannerImpl();
@@ -63,30 +66,35 @@ public class ScanManager {
     }
 
     /**
-     * 条码扫描:硬件扫把头优先,失败降级到 CameraX。
+     * 条码扫描:有硬件扫把头就用它,没有才降级到 CameraX(摄像头预览由 UI 侧的
+     * {@link #attachBarcodeCamera} 绑定)。走哪条路探测一次就定下来,见 {@link #usesCameraBarcode()}。
      */
     private void startBarcode(ScannerCallback cb) {
-        // 1. 尝试硬件扫把头
-        if (!barcodeHw.isReady()) {
-            try {
-                barcodeHw.init(appCtx);
-            } catch (Throwable e) {
-                Log.w(TAG, "hardware barcode init failed, fallback to camera", e);
-                barcodeHw.release(); // 清理
-            }
-        }
-
-        if (barcodeHw.isReady()) {
-            Log.i(TAG, "barcode: using hardware scanner");
-            barcodeHw.setCallback(cb);
-            barcodeHw.startScan(ScanType.BARCODE);
+        if (usesCameraBarcode()) {
+            Log.i(TAG, "barcode: using camera fallback");
+            barcodeCamera.setCallback(cb);
+            barcodeCamera.startScan(ScanType.BARCODE);
             return;
         }
+        Log.i(TAG, "barcode: using hardware scanner");
+        barcodeHw.setCallback(cb);
+        barcodeHw.startScan(ScanType.BARCODE);
+    }
 
-        // 2. 降级到 CameraX 摄像头(需要 Activity 调 attachBarcodeCamera 绑定预览)
-        Log.i(TAG, "barcode: hardware unavailable, using camera fallback");
-        barcodeCamera.setCallback(cb);
-        barcodeCamera.startScan(ScanType.BARCODE);
+    /**
+     * 条码是否只能走摄像头(= 本机没有硬件扫把头)。
+     *
+     * **探测一次、结果定下来**,不每次重探:厂商 SDK 在没有该硬件的设备上会出现
+     * "第一次 init 失败、后面某次却成功"。判定来回翻的现场表现是 —— 第一次点「条码扫码」
+     * 弹出摄像头面板,之后再也弹不出来(第二次被判成"有扫码头",走原地流程,于是什么也扫不到)。
+     * 顺带也免掉每次点击都白等一次 `open()`(没有该硬件时要等它失败)。
+     */
+    public boolean usesCameraBarcode() {
+        if (cameraBarcode == null) {
+            ensureReady(ScanType.BARCODE);
+            cameraBarcode = !barcodeHw.isReady();
+        }
+        return cameraBarcode;
     }
 
     public void stopScan() {
@@ -130,10 +138,10 @@ public class ScanManager {
         uhf.release();
         barcodeHw.release();
         barcodeCamera.release();
+        cameraBarcode = null;   // 扫码头已经关掉,下次要重新探测
     }
 
     /** 设备状态 - 用于 UI 显示。 */
     public boolean isUhfReady() { return uhf.isReady(); }
     public boolean isBarcodeReady() { return barcodeHw.isReady() || barcodeCamera.isReady(); }
-    public boolean isBarcodeHwReady() { return barcodeHw.isReady(); }
 }

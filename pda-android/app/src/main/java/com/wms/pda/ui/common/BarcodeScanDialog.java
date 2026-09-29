@@ -21,6 +21,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 
 import com.wms.pda.R;
@@ -45,6 +46,9 @@ import com.wms.pda.scan.ScannerCallback;
  *
  * 超时只**提示**不停止:面板开着就是在等人对准,自动停会变成"还没对准就被打断"。
  * 硬件扫把头那两条路是持续扫的,更不能加超时(见 ScannerCallback 的说明)。
+ *
+ * **连续扫**:面板不关,每读到一个码就交给宿主一个(同一个码 2 秒内不重复报,见
+ * BarcodeScannerImpl),关窗由用户点「完成」—— 与扫码头"一直扫到点停止"的手感一致。
  */
 public class BarcodeScanDialog extends DialogFragment {
 
@@ -65,10 +69,36 @@ public class BarcodeScanDialog extends DialogFragment {
     private Context appCtx;
     private boolean cameraStarted;
     private boolean permissionAsked;
+    /** 是否已经交付过至少一个码 —— 交付过就别再拿"对准一点"覆盖掉"最近读到什么" */
+    private boolean anyDelivered;
 
-    /** 单入口:面板已经在显示就不重复弹(连点两次不会叠两层)。 */
+    /** 扫描回调:每次 onStart 重新武装扫描状态时复用同一个实例 */
+    private final ScannerCallback scanCallback = new ScannerCallback() {
+        @Override
+        public void onScanResult(ScanResult result) {
+            deliver(result == null ? null : result.getCode());
+        }
+
+        @Override
+        public void onError(int code, String msg) {
+            if (tvHint != null) tvHint.setText(getString(R.string.msg_scan_exception, msg));
+        }
+    };
+
+    /**
+     * 单入口:面板**正在显示**就不重复弹(连点两次不会叠两层)。
+     *
+     * 判据必须落在"确实还显示着"上:只判 `findFragmentByTag != null` 的话,上一个面板
+     * `dismiss()` 的移除事务还没执行完时仍能查到它,于是**下一次点击什么都不做** ——
+     * 现场表现就是"扫过一次之后,再点条码扫码不弹面板了"。
+     */
     public static void show(@NonNull FragmentManager fm) {
-        if (fm.findFragmentByTag(TAG) != null) return;
+        Fragment existing = fm.findFragmentByTag(TAG);
+        if (existing instanceof DialogFragment
+                && ((DialogFragment) existing).getDialog() != null
+                && ((DialogFragment) existing).getDialog().isShowing()) {
+            return;
+        }
         new BarcodeScanDialog().show(fm, TAG);
     }
 
@@ -95,14 +125,14 @@ public class BarcodeScanDialog extends DialogFragment {
                 .setTitle(R.string.scan_barcode)
                 .setView(v)
                 .setPositiveButton(R.string.action_confirm, null)
-                .setNegativeButton(R.string.action_cancel, null)
+                .setNegativeButton(R.string.action_done, null)
                 .create();
         if (d.getWindow() != null) {
             d.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
-        // 「确认」= 提交手动输入的码。输入框空着就别关窗 —— 否则用户会以为输进去了。
+        // 「确认」= 提交手动输入的码(提交后面板**不关**,可以接着输下一个;空输入不做任何事)
         d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_POSITIVE)
-                .setOnClickListener(b -> { if (submitManual()) d.dismiss(); }));
+                .setOnClickListener(b -> submitManual()));
         return d;
     }
 
@@ -116,6 +146,23 @@ public class BarcodeScanDialog extends DialogFragment {
             permissionAsked = true;
             permissionLauncher.launch(Manifest.permission.CAMERA);
         }
+    }
+
+    /**
+     * 开始/恢复扫描。
+     *
+     * 相机只绑一次,但**扫描状态每次 onStart 都要重新武装**:宿主 Activity 在 `onPause()` 里会
+     * `stopScan()`(那是给页面上原地扫码用的),而面板现在不再自动关 —— 息屏/切走再回来时,
+     * 面板看着还在、`scanning` 却已经是 false,表现就是"面板开着却怎么都不出码"。
+     * 重新 startScan 只是把标记置回 true(并重置重复抑制),不会重绑相机。
+     */
+    private void startCamera() {
+        if (previewView == null) return;
+        ScanManager.get(appCtx).startScan(ScanType.BARCODE, scanCallback);
+        if (cameraStarted) return;
+        cameraStarted = true;
+        // 绑弹窗自己(它没走 onCreateView,getViewLifecycleOwner() 在这条路上是空的)
+        ScanManager.get(appCtx).attachBarcodeCamera(this, previewView);
     }
 
     @Override
@@ -133,24 +180,6 @@ public class BarcodeScanDialog extends DialogFragment {
                 == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void startCamera() {
-        if (cameraStarted || previewView == null) return;
-        cameraStarted = true;
-        ScanManager.get(appCtx).startScan(ScanType.BARCODE, new ScannerCallback() {
-            @Override
-            public void onScanResult(ScanResult result) {
-                deliver(result == null ? null : result.getCode());
-            }
-
-            @Override
-            public void onError(int code, String msg) {
-                if (tvHint != null) tvHint.setText(getString(R.string.msg_scan_exception, msg));
-            }
-        });
-        // 绑弹窗自己(它没走 onCreateView,getViewLifecycleOwner() 在这条路上是空的)
-        ScanManager.get(appCtx).attachBarcodeCamera(this, previewView);
-    }
-
     /** 权限被拒(或被"不再询问"):退成手动输入,并说清为什么没有画面。 */
     private void onCameraDenied() {
         if (tvHint != null) tvHint.setText(R.string.scan_barcode_no_permission);
@@ -158,22 +187,29 @@ public class BarcodeScanDialog extends DialogFragment {
     }
 
     private void showSlowHint() {
-        if (tvHint != null && cameraStarted) tvHint.setText(R.string.scan_barcode_hint_slow);
+        if (tvHint != null && cameraStarted && !anyDelivered) {
+            tvHint.setText(R.string.scan_barcode_hint_slow);
+        }
     }
 
-    /** @return 有码可交(交出去了)就 true */
-    private boolean submitManual() {
+    /** 手动输入的那一格:空着就什么都不做(面板不关,让用户接着写或点「完成」) */
+    private void submitManual() {
         String code = etManual == null ? "" : etManual.getText().toString().trim();
-        if (code.isEmpty()) return false;
+        if (code.isEmpty()) return;
         deliver(code);
-        return true;
     }
 
+    /**
+     * 把一个码交给宿主。**不关窗** —— 面板是连续扫的,关窗由用户点「完成」。
+     * 成败由宿主那边的提示照常说;这里只把"最近读到什么"留在面板上,免得用户不知道有没有读到。
+     */
     private void deliver(@Nullable String code) {
         if (code == null || code.isEmpty()) return;
+        anyDelivered = true;
         Bundle b = new Bundle();
         b.putString(KEY_CODE, code);
         getParentFragmentManager().setFragmentResult(REQUEST_KEY, b);
-        dismiss();
+        if (tvHint != null) tvHint.setText(getString(R.string.scan_barcode_last_fmt, code));
+        if (etManual != null) etManual.setText("");   // 手动输入:清空,方便接着输下一个
     }
 }

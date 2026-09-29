@@ -142,8 +142,7 @@ public class StocktakeDetailActivity extends AppCompatActivity {
 
         // 没有硬件扫把头(手机)→ 开摄像头面板(见 ui/common/BarcodeScanDialog):
         // 它自带权限申请与手动输入兜底,也有自己的取景与取消,所以这里不切本页的按钮状态。
-        ScanManager.get(this).ensureReady(ScanType.BARCODE);
-        if (!ScanManager.get(this).isBarcodeHwReady()) {
+        if (ScanManager.get(this).usesCameraBarcode()) {
             BarcodeScanDialog.show(getSupportFragmentManager());
             return;
         }
@@ -257,7 +256,8 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                             Toast.makeText(StocktakeDetailActivity.this,
                                     R.string.stocktake_already_counted, Toast.LENGTH_SHORT).show();
                         } else if (msg != null && msg.contains(BackendMessages.CODE_NOT_FOUND)) {
-                            showScanRejected(getString(R.string.scan_code_not_in_stock));
+                            // 带上扫到的**原文**:摄像头会读错,只写"该码未入库"分不清是读错还是瞄错
+                            showScanRejected(getString(R.string.scan_code_not_in_stock, canon));
                         } else {
                             // 网络/服务端瞬时失败:放开去重,允许用户重扫该码
                             triedCodes.remove(canon);

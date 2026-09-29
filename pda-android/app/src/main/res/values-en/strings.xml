@@ -13,6 +13,7 @@
     <!-- 通用 -->
     <string name="action_confirm">Confirm</string>
     <string name="action_cancel">Cancel</string>
+    <string name="action_done">Done</string>
     <string name="action_save">Save</string>
     <string name="action_submit">Submit</string>
     <string name="action_transfer">Transfer</string>
@@ -217,8 +218,10 @@
     <string name="scan_rfid">RFID scan</string>
     <string name="scan_barcode">Barcode scan</string>
     <!-- Camera scan panel (BarcodeScanDialog): for devices without a hardware scan head -->
-    <string name="scan_barcode_hint">Aim the camera at the barcode</string>
-    <string name="scan_barcode_hint_slow">No barcode yet — aim closer, avoid glare, or type the code below</string>
+    <string name="scan_barcode_hint">Aim at the barcode (10–20 cm, straight on, avoid glare); tap the screen to focus</string>
+    <string name="scan_barcode_hint_slow">No barcode yet — move closer or re-aim, or type the code below</string>
+    <!-- Continuous scan: keep the most recent read on the panel -->
+    <string name="scan_barcode_last_fmt">Last: %1$s</string>
     <string name="scan_barcode_manual_hint">Or type the code</string>
     <string name="scan_barcode_no_permission">No camera permission, so the camera is unavailable — enable it in system settings, or type the code below</string>
     <string name="action_stop">Stop</string>
@@ -275,7 +278,8 @@
     <!-- Merge suffix for stocktake scan rejections. Not reusing the key above because that one
          ends with "Skipped — ", while the stocktake sentences are already complete. -->
     <string name="scan_reject_dup_fmt">%1$s (%2$d more of the same omitted)</string>
-    <string name="scan_code_not_in_stock">Code not in stock, skipped</string>
+    <!-- %1$s = the raw scanned text (cameras can misread; without it you cannot tell a misread from a wrong label) -->
+    <string name="scan_code_not_in_stock">Not in stock: %1$s, skipped</string>
     <string name="scan_already_out">Already shipped, skipped</string>
     <string name="scan_scrapped">Code scrapped, skipped</string>
     <string name="scan_not_locked">Code not reserved for this order, skipped</string>

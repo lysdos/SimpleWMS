@@ -5,6 +5,7 @@
     <!-- 通用 -->
     <string name="action_confirm">确认</string>
     <string name="action_cancel">取消</string>
+    <string name="action_done">完成</string>
     <string name="action_save">保存</string>
     <string name="action_submit">提交</string>
     <string name="action_transfer">调拨</string>
@@ -227,8 +228,10 @@
     <string name="scan_rfid">RFID 扫码</string>
     <string name="scan_barcode">条码扫码</string>
     <!-- 摄像头扫码面板(BarcodeScanDialog):给没有硬件扫码头的手持设备用 -->
-    <string name="scan_barcode_hint">把条码对准取景框</string>
-    <string name="scan_barcode_hint_slow">还没识别到条码:对准一点、避开反光,或直接在下面输入编码</string>
+    <string name="scan_barcode_hint">把条码对准取景框(10~20cm、正对、避开反光),点屏幕可对焦</string>
+    <string name="scan_barcode_hint_slow">还没识别到:再靠近或对准一点,或直接在下面输入编码</string>
+    <!-- 连续扫:每读到一个就把"最近读到什么"留在面板上 -->
+    <string name="scan_barcode_last_fmt">最近: %1$s</string>
     <string name="scan_barcode_manual_hint">或直接输入编码</string>
     <string name="scan_barcode_no_permission">没有相机权限,摄像头用不了;可到系统设置里开启,或直接在下面输入编码</string>
     <string name="action_stop">停止</string>
@@ -290,9 +293,11 @@
     <string name="scan_skipped_fmt">%1$s,已跳过</string>
     <string name="scan_skipped_dup_fmt">%1$s(另有 %2$d 个重复错误省略),已跳过</string>
     <!-- 盘点详情页扫码被拒时的"合并提示"后缀。之所以不复用上面那条:那条结尾带「已跳过」,
-         而盘点页的句子本身已经是完整句(如「该码未入库,已跳过」),套上去会变成「…已跳过,已跳过」。 -->
+         而盘点页的句子本身已经是完整句(如「该码未入库: 0000…,已跳过」),套上去会变成「…已跳过,已跳过」。 -->
     <string name="scan_reject_dup_fmt">%1$s(另有 %2$d 条同类提示已省略)</string>
-    <string name="scan_code_not_in_stock">该码未入库,已跳过</string>
+    <!-- %1$s = **扫到的原文**。摄像头会读错(反光/角度/无校验位的码制),不带上原文就分不清
+         是读错了还是瞄错了标签 —— 这条提示是"这个字符串不是任何单元的码"的唯一出口。 -->
+    <string name="scan_code_not_in_stock">该码未入库: %1$s,已跳过</string>
     <string name="scan_already_out">该码已出过库,已跳过</string>
     <string name="scan_scrapped">该码已报废,已跳过</string>
     <string name="scan_not_locked">该码未锁定给本出库单,已跳过</string>

@@ -2,13 +2,18 @@ package com.wms.pda.scan;
 
 import android.content.Context;
 import android.util.Log;
+import android.util.Size;
+import android.view.MotionEvent;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
+import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 import androidx.camera.core.Preview;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.content.ContextCompat;
@@ -46,6 +51,11 @@ public class BarcodeScannerImpl implements ScannerService {
 
     private final ExecutorService analysisExecutor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean scanning = new AtomicBoolean(false);
+    /** 连续扫:同一个码在这个窗口内不重复上报。硬件扫码头是 1500ms,这里给宽一点 ——
+     *  摄像头帧率高得多,同一张标签每一帧都在画面里,重复上报会变成刷屏。 */
+    private static final long SAME_CODE_MS = 2000L;
+    private String lastCode;
+    private long lastCodeMs;
     private volatile ScannerCallback cb;
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
@@ -108,8 +118,10 @@ public class BarcodeScannerImpl implements ScannerService {
     public void startScan(ScanType type) {
         if (type != ScanType.BARCODE) return;
         scanning.set(true);
-        // 摄像头预览 + 识别由 attachCamera 启动,这里仅标记状态
-        // 实际回调在 analyze() 中触发 cb.onScanResult
+        lastCode = null;    // 新一轮:上一轮扫过的码允许重扫
+        lastCodeMs = 0L;
+        // 摄像头预览 + 识别由 attachCamera 启动,这里仅标记状态;
+        // 结果在 analyze() 里回调,而且是**连续**的(不读到一个就停)。
     }
 
     @Override
@@ -141,19 +153,54 @@ public class BarcodeScannerImpl implements ScannerService {
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(previewView.getSurfaceProvider());
 
+                // 分辨率是这条链路上最关键的一格:不设的话 CameraX 默认只给 640×480,而 ML Kit
+                // 官方对条码扫描的建议是**至少 1280×720**。24 位 1D 码在 640 宽的画幅里每根条纹
+                // 分不到一个像素,解码器只能"猜" —— 实测读出来的串长度像样、前几位还对、后面开始飘,
+                // 还夹杂 + % ^ 这类符号,后端自然查无此码。宁可多花点 CPU:
+                // STRATEGY_KEEP_ONLY_LATEST 保证堆积时丢帧而不是排队。
                 ImageAnalysis analysis = new ImageAnalysis.Builder()
+                        .setResolutionSelector(new ResolutionSelector.Builder()
+                                .setResolutionStrategy(new ResolutionStrategy(
+                                        new Size(1280, 720),
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                                .build())
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build();
                 analysis.setAnalyzer(analysisExecutor, this::analyze);
 
                 cameraProvider.unbindAll();
                 camera = cameraProvider.bindToLifecycle(owner, selector, preview, analysis);
+
+                // 对焦:先主动对一次中央(手机起手常常是虚的),再允许点屏幕对哪儿。
+                // 不点按也没关系 —— 相机自身的连续对焦仍在工作,这只是给它一个明确的起始点。
+                previewView.post(() -> focusAt(previewView,
+                        previewView.getWidth() / 2f, previewView.getHeight() / 2f));
+                previewView.setOnTouchListener((v, e) -> {
+                    if (e.getAction() == MotionEvent.ACTION_UP) {
+                        focusAt(previewView, e.getX(), e.getY());
+                    }
+                    return true;
+                });
             } catch (Throwable t) {
                 Log.e(TAG, "attachCamera failed", t);
                 ScannerCallback localCb = cb;
                 if (localCb != null) localCb.onError(-1, "摄像头不可用: " + t.getMessage());
             }
         }, ContextCompat.getMainExecutor(previewView.getContext()));
+    }
+
+    /** 在预览的 (x, y) 处触发一次对焦 + 测光;相机还没绑上就什么都不做。 */
+    private void focusAt(@NonNull PreviewView previewView, float x, float y) {
+        Camera cam = camera;
+        if (cam == null) return;
+        try {
+            FocusMeteringAction action = new FocusMeteringAction.Builder(
+                    previewView.getMeteringPointFactory().createPoint(x, y),
+                    FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE).build();
+            cam.getCameraControl().startFocusAndMetering(action);
+        } catch (Throwable t) {
+            Log.w(TAG, "focus failed", t);
+        }
     }
 
     /** Activity onPause 时调,释放摄像头。 */
@@ -183,21 +230,24 @@ public class BarcodeScannerImpl implements ScannerService {
                 mediaImage, imageProxy.getImageInfo().getRotationDegrees());
         mlKit().process(inputImage)
                 .addOnSuccessListener(barcodes -> {
-                    if (barcodes != null && !barcodes.isEmpty() && scanning.get()) {
-                        for (Barcode b : barcodes) {
-                            String raw = b.getRawValue();
-                            if (raw != null && !raw.isEmpty()) {
-                                // 抓到一个就停 + 回调
-                                scanning.set(false);
-                                ScannerCallback localCb = cb;
-                                if (localCb != null) {
-                                    localCb.onScanResult(new ScanResult(
-                                            raw, ScanType.BARCODE, null,
-                                            System.currentTimeMillis()));
-                                }
-                                break;
-                            }
+                    if (barcodes == null || barcodes.isEmpty() || !scanning.get()) return;
+                    long now = System.currentTimeMillis();
+                    for (Barcode b : barcodes) {
+                        String raw = b.getRawValue();
+                        if (raw == null || raw.isEmpty()) continue;
+                        // 连续扫:一个码报一次,同一个码在窗口内不再报(它每一帧都在画面里),
+                        // 而且**不停** —— 读到一个就停那是"一次一个"的老行为。
+                        if (raw.equals(lastCode) && now - lastCodeMs < SAME_CODE_MS) break;
+                        lastCode = raw;
+                        lastCodeMs = now;
+                        // 记下"到底读到了什么":摄像头会读错(反光/角度/无校验位的码制),
+                        // 现场只会看到"该码未入库",光看提示分不清是读错还是扫错了标签。
+                        Log.d(TAG, "camera decoded: " + raw);
+                        ScannerCallback localCb = cb;
+                        if (localCb != null) {
+                            localCb.onScanResult(new ScanResult(raw, ScanType.BARCODE, null, now));
                         }
+                        break;   // 一帧只报一个,其余的交给下一帧
                     }
                 })
                 .addOnFailureListener(t -> Log.d(TAG, "scan failed", t))
