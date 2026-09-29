@@ -79,6 +79,10 @@ log = logging.getLogger("wms-bridge")
 # ==================== 配置 ====================
 WMS_USERNAME = os.getenv("WMS_USERNAME", "admin")
 WMS_PASSWORD = os.getenv("WMS_PASSWORD", "admin123")
+# 登录限流豁免用的共享密钥,与 backend 的 WMS_LOGIN_NO_THROTTLE_TOKEN 是同一个值
+# (两个服务从 .env 读同一个名字,避免"改了这边忘了那边")。空白 = 不带该头,
+# 退化为受限流保护 —— 与后端 fail-closed 的口径一致。
+WMS_NO_THROTTLE_TOKEN = os.getenv("WMS_LOGIN_NO_THROTTLE_TOKEN", "")
 DEVICE_CODE  = os.getenv("DEFAULT_DEVICE_CODE", "MOCK-UHF-001")
 HTTP_TIMEOUT  = 5  # 秒
 MAX_SCANNED   = 200  # scanned_cache 上限(防止长跑内存无限增长)
@@ -120,8 +124,18 @@ def _http_post(path, body=None, headers=None):
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", errors="ignore")
-        log.error("[HTTP] %s %s -> %d body=%s", "POST", path, e.code, body[:200])
+        raw = e.read().decode("utf-8", errors="ignore")
+        log.error("[HTTP] %s %s -> %d body=%s", "POST", path, e.code, raw[:200])
+        # 后端的错误体同样是 ApiResponse 壳({"code","message","data"}),解析出来再返回 ——
+        # 否则调用方只能拿到 "HTTP 401" 这种没信息量的文案,UHF 登录页会把这句原样显示给操作员。
+        # code 取响应体里的值(本后端的错误体里它与 HTTP 状态码一致),login() 判 429 的冷却逻辑
+        # 因此不受影响;响应体不是 JSON 时(例如 nginx 自己吐的 502 页面)退回 HTTP 状态码。
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and parsed.get("code") is not None:
+                return parsed
+        except ValueError:
+            pass
         return {"code": e.code, "message": f"HTTP {e.code}", "data": None}
     except Exception as e:
         log.error("[HTTP] %s %s -> error: %s", "POST", path, e)
@@ -147,14 +161,26 @@ def _auth_headers():
         return {"Authorization": "Bearer " + state.token}
 
 # ==================== 登录 ====================
-# 被限流(429)后的冷却秒数。
+def _login_headers():
+    """调 /api/auth/login 时带上"豁免限流"头(仅当配了共享密钥)。
+
+    UHF 终端的人机登录(登录页)与出库扫码的自动登录是**同一个容器**代发的,后端分不清
+    两者,也无从按来源 IP 区分(docker 网络里容器 IP 重建后会漂)。而终端一旦被限流锁
+    5 分钟,现场整条出库扫码线就停摆,所以按容器整体豁免。密钥只在容器进程内,不下发浏览器。
+    """
+    if not WMS_NO_THROTTLE_TOKEN:
+        return None
+    return {"X-WMS-No-Throttle": WMS_NO_THROTTLE_TOKEN}
+
+
+# 被限流(429)后的冷却秒数 —— 兜底,不是主路径。
 #
-# 后端连续失败会锁定(默认 5 分钟),这段时间继续重试毫无意义;更麻烦的是,
-# 它会把"人在 UHF 登录页手输正确口令"也一起顶掉 —— 那个页面的登录请求是**本容器**
-# 代发的,来源 IP 与后台自动登录完全相同,于是两者共用后端的同一个限流桶
-# ((用户名, IP) 那一把钥匙)。所以一收到 429 就闭嘴等着,冷却期内一次 HTTP 都不发。
+# 正常情况下本容器已被后端豁免限流(见 _login_headers),不会拿到 429;留这段是因为
+# 密钥可能只配了一侧(比如 .env 加了、还没重建 backend):那时后端照旧回 429,若继续
+# 重试就毫无意义,还会把"人在 UHF 登录页手输正确口令"一起顶掉(两者共用后端的
+# (用户名, IP) 限流桶)。所以收到 429 就闭嘴等着,冷却期内一次 HTTP 都不发。
 #
-# 取 60 秒(比后端 5 分钟的锁短):既不踩着锁刷,又能在凭据改对后最多 60 秒内自动恢复。
+# 取 60 秒(比后端 5 分钟的锁短):既不踩着锁刷,又能在配置补齐后最多 60 秒内自动恢复。
 LOGIN_COOLDOWN_SEC = 60
 _login_cooldown_until = 0.0
 
@@ -169,7 +195,8 @@ def login():
             return False
         for attempt in range(1, 4):
             r = _http_post("/api/auth/login",
-                           {"username": WMS_USERNAME, "password": WMS_PASSWORD})
+                           {"username": WMS_USERNAME, "password": WMS_PASSWORD},
+                           headers=_login_headers())
             if r.get("code") == 0 and r.get("data", {}).get("token"):
                 state.token = r["data"]["token"]
                 _login_cooldown_until = 0.0      # 成功即解除冷却

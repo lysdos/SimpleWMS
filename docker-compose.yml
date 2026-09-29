@@ -100,6 +100,9 @@ services:
       # JWT 密钥强制从 .env 读,空值会拒启动
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env (32+ bytes)}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS:-24}
+      # 内部受信调用方(UHF-Rader 容器)豁免登录失败限流用的共享密钥;
+      # 与 uhf-rader 服务注入的是同一个值。空白 = 豁免关闭(照旧限流)。
+      WMS_LOGIN_NO_THROTTLE_TOKEN: ${WMS_LOGIN_NO_THROTTLE_TOKEN:?WMS_LOGIN_NO_THROTTLE_TOKEN must be set in .env}
     ports:
       # 只绑本机回环:局域网里唯一对外开放的门是 nginx(9080),它把 /api/* 反代进来。
       # PDA / UHF 都走 9080 —— 原先为了让 PDA 直连而放开到局域网(9090:8080),
@@ -148,6 +151,9 @@ services:
       # 不再给弱默认,缺 WMS_PASSWORD 时 bridge 启动会直接失败提示设置。
       WMS_USERNAME: ${WMS_USERNAME:?WMS_USERNAME must be set in .env}
       WMS_PASSWORD: ${WMS_PASSWORD:?WMS_PASSWORD must be set in .env}
+      # 登录限流豁免的共享密钥(与 backend 同一个值):本容器的人机登录与自动登录
+      # 后端分不清,一旦被锁 5 分钟整条扫码线停摆,故后端对本容器的登录请求不计失败。
+      WMS_LOGIN_NO_THROTTLE_TOKEN: ${WMS_LOGIN_NO_THROTTLE_TOKEN:?WMS_LOGIN_NO_THROTTLE_TOKEN must be set in .env}
       # 读卡器 TCP(根据现场实际改)
       READER_HOST: ${UHF_READER_HOST:-192.168.1.209}
       READER_PORT: ${UHF_READER_PORT:-5000}

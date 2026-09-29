@@ -75,6 +75,9 @@
   两把尺子是刻意的:只按用户名计数,谁都能拿别人的工号把别人锁在门外;只按 IP 计数,同一个 nginx 出口下的同事会互相连坐。
   成功后计数清零;计数在**进程内存**里,多实例部署需换成共享存储才有意义。
   客户端 IP 取 `X-Real-IP` —— nginx 用 `proxy_set_header X-Real-IP $remote_addr` **覆写**该头,伪造无效。
+- **豁免(2026-09-29)**:UHF-Rader 终端**整机**不受登录失败限流。它的登录页与其出库扫码的自动登录都由**同一个容器**代发,后端分不清两者,也无法按来源 IP 区分(docker 网络里容器 IP 重建后会漂)——而该终端被锁 5 分钟 = 现场整条扫码线停摆。
+  做法:`.env` 的 `WMS_LOGIN_NO_THROTTLE_TOKEN` 由 backend 与 uhf-rader 两个容器读**同一个值**,UHF 代调 `/api/auth/login` 时带 `X-WMS-No-Throttle: <密钥>`;后端命中则**既不看锁定、也不计失败**(只豁免一半的话,终端页面的误输仍会把桶记满,回头把自动登录顶掉)。
+  密钥只在容器进程内,不下发浏览器;**未配置(空白)时豁免整体关闭**(fail-closed,不会"配漏了反而放行")。WMS 网页登录页与 PDA 不带该头,照旧受限流保护。比较走常量时间,不给出逐字节试探的余地。
 - **密码下限 8 位(2026-09-28)**:新建用户 / 管理员重置 / 自行改密都按 8 位卡(此前是 6 位,与首个 admin 账号的 8 位口径不一)。
   存量 6~7 位口令**仍可登录**,这次收紧只作用于新建与改密,不会把现有账号锁在外面。
 
@@ -125,6 +128,8 @@
 | POST | `/logout` | 已登录 | — | `{code:0,message:ok}` | — |
 | GET | `/me` | 已登录 | — | `{userId, username, role}` | 401 |
 | POST | `/me/change-password` | 已登录 | `{oldPassword, newPassword}` | `{code:0,message:ok}` | 400 旧密码错 |
+
+`POST /login` 另接受一个仅供内部受信调用方的头 `X-WMS-No-Throttle: <WMS_LOGIN_NO_THROTTLE_TOKEN>`(只有 UHF-Rader 容器会带):命中则不查锁定、不计失败,理由与 fail-closed 口径见 §1.3 的「豁免」。
 
 ### 2.2 仪表盘 — `/api/dashboard`
 
@@ -400,7 +405,7 @@ PDA 扫码链路涉及的端点(共 4 个):
 
 ## 6. 性能与限流
 
-- 当前无显式限流(测试用)
+- 登录入口有失败限流(§1.3:同一 **用户名+IP** 错 5 次、或同一 **IP** 错 20 次 → 锁 5 分钟;UHF-Rader 容器整机豁免);**其余接口无显式限流**
 - 库存 CSV 导出硬编码 5000 行
 - FIFO 出库:`consumeForOutbound` 多次 SELECT inventory_item(按 `id ASC` ORDER BY limit),N=100 时约几毫秒
 
@@ -429,3 +434,9 @@ PDA 扫码链路涉及的端点(共 4 个):
 - **`RoleInterceptor` 默认放行**(没写 `@RequireRole` 就对所有已登录用户开放):这是既定姿态(见 §5 矩阵),代价是新增 controller 忘写注解即默认开放。
 - **`barcode.png` 的 404 是空响应体**(`ResponseEntity.status(404).build()`),与其余 404 的 JSON 壳不一致;二进制端点,暂不动。
 - **i18n `t(key, {default})` 不支持 `default` 参数**、`confirmModal` 硬编码中文「确认」:`views.js` 的 `statusLabel`/`docStatusLabel` 是死代码,一旦被调用会吐裸 key。低危。
+
+### 8.2 已评审但决定**接受**的风险(2026-09-29)
+
+- **UHF-Rader 登录页 = 局域网内不限次数的口令试探入口**。§1.3 的豁免让整个 UHF 容器绕过登录失败限流,而该容器的 Web UI 端口是 `5001:5000`(绑所有网卡,局域网可达),`GET /api/wms/session` 又是免鉴权的 —— 局域网内任何一台机器都能先领 cookie、再反复打 `/api/wms/login` 试探 WMS 口令,上限从「5 次/(用户名,IP)」变成没有。
+  选它是因为反面的代价更具体:UHF 终端被锁 5 分钟 = 现场整条出库扫码线停摆,而该终端只服务于车间局域网。WMS 网页登录页与 PDA 不带豁免头,照旧限流(§1.3)。
+  真要收紧,先确认现场是**怎么打开 UHF 界面**的:同一台机器可把端口改成 `"127.0.0.1:5001:5000"`;若是局域网另一台设备访问,则只能在 Flask 侧给 `/api/wms/login` 加一层轻量节流 —— 那会与「终端登录页不做失败限流」的要求相抵触,需重新拍板。

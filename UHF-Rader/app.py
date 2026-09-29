@@ -466,9 +466,10 @@ def api_wms_login():
     if wms_override:
         with wms_bridge.state.lock:
             wms_bridge.state.wms_url = wms_override.rstrip('/')
-    # 调 WMS
+    # 调 WMS(带上"豁免限流"头:本容器整机豁免,理由见 wms_bridge._login_headers)
     r = wms_bridge._http_post('/api/auth/login',
-                             {'username': username, 'password': password})
+                             {'username': username, 'password': password},
+                             headers=wms_bridge._login_headers())
     if r.get('code') == 0 and r.get('data', {}).get('token'):
         d = r['data']
         with wms_bridge.state.lock:
