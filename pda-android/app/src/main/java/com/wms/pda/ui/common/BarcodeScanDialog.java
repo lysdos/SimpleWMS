@@ -10,6 +10,8 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.TextView;
 
@@ -120,6 +122,17 @@ public class BarcodeScanDialog extends DialogFragment {
         previewView = v.findViewById(R.id.pv_scan);
         tvHint = v.findViewById(R.id.tv_scan_hint);
         etManual = v.findViewById(R.id.et_manual_code);
+        // 手输时把取景收起来:输入框立刻上到内容顶部,软键盘再高也盖不到它。
+        // 为什么非这样不可:弹窗居中、高度固定,而 SOFT_INPUT_ADJUST_RESIZE 在 Android 11+
+        // 对 Dialog 常不生效 —— 键盘从下面盖上来,盖住的正好是原来贴底的那一格输入框。
+        etManual.setOnFocusChangeListener((fv, hasFocus) -> setManualMode(hasFocus));
+        // 键盘上的「完成」= 提交这个码 + 回取景(没有它的话,ADJUST_RESIZE 失效的机型上
+        // 按返回键不会让输入框失焦,取景就一直藏着,用户找不到回去的路)
+        etManual.setOnEditorActionListener((fv, actionId, e) -> {
+            if (actionId != EditorInfo.IME_ACTION_DONE) return false;
+            submitManual();
+            return true;
+        });
 
         AlertDialog d = new AlertDialog.Builder(requireContext())
                 .setTitle(R.string.scan_barcode)
@@ -192,11 +205,30 @@ public class BarcodeScanDialog extends DialogFragment {
         }
     }
 
-    /** 手动输入的那一格:空着就什么都不做(面板不关,让用户接着写或点「完成」) */
+    /**
+     * 输入态:收起取景(让输入框上到顶部),并**暂停扫描** —— 收起预览不等于停止识别,
+     * 镜头仍在分析,手输时货架上任何一个标签都可能被自动报进来(在出库页那就是误确认一件货)。
+     * 退出输入态时重新武装扫描(相机只绑一次,这里只是把标记置回 true)。
+     */
+    private void setManualMode(boolean on) {
+        if (previewView != null) previewView.setVisibility(on ? View.GONE : View.VISIBLE);
+        if (on) {
+            ScanManager.get(appCtx).stopScan();
+        } else if (cameraStarted) {
+            ScanManager.get(appCtx).startScan(ScanType.BARCODE, scanCallback);
+        }
+    }
+
+    /** 提交一个手输的码:交出去 → 收键盘 → 丢焦点(取景随之回来、扫描重新武装)。 */
     private void submitManual() {
-        String code = etManual == null ? "" : etManual.getText().toString().trim();
+        if (etManual == null) return;
+        String code = etManual.getText().toString().trim();
         if (code.isEmpty()) return;
         deliver(code);
+        InputMethodManager imm = (InputMethodManager)
+                requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(etManual.getWindowToken(), 0);
+        etManual.clearFocus();   // 触发上面的焦点监听 → 取景回来
     }
 
     /**
