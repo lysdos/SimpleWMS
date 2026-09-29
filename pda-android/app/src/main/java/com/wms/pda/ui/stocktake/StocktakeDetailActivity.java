@@ -22,6 +22,7 @@ import com.wms.pda.data.model.StocktakeOrder;
 import com.wms.pda.data.remote.BackendMessages;
 import com.wms.pda.data.repo.RepositoryProvider;
 import com.wms.pda.data.repo.WmsCallback;
+import com.wms.pda.ui.common.BarcodeScanDialog;
 import com.wms.pda.ui.common.StatusPill;
 import com.wms.pda.scan.ScanManager;
 import com.wms.pda.scan.ScanResult;
@@ -81,6 +82,13 @@ public class StocktakeDetailActivity extends AppCompatActivity {
         btnBarcodeScan.setOnClickListener(v -> startBarcodeScan());
         btnBarcodeStop.setOnClickListener(v -> stopScan());
 
+        // 摄像头扫码面板的结果走 Fragment Result(旋转重建后回调也不会丢)
+        getSupportFragmentManager().setFragmentResultListener(
+                BarcodeScanDialog.REQUEST_KEY, this, (key, b) -> {
+                    String code = b.getString(BarcodeScanDialog.KEY_CODE);
+                    if (code != null) handleScanResult(code);
+                });
+
         btnSubmit.setOnClickListener(v -> confirmAndSubmit());
     }
 
@@ -122,13 +130,6 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                 Toast.makeText(StocktakeDetailActivity.this,
                         code == -100 ? msg : getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
             }
-
-            @Override
-            public void onTimeout() {
-                stopScan();
-                Toast.makeText(StocktakeDetailActivity.this,
-                        R.string.scan_rfid_timeout, Toast.LENGTH_SHORT).show();
-            }
         });
     }
 
@@ -138,6 +139,15 @@ public class StocktakeDetailActivity extends AppCompatActivity {
 
     private void startBarcodeScan() {
         if (activeScanType == ScanType.RFID_EPC) stopScan();
+
+        // 没有硬件扫把头(手机)→ 开摄像头面板(见 ui/common/BarcodeScanDialog):
+        // 它自带权限申请与手动输入兜底,也有自己的取景与取消,所以这里不切本页的按钮状态。
+        ScanManager.get(this).ensureReady(ScanType.BARCODE);
+        if (!ScanManager.get(this).isBarcodeHwReady()) {
+            BarcodeScanDialog.show(getSupportFragmentManager());
+            return;
+        }
+
         activeScanType = ScanType.BARCODE;
         updateButtonStates();
 
@@ -154,12 +164,6 @@ public class StocktakeDetailActivity extends AppCompatActivity {
                         code == -100 ? msg : getString(R.string.msg_scan_exception, msg), Toast.LENGTH_SHORT).show();
             }
 
-            @Override
-            public void onTimeout() {
-                stopScan();
-                Toast.makeText(StocktakeDetailActivity.this,
-                        R.string.scan_barcode_timeout, Toast.LENGTH_SHORT).show();
-            }
         });
     }
 

@@ -29,6 +29,7 @@ import com.wms.pda.scan.ScanManager;
 import com.wms.pda.scan.ScanResult;
 import com.wms.pda.scan.ScanType;
 import com.wms.pda.scan.ScannerCallback;
+import com.wms.pda.ui.common.BarcodeScanDialog;
 import com.wms.pda.ui.common.StatusPill;
 import com.wms.pda.util.BeepUtil;
 
@@ -126,6 +127,13 @@ public class OutboundDetailActivity extends AppCompatActivity {
         btnBarcodeScan.setOnClickListener(v -> startBarcodeScan());
         btnBarcodeStop.setOnClickListener(v -> stopScan());
 
+        // 摄像头扫码面板的结果走 Fragment Result(旋转重建后回调也不会丢)
+        getSupportFragmentManager().setFragmentResultListener(
+                BarcodeScanDialog.REQUEST_KEY, this, (key, b) -> {
+                    String code = b.getString(BarcodeScanDialog.KEY_CODE);
+                    if (code != null) handleBarcodeCode(code);
+                });
+
         findViewById(R.id.btn_clear_scans).setOnClickListener(v -> confirmClearScans());
 
         findViewById(R.id.btn_header_edit).setOnClickListener(v -> {
@@ -222,12 +230,6 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 }
             }
 
-            @Override
-            public void onTimeout() {
-                stopScan();
-                Toast.makeText(OutboundDetailActivity.this,
-                        getString(R.string.scan_rfid_timeout), Toast.LENGTH_SHORT).show();
-            }
         });
     }
 
@@ -240,19 +242,22 @@ public class OutboundDetailActivity extends AppCompatActivity {
         if (activeScanType == ScanType.RFID_EPC) {
             stopScan();
         }
+
+        // 没有硬件扫把头(手机)→ 开摄像头面板(见 ui/common/BarcodeScanDialog):
+        // 它自带权限申请与手动输入兜底,也有自己的取景与取消,所以这里不切本页的按钮状态。
+        ScanManager.get(this).ensureReady(ScanType.BARCODE);
+        if (!ScanManager.get(this).isBarcodeHwReady()) {
+            BarcodeScanDialog.show(getSupportFragmentManager());
+            return;
+        }
+
         activeScanType = ScanType.BARCODE;
         updateButtonStates();
 
         ScanManager.get(this).startScan(ScanType.BARCODE, new ScannerCallback() {
             @Override
             public void onScanResult(ScanResult result) {
-                String code = result.getCode();
-                if (code == null || code.isEmpty()) return;
-                // 条码**故意不**做期望集过滤:这是操作员瞄准某个目标的动作,
-                // 扫到不对的货要给出明确原因(未锁定/已出库),静默会让人以为枪坏了。
-                String canon = canonicalCode(code);
-                if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
-                submitScan(code);
+                handleBarcodeCode(result == null ? null : result.getCode());
             }
 
             @Override
@@ -266,13 +271,19 @@ public class OutboundDetailActivity extends AppCompatActivity {
                 }
             }
 
-            @Override
-            public void onTimeout() {
-                stopScan();
-                Toast.makeText(OutboundDetailActivity.this,
-                        getString(R.string.scan_barcode_timeout), Toast.LENGTH_SHORT).show();
-            }
         });
+    }
+
+    /**
+     * 条码扫描结果统一入口:硬件扫码头与摄像头面板共用。
+     * 条码**故意不**做期望集过滤:这是操作员瞄准某个目标的动作,扫到不对的货要给出
+     * 明确原因(未锁定/已出库),静默会让人以为枪坏了。
+     */
+    private void handleBarcodeCode(String code) {
+        if (code == null || code.isEmpty()) return;
+        String canon = canonicalCode(code);
+        if (scannedCodes.contains(canon) || triedCodes.contains(canon)) return;
+        submitScan(code);
     }
 
     // ============================================================

@@ -216,6 +216,11 @@
     <string name="stocktake_submit_confirm_unfinished">%1$d lines are still uncounted; they count as 0 (short). Submit anyway?</string>
     <string name="scan_rfid">RFID scan</string>
     <string name="scan_barcode">Barcode scan</string>
+    <!-- Camera scan panel (BarcodeScanDialog): for devices without a hardware scan head -->
+    <string name="scan_barcode_hint">Aim the camera at the barcode</string>
+    <string name="scan_barcode_hint_slow">No barcode yet — aim closer, avoid glare, or type the code below</string>
+    <string name="scan_barcode_manual_hint">Or type the code</string>
+    <string name="scan_barcode_no_permission">No camera permission, so the camera is unavailable — enable it in system settings, or type the code below</string>
     <string name="action_stop">Stop</string>
     <string name="stocktake_row_delete">Delete</string>
     <string name="stocktake_row_delete_confirm">Delete this count line (%1$s)? You can scan it again to record a surplus.</string>
@@ -263,8 +268,6 @@
     <string name="msg_scan_exception">Scan error: %1$s</string>
     <string name="msg_deleted">Deleted</string>
     <string name="msg_create_failed">Create failed: %1$s</string>
-    <string name="scan_rfid_timeout">RFID scan timed out, no tag read</string>
-    <string name="scan_barcode_timeout">Barcode scan timed out, no code read</string>
     <string name="scan_already_scanned_fmt">Already scanned: %1$s</string>
     <string name="scan_unknown_reason">Unknown reason</string>
     <string name="scan_skipped_fmt">Skipped — %1$s</string>

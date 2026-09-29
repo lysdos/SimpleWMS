@@ -226,6 +226,11 @@
          没引资源、自己抄了一份中文,切英文后不生效) -->
     <string name="scan_rfid">RFID 扫码</string>
     <string name="scan_barcode">条码扫码</string>
+    <!-- 摄像头扫码面板(BarcodeScanDialog):给没有硬件扫码头的手持设备用 -->
+    <string name="scan_barcode_hint">把条码对准取景框</string>
+    <string name="scan_barcode_hint_slow">还没识别到条码:对准一点、避开反光,或直接在下面输入编码</string>
+    <string name="scan_barcode_manual_hint">或直接输入编码</string>
+    <string name="scan_barcode_no_permission">没有相机权限,摄像头用不了;可到系统设置里开启,或直接在下面输入编码</string>
     <string name="action_stop">停止</string>
     <string name="stocktake_row_delete">删除</string>
     <string name="stocktake_row_delete_confirm">删除该盘点行(%1$s)?删除后可重新扫码记盘盈。</string>
@@ -279,8 +284,6 @@
     <string name="msg_scan_exception">扫码异常: %1$s</string>
     <string name="msg_deleted">已删除</string>
     <string name="msg_create_failed">创建失败: %1$s</string>
-    <string name="scan_rfid_timeout">RFID 扫码超时,未读到标签</string>
-    <string name="scan_barcode_timeout">条码扫码超时,未读到码</string>
     <string name="scan_already_scanned_fmt">该码已扫过: %1$s</string>
     <string name="scan_unknown_reason">未知原因</string>
     <!-- 扫码被拒时"原因 + 已跳过"的包装。%1$s 的原因可能来自后端,所以只翻包装、不翻它 -->

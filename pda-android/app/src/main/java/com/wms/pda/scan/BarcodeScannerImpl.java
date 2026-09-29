@@ -56,8 +56,8 @@ public class BarcodeScannerImpl implements ScannerService {
      * **不能放在构造函数里**:ScanManager 会无条件 new 出一个摄像头兜底实例,而
      * `BarcodeScanning.getClient` 会触发 ML Kit 动态模块加载 —— 真机 logcat 里那条
      * `DynamiteModule` 就是它(十几毫秒,量不大,但发生在冷启动的主线程上)。
-     * 关键是硬件扫把头可用时这条路径根本走不到 —— 全项目没有地方调 attachBarcodeCamera,
-     * 所以这份工作是白做的。现在只有真要用摄像头时才建,且调用点在 analysisExecutor 上,不占主线程。
+     * 有硬件扫把头的 PDA 永远走不到这里,所以只有真要用摄像头时才建,且调用点在
+     * analysisExecutor 上,不占主线程。
      *
      * 注:冷启动那近 2 秒的卡顿不是这里,是 ScanManager 在主线程同步调厂商的
      * `BarcodeFactory...open()`(见 BarcodeHardwareScannerImpl.init)。

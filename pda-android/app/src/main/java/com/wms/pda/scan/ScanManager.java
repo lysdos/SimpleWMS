@@ -21,9 +21,6 @@ public class ScanManager {
     private final BarcodeScannerImpl barcodeCamera;
     private final BarcodeHardwareScannerImpl barcodeHw;
 
-    /** 记录当前 BARCODE 走的是哪条路径(硬件 or 摄像头)。 */
-    private ScannerService activeBarcodeSvc;
-
     private ScanManager(Context ctx) {
         this.appCtx = ctx.getApplicationContext();
         this.uhf = new UhfScannerImpl();
@@ -81,7 +78,6 @@ public class ScanManager {
 
         if (barcodeHw.isReady()) {
             Log.i(TAG, "barcode: using hardware scanner");
-            activeBarcodeSvc = barcodeHw;
             barcodeHw.setCallback(cb);
             barcodeHw.startScan(ScanType.BARCODE);
             return;
@@ -89,7 +85,6 @@ public class ScanManager {
 
         // 2. 降级到 CameraX 摄像头(需要 Activity 调 attachBarcodeCamera 绑定预览)
         Log.i(TAG, "barcode: hardware unavailable, using camera fallback");
-        activeBarcodeSvc = barcodeCamera;
         barcodeCamera.setCallback(cb);
         barcodeCamera.startScan(ScanType.BARCODE);
     }
@@ -98,7 +93,6 @@ public class ScanManager {
         if (uhf.isReady()) uhf.stopScan();
         if (barcodeHw.isReady()) barcodeHw.stopScan();
         if (barcodeCamera.isReady()) barcodeCamera.stopScan();
-        activeBarcodeSvc = null;
     }
 
     /**
@@ -136,7 +130,6 @@ public class ScanManager {
         uhf.release();
         barcodeHw.release();
         barcodeCamera.release();
-        activeBarcodeSvc = null;
     }
 
     /** 设备状态 - 用于 UI 显示。 */
