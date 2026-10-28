@@ -60,6 +60,17 @@ public class InboundService {
 
     /** 商品默认库位;商品也没设就用兜底库位 */
     private String defaultLocationOf(Product p) {
+        return defaultLocationOfStatic(p);
+    }
+
+    /**
+     * {@link #defaultLocationOf(Product)} 的静态版本,同时供 CSV 导入的预检使用。
+     *
+     * **必须共用**:导入预检要告诉用户"库位留空的话这批货会落在哪",那个结果必须与
+     * 真正落库时算出来的完全一致。抄一份的话,将来改兜底规则只会改一处,用户就会看到
+     * "预检说落在 A,实际进了 B"。
+     */
+    static String defaultLocationOfStatic(Product p) {
         String dflt = blankToNull(p.getLocation());
         return dflt == null ? Location.FALLBACK_CODE : dflt;
     }

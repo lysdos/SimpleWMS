@@ -163,6 +163,29 @@ class InboundImportServiceTest {
         assertNull(r.getLines().get(0).getLocation());
     }
 
+    @Test
+    void blankLocation_previewShowsWhereItWillActuallyLand() {
+        // 库位留空不是"没有库位":后端会按 商品默认 → 兜底 解析。
+        // 预览必须显示**实际**落点,否则用户以为这批货没地方放。
+        Product withDefault = product(1, "SKU-A", "螺丝刀");
+        withDefault.setLocation("A-01-01");
+        when(productDao.findAll(isNull(), isNull())).thenReturn(List.of(withDefault));
+
+        var r = service.importInbound(csv("SKU,数量,库位\nSKU-A,1,\n"), null, null, "t", true);
+
+        assertTrue(r.isOk());
+        assertNull(r.getLines().get(0).getLocation(), "文件里确实是空的");
+        assertEquals("A-01-01", r.getLines().get(0).getResolvedLocation(), "但实际会落到商品默认库位");
+    }
+
+    @Test
+    void blankLocation_andNoProductDefault_fallsBackToSystemLocation() {
+        // 商品默认库位也没设 → 落进兜底库位「默认库位」
+        var r = service.importInbound(csv("SKU,数量,库位\nSKU-A,1,\n"), null, null, "t", true);
+        assertTrue(r.isOk());
+        assertEquals(com.wms.model.Location.FALLBACK_CODE, r.getLines().get(0).getResolvedLocation());
+    }
+
     // ---------- 日期 ----------
 
     @Test
@@ -241,6 +264,32 @@ class InboundImportServiceTest {
         var r = service.importInbound(csv("某公司到货清单,,,,\nSKU,数量\nSKU-A,2\n"), null, null, "t", true);
         assertTrue(r.isOk());
         assertEquals(1, r.getFileRows());
+    }
+
+    // ---------- 模板自闭环 ----------
+
+    @Test
+    void template_hasCleanHeaderAndAFullSampleRow() {
+        String tpl = new String(InboundImportService.template(), StandardCharsets.UTF_8);
+        // 表头保持干净:与既有导出一致,不带括号说明
+        assertTrue(tpl.contains("SKU,数量,供应商,生产日期,保质期天数,库位,行备注"), "表头应干净且完整");
+        // 示例行每格都要给值 —— 填法靠它体现(供应商给名称、库位给编码)
+        assertTrue(tpl.contains("IMP-DEMO-001"), "缺示例 SKU");
+        assertTrue(tpl.contains("示例供应商"), "缺示例供应商(名称形态)");
+        assertTrue(tpl.contains("A-01-01"), "缺示例库位(编码形态)");
+    }
+
+    @Test
+    void template_roundTripsThroughImport() {
+        // "下载模板 → 填写 → 导入" 必须能闭环:用模板原文(只把示例 SKU 换成真实存在的)
+        // 走一遍导入,不能报"找不到表头"。
+        String tpl = new String(InboundImportService.template(), StandardCharsets.UTF_8);
+        String filled = tpl.replace("IMP-DEMO-001", "SKU-A");
+        var r = service.importInbound(filled.getBytes(StandardCharsets.UTF_8), null, null, "t", true);
+
+        assertTrue(r.isOk(), () -> "模板自身应可导入,errors=" + r.getErrors());
+        assertEquals(1, r.getFileRows());
+        assertEquals(10, r.getTotalUnits());
     }
 
     @Test

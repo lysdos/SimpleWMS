@@ -355,6 +355,15 @@ const Views = {
         }
 
         if (ok && (r.lines || []).length) {
+            // 库位列显示**实际**会落到的库位:用户留空时后端会按「商品默认库位 → 兜底库位」
+            // 解析。只显示"未指定"会让人以为这批货没有库位。
+            // 留空的那些加一句「自动」,让用户知道不是自己填的。
+            const locCell = l => {
+                const code = l.resolvedLocation || l.location;
+                const label = Views.locLabel(code);
+                return l.location ? label
+                    : `${label}<span style="color:var(--c-text-3);font-size:12px;"> ${t('inbound.import.loc_auto')}</span>`;
+            };
             const rows = r.lines.map(l => `
                 <tr>
                     <td><strong>${escapeHtml(l.sku || '')}</strong></td>
@@ -362,7 +371,7 @@ const Views = {
                     <td class="num">${l.quantity}</td>
                     <td>${escapeHtml(l.supplier || '-')}</td>
                     <td>${escapeHtml(l.productionDate || '-')}</td>
-                    <td>${Views.locLabel(l.location)}</td>
+                    <td>${locCell(l)}</td>
                     <td>${escapeHtml(l.rowRemark || '')}</td>
                     <td style="color:var(--c-text-3);font-size:12px;">${(l.sourceLines || []).join(', ')}</td>
                 </tr>`).join('');

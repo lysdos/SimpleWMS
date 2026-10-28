@@ -920,13 +920,17 @@ async function openInboundImport() {
     const ok = freshModalOk(t('inbound.import.preview'));
     ok.addEventListener('click', () => runInboundImport(false));
 
-    // 换文件后必须回到「预检」:否则用户预检通过后又选了另一个文件,按钮还是
-    // 「确认导入 500 件」,一点就按**新文件**直接建单 —— 他以为还要再预检一次。
+    // 换文件后必须回到「预检」。
+    // ⚠️ 这里不能只改文案:预检通过后 freshModalOk() 会**换掉整个按钮元素**
+    // (cloneNode + replaceChild),新元素上挂的是「确认导入 → 直接建单」的处理器。
+    // 只把 textContent 改回「预检」的话,按钮长得像预检、点下去却直接建单 ——
+    // 现场表现就是"选了第二个文件,点预检却直接生成了草稿单"。
+    // 所以必须再走一次 freshModalOk 重建按钮,并重新挂预检处理器。
     document.getElementById('imp-file').addEventListener('change', () => {
         const report = document.getElementById('imp-report');
         if (report) report.innerHTML = '';
-        const btn = document.getElementById('modal-ok');
-        if (btn) { btn._inFlight = false; btn.disabled = false; btn.textContent = t('inbound.import.preview'); }
+        const btn = freshModalOk(t('inbound.import.preview'));
+        btn.addEventListener('click', () => runInboundImport(false));
     });
 }
 

@@ -88,12 +88,26 @@ public class InboundImportService {
         return report;
     }
 
-    /** 模板:带 BOM + 中文表头。和既有 4 个导出的表头语言一致(都只用中文,不随界面语言变)。 */
+    /**
+     * 导入模板:带 BOM 的中文 CSV。表头保持干净(与既有 4 个导出同一套中文列名),
+     * 填法靠**示例行**体现 —— 供应商那格给的是名称、库位那格给的是编码,
+     * 一看就知道该列填什么形态的值。
+     *
+     * 示例行只有一行且全部填了值,用户照抄改数即可;不需要就整行删掉
+     * (示例 SKU 在档案里不存在,留着会报"SKU 不存在")。
+     */
     public static byte[] template() {
         StringBuilder sb = new StringBuilder();
         sb.append('﻿');   // BOM:Excel 双击打开才不会把中文读成乱码
         sb.append("SKU,数量,供应商,生产日期,保质期天数,库位,行备注\n");
-        sb.append("示例-请删掉本行,,,,,,\n");
+        // 示例行:每格都给出该列"正确长什么样"
+        sb.append("IMP-DEMO-001,")      // SKU:填商品档案里的编码
+          .append("10,")                // 数量:按件计,每件生成一个条码
+          .append("示例供应商,")         // 供应商:填**名称**(基础管理→供应商管理里那个名字)
+          .append("2026-09-01,")        // 生产日期:yyyy-MM-dd
+          .append("365,")               // 保质期天数:整数
+          .append("A-01-01,")           // 库位:填**库位编码**(库位管理里的 code,不是名称)
+          .append("示例备注\n");
         return sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
@@ -249,6 +263,11 @@ public class InboundImportService {
             pl.setProductionDate(b.productionDate == null ? null : b.productionDate.toString());
             pl.setShelfLifeDays(b.shelfLifeDays);
             pl.setLocation(b.location);
+            // 库位留空时,**实际**会落到哪里:商品默认库位 → 兜底库位「默认库位」。
+            // 必须让用户看到这个结果 —— 预览里只写"未指定"会让人以为这批货没库位,
+            // 而实际上它一定会落进某个库位。解析与落库共用同一份实现,避免口径漂移。
+            pl.setResolvedLocation(b.location != null ? b.location
+                    : InboundService.defaultLocationOfStatic(p));
             pl.setRowRemark(b.rowRemark);
             pl.setSourceLines(new ArrayList<>(mergedLines.get(e.getKey())));
             preview.add(pl);
@@ -477,6 +496,8 @@ public class InboundImportService {
 
     public static class PreviewLine {
         private String sku, productName, supplier, productionDate, location, rowRemark;
+        /** 实际会落到的库位(留空时已按 商品默认 → 兜底 解析好),供预览展示 */
+        private String resolvedLocation;
         private Integer quantity, shelfLifeDays;
         private List<Integer> sourceLines;
         public String getSku() { return sku; } public void setSku(String v) { sku = v; }
@@ -484,6 +505,7 @@ public class InboundImportService {
         public String getSupplier() { return supplier; } public void setSupplier(String v) { supplier = v; }
         public String getProductionDate() { return productionDate; } public void setProductionDate(String v) { productionDate = v; }
         public String getLocation() { return location; } public void setLocation(String v) { location = v; }
+        public String getResolvedLocation() { return resolvedLocation; } public void setResolvedLocation(String v) { resolvedLocation = v; }
         public String getRowRemark() { return rowRemark; } public void setRowRemark(String v) { rowRemark = v; }
         public Integer getQuantity() { return quantity; } public void setQuantity(Integer v) { quantity = v; }
         public Integer getShelfLifeDays() { return shelfLifeDays; } public void setShelfLifeDays(Integer v) { shelfLifeDays = v; }
