@@ -30,6 +30,11 @@ public class WarehouseService {
         return warehouseDao.findById(id);
     }
 
+    /** 按 id 批量取(导出选中项用) */
+    public List<Warehouse> listByIds(java.util.Collection<Integer> ids) {
+        return warehouseDao.findByIds(ids);
+    }
+
     @Transactional
     public Warehouse create(Warehouse w) {
         validate(w);

@@ -42,6 +42,11 @@ public class LocationService {
         return locationDao.findAll(keyword, status, warehouseId);
     }
 
+    /** 按 id 批量取(导出选中项用) */
+    public List<Location> listByIds(java.util.Collection<Integer> ids) {
+        return locationDao.findByIds(ids);
+    }
+
     public Location get(int id) {
         return locationDao.findById(id);
     }

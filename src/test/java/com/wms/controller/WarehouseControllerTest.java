@@ -34,6 +34,8 @@ class WarehouseControllerTest {
     @MockBean private UserDao userDao;
     @MockBean private JwtService jwtService;
     @MockBean private WarehouseService service;
+    // WarehouseController 现在多了 CSV 导入的依赖,@WebMvcTest 只加载 controller 层
+    @MockBean private com.wms.service.WarehouseImportService warehouseImportService;
 
     private Warehouse sample() {
         Warehouse w = new Warehouse();

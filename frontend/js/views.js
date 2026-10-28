@@ -1383,9 +1383,10 @@ const Views = {
     /* ================== 库位管理列表 ================== */
     locations(locations, statusFilter, warehouses, warehouseFilter) {
         const rows = locations.length === 0
-            ? `<tr><td colspan="6" class="empty">${t('location.empty')}</td></tr>`
+            ? `<tr><td colspan="8" class="empty">${t('location.empty')}</td></tr>`
             : locations.map(l => `
                 <tr>
+                    <td><input type="checkbox" class="row-cb" data-kind="location" data-id="${l.id}" onchange="updateSelectedCount('location')"></td>
                     <td><strong>${escapeHtml(l.code)}</strong></td>
                     <td>${escapeHtml(l.name || '')}</td>
                     <td>${l.warehouseName ? escapeHtml(l.warehouseName) : `<span style="color:var(--c-text-3);">${t('location.warehouse.none')}</span>`}</td>
@@ -1407,6 +1408,9 @@ const Views = {
                 <div class="desc">${t('location.desc')}</div>
             </div>
             <div class="right">
+                <button class="btn" onclick="openModuleImport('location')">${t('common.import')}</button>
+                <button class="btn" onclick="exportLocations()">${t('common.export')}</button>
+                <button class="btn" id="btn-export-selected-location" disabled onclick="exportSelectedRows('location')">${t('common.export_selected')}</button>
                 <button class="btn btn-primary" onclick="newLocation()">${t('location.create')}</button>
             </div>
         </div>
@@ -1424,10 +1428,12 @@ const Views = {
                 </select>
                 <button class="btn btn-sm" onclick="searchLocations()">${t('common.search')}</button>
                 <button class="btn btn-sm" onclick="document.getElementById('loc-kw').value='';document.getElementById('loc-wh-filter').value='';document.getElementById('loc-status-filter').value='';searchLocations()">${t('common.clear')}</button>
+                <span id="location-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
             </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" onchange="toggleAllRowCbs(this,'location')"></th>
                         <th style="width:120px;">${t('location.col.code')}</th>
                         <th>${t('location.col.name')}</th>
                         <th style="width:150px;">${t('location.col.warehouse')}</th>
@@ -1502,9 +1508,10 @@ const Views = {
     /* ================== 仓库管理列表 ================== */
     warehouses(warehouses, statusFilter) {
         const rows = (warehouses || []).length === 0
-            ? `<tr><td colspan="6" class="empty">${t('warehouse.empty')}</td></tr>`
+            ? `<tr><td colspan="8" class="empty">${t('warehouse.empty')}</td></tr>`
             : warehouses.map(w => `
                 <tr>
+                    <td><input type="checkbox" class="row-cb" data-kind="warehouse" data-id="${w.id}" onchange="updateSelectedCount('warehouse')"></td>
                     <td><strong>${escapeHtml(w.code)}</strong></td>
                     <td>${escapeHtml(w.name)}</td>
                     <td>${t('warehouse.locations.count', { n: w.locationCount || 0 })}</td>
@@ -1523,6 +1530,9 @@ const Views = {
                 <div class="desc">${t('warehouse.desc')}</div>
             </div>
             <div class="right">
+                <button class="btn" onclick="openModuleImport('warehouse')">${t('common.import')}</button>
+                <button class="btn" onclick="exportWarehouses()">${t('common.export')}</button>
+                <button class="btn" id="btn-export-selected-warehouse" disabled onclick="exportSelectedRows('warehouse')">${t('common.export_selected')}</button>
                 <button class="btn btn-primary" onclick="newWarehouse()">${t('warehouse.create')}</button>
             </div>
         </div>
@@ -1536,10 +1546,12 @@ const Views = {
                 </select>
                 <button class="btn btn-sm" onclick="searchWarehouses()">${t('common.search')}</button>
                 <button class="btn btn-sm" onclick="document.getElementById('wh-kw').value='';document.getElementById('wh-status-filter').value='';searchWarehouses()">${t('common.clear')}</button>
+                <span id="warehouse-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
             </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" onchange="toggleAllRowCbs(this,'warehouse')"></th>
                         <th style="width:120px;">${t('warehouse.col.code')}</th>
                         <th>${t('warehouse.col.name')}</th>
                         <th style="width:110px;">${t('warehouse.col.locations')}</th>

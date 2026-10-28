@@ -78,6 +78,14 @@ public class LocationDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /** 按 id 批量取(导出选中项用)。空集合返回空表 —— 拼成 `IN ()` 是语法错误。 */
+    public List<Location> findByIds(java.util.Collection<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return new java.util.ArrayList<>();
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        return jdbc.query(SELECT_WITH_WAREHOUSE + " AND l.id IN (" + placeholders + ") ORDER BY l.code ASC",
+                ROW, ids.toArray());
+    }
+
     public int insert(Location l) {
         String sql = "INSERT INTO location (code, name, warehouse_id, remark, enabled) VALUES (?,?,?,?,?)";
         KeyHolder kh = new GeneratedKeyHolder();

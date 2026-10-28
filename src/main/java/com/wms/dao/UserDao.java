@@ -84,6 +84,15 @@ public class UserDao {
             "FROM app_user ORDER BY id", ROW);
     }
 
+    /** 按 id 批量取(导出选中项用)。空集合返回空表 —— 拼成 `IN ()` 是语法错误。 */
+    public List<AppUser> findByIds(java.util.Collection<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return new java.util.ArrayList<>();
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        return jdbc.query(
+            "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
+            "FROM app_user WHERE id IN (" + placeholders + ") ORDER BY id", ROW, ids.toArray());
+    }
+
     public List<AppUser> findUsers(String keyword, String role, String status, String beginDate, String endDate) {
         StringBuilder sb = new StringBuilder(
             "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +

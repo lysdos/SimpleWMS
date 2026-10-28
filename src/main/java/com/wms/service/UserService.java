@@ -88,6 +88,11 @@ public class UserService {
         return userDao.findUsers(keyword, role, status, beginDate, endDate);
     }
 
+    /** 按 id 批量取(导出选中项用) */
+    public List<AppUser> listByIds(java.util.Collection<Integer> ids) {
+        return userDao.findByIds(ids);
+    }
+
     @Transactional
     public AppUser create(String username, String rawPassword, String role) {
         if (username == null || username.isBlank()) throw new IllegalArgumentException("用户名不能为空");

@@ -1142,7 +1142,36 @@ function exportSuppliers() {
     });
 }
 
-/* 提交入库单 */
+/* ---------- 仓库页入口 ---------- */
+function exportWarehouses() {
+    exportRowsWithFilter('warehouse', {
+        keyword: state.warehouseKw || '',
+        status : state.warehouseStatus || ''
+    });
+}
+
+/* ---------- 库位页入口 ---------- */
+function exportLocations() {
+    const params = {
+        keyword: state.locationKw || '',
+        status : state.locationStatus || ''
+    };
+    if (state.locationWarehouseId) params.warehouseId = state.locationWarehouseId;
+    exportRowsWithFilter('location', params);
+}
+
+/* ---------- 用户页入口(只导出,不做导入:明文密码风险) ---------- */
+function exportUsers() {
+    exportRowsWithFilter('user', {
+        keyword  : state.userKw || '',
+        role     : state.userRole || '',
+        status   : state.userStatus || '',
+        beginDate: state.userDateFrom || '',
+        endDate  : state.userDateTo || ''
+    });
+}
+
+/* ---------- 提交入库单 */
 async function commitInboundOrder(id, btn) {
     const orderNo = btnData(btn, 'orderNo', '#' + id);
     if (!confirm(t('inbound.confirm_commit', { n: orderNo }))) return;

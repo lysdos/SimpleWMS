@@ -10,11 +10,12 @@ window.UserAdminView = {
         state.users = users;   // resetPw / deleteUser 的确认文案要按 id 反查用户名
         const meId = state.currentUser ? (await api.get('/api/auth/me')).userId : null;
         const rows = users.length === 0
-            ? `<tr><td colspan="9" class="empty">${t('user.empty')}</td></tr>`
+            ? `<tr><td colspan="10" class="empty">${t('user.empty')}</td></tr>`
             : users.map(u => {
                 const isSelf = meId === u.id;
                 return `
                 <tr>
+                    <td><input type="checkbox" class="row-cb" data-kind="user" data-id="${u.id}" onchange="updateSelectedCount('user')"></td>
                     <td>${u.id}</td>
                     <td>${escapeHtml(u.username)}${isSelf ? ` <span class="badge ok">${t('user.badge.me')}</span>` : ''}</td>
                     <td>${escapeHtml(u.role)}</td>
@@ -37,6 +38,8 @@ window.UserAdminView = {
                     <h2>${t('user.title')}</h2>
                     <div class="desc">${t('user.desc')}</div>
                 </div>
+                <button class="btn" onclick="exportUsers()">${t('common.export')}</button>
+                <button class="btn" id="btn-export-selected-user" disabled onclick="exportSelectedRows('user')">${t('common.export_selected')}</button>
                 <button class="btn btn-primary" onclick="UserAdminView.newUser()">${t('user.create')}</button>
             </div>
             <div class="card">
@@ -56,10 +59,12 @@ window.UserAdminView = {
                     <span style="display:inline-flex;align-items:center;gap:4px;"><label style="font-size:13px;color:var(--c-text-3);">${t('orders.end_label')}</label><input id="user-date-to" type="date" class="input input-sm" value="${state.userDateTo||''}"></span>
                     <button class="btn btn-sm" onclick="UserAdminView.search()">${t('common.search')}</button>
                     <button class="btn btn-sm" onclick="UserAdminView.resetSearch()">${t('common.reset')}</button>
+                    <span id="user-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
                 </div>
                 <div class="table-wrap">
                     <table class="table">
                         <thead><tr>
+                            <th style="width:36px;"><input type="checkbox" onchange="toggleAllRowCbs(this,'user')"></th>
                             <th style="width:60px;">ID</th>
                             <th>${t('user.col.username')}</th>
                             <th>${t('user.col.role')}</th>
