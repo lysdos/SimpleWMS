@@ -4,9 +4,15 @@ import com.wms.annotation.RequireRole;
 import com.wms.model.ApiResponse;
 import com.wms.model.Product;
 import com.wms.model.ProductSupplier;
+import com.wms.service.ProductImportService;
 import com.wms.service.ProductService;
+import com.wms.util.CsvWriter;
+import com.wms.util.Dates;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -18,10 +24,13 @@ import java.util.Map;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductImportService productImportService;
 
     @Autowired
-    public ProductController(ProductService productService) {
+    public ProductController(ProductService productService,
+                             ProductImportService productImportService) {
         this.productService = productService;
+        this.productImportService = productImportService;
     }
 
     @GetMapping
@@ -60,6 +69,95 @@ public class ProductController {
     public ApiResponse<Void> delete(@PathVariable int id) {
         productService.delete(id);
         return ApiResponse.ok();
+    }
+
+    // ==================== 导出 / 导入 ====================
+
+    private static final String[] EXPORT_HEADERS = {
+            "ID", "SKU", "名称", "分类", "单位", "默认库位", "数量", "单价",
+            "低库存预警", "默认保质期天数", "临期预警天数", "默认供应商", "全部供应商", "备注", "创建时间"
+    };
+
+    /** 导出(按筛选)。筛选参数与列表接口完全一致,不传即全量。 */
+    @GetMapping(value = "/export.csv", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<byte[]> exportCsv(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "supplier", required = false) String supplier) {
+        return CsvWriter.download("products.csv", EXPORT_HEADERS,
+                toRows(productService.list(keyword, supplier)));
+    }
+
+    /**
+     * 导出选中项。
+     *
+     * 用 POST + body 传 id 列表,而不是把 id 拼进 query:ID 多了会超 URL 长度限制,
+     * 也不用操心编码。仓库里出库单的批量导出(export.zip)早就是这个做法。
+     */
+    @PostMapping(value = "/export.csv", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<byte[]> exportSelected(@RequestBody List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new IllegalArgumentException("请选择要导出的商品");
+        }
+        return CsvWriter.download("products.csv", EXPORT_HEADERS, toRows(productService.listByIds(ids)));
+    }
+
+    private static List<Object[]> toRows(List<Product> list) {
+        List<Object[]> rows = new ArrayList<>();
+        for (Product p : list) {
+            // 供应商有两列:默认供应商单列(便于筛选),全部供应商分号分隔(信息完整)
+            String defaultSup = null;
+            StringBuilder all = new StringBuilder();
+            if (p.getSuppliers() != null) {
+                for (Product.SupplierRef s : p.getSuppliers()) {
+                    if (all.length() > 0) all.append(';');
+                    all.append(s.getName());
+                    if (Boolean.TRUE.equals(s.getIsDefault())) defaultSup = s.getName();
+                }
+            }
+            rows.add(new Object[]{
+                    p.getId(), p.getSku(), p.getName(), p.getCategory(), p.getUnit(),
+                    p.getLocation(), p.getQuantity(), p.getUnitPrice(), p.getLowStock(),
+                    p.getDefaultShelfLifeDays(), p.getExpiryWarnDays(),
+                    defaultSup, all.length() == 0 ? null : all.toString(),
+                    p.getRemark(), Dates.fmt(p.getCreatedAt())
+            });
+        }
+        return rows;
+    }
+
+    /** 导入模板:带 BOM 的中文表头 + 一行示例(每格都给出该列"正确长什么样") */
+    @GetMapping(value = "/import/template", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<byte[]> importTemplate() {
+        List<Object[]> sample = new ArrayList<>();
+        sample.add(new Object[]{
+                "IMP-DEMO-001", "示例商品", "默认", "件", "", "12.50",
+                "10", "365", "30", "示例供应商", "示例供应商;另一个供应商", "示例备注"
+        });
+        return CsvWriter.download("商品导入模板.csv",
+                new String[]{"SKU", "名称", "分类", "单位", "默认库位", "单价",
+                        "低库存预警", "默认保质期天数", "临期预警天数", "默认供应商", "全部供应商", "备注"},
+                sample);
+    }
+
+    /**
+     * CSV 批量导入。与入库导入同一个交互:dryRun=true 只预检不落库。
+     * 权限与其它写接口一致 —— 只有 ADMIN 能改商品资料。
+     */
+    @PostMapping(value = "/import", consumes = "multipart/form-data")
+    @RequireRole("ADMIN")
+    public ApiResponse<ProductImportService.ImportReport> importCsv(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("请选择要导入的 CSV 文件");
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("读取上传文件失败: " + e.getMessage());
+        }
+        return ApiResponse.ok(productImportService.importProducts(bytes, dryRun));
     }
 
     /**

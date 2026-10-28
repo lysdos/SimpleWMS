@@ -195,13 +195,14 @@ const Views = {
     /* ================== 2. 商品管理 ================== */
     products(products, suppliers, keyword, supplierFilter) {
         const rows = products.length === 0
-            ? `<tr><td colspan="11" class="empty">${t('product.empty')}</td></tr>`
+            ? `<tr><td colspan="12" class="empty">${t('product.empty')}</td></tr>`
             : products.map(p => {
                 const lowBadge = p.quantity <= p.lowStock
                     ? `<span class="badge low">${t('product.low_badge')}</span>` : '';
                 const supp = productSuppliersHtml(p);
                 return `
                 <tr>
+                    <td><input type="checkbox" class="row-cb" data-kind="product" data-id="${p.id}" onchange="updateSelectedCount('product')"></td>
                     <td>${p.id}</td>
                     <td><strong>${escapeHtml(p.sku)}</strong></td>
                     <td>${escapeHtml(p.name)} ${lowBadge}</td>
@@ -228,6 +229,9 @@ const Views = {
                 <div class="desc">${t('product.desc')}</div>
             </div>
             <div class="right">
+                <button class="btn" onclick="openProductImport()">${t('common.import')}</button>
+                <button class="btn" onclick="exportProducts()">${t('common.export')}</button>
+                <button class="btn" id="btn-export-selected-product" disabled onclick="exportSelectedProducts()">${t('common.export_selected')}</button>
                 <button class="btn btn-primary" onclick="newProduct()">${t('product.create')}</button>
             </div>
         </div>
@@ -240,10 +244,12 @@ const Views = {
                 </select>
                 <button class="btn btn-sm" onclick="searchProducts()">${t('common.search')}</button>
                 <button class="btn btn-sm" onclick="document.getElementById('kw-product').value='';document.getElementById('product-supplier-filter').value='';searchProducts()">${t('common.clear')}</button>
+                <span id="product-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
             </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" onchange="toggleAllRowCbs(this,'product')"></th>
                         <th style="width:60px;">ID</th>
                         <th>${t('product.col.sku')}</th>
                         <th>${t('product.col.name')}</th>
@@ -259,6 +265,55 @@ const Views = {
                 </table>
             </div>
         </div>`;
+    },
+
+    /* ================== 基础管理:导入弹窗(五模块共用) ================== */
+
+    moduleImportModal(kind) {
+        return `
+        <div class="form-row">
+            <div class="form-field">
+                <label>${t('common.import_file')}<span class="req">*</span></label>
+                <input id="imp-file" type="file" accept=".csv,text/csv" class="input">
+            </div>
+        </div>
+        <div class="desc" style="margin:8px 0;">
+            ${t('common.import_tip')}
+            <button class="btn-link" onclick="downloadModuleTemplate('${kind}')">${t('common.import_template')}</button>
+        </div>
+        <div id="imp-report"></div>`;
+    },
+
+    /** 预检报告(五模块共用)。errors 非空时不显示"确认导入"入口。 */
+    importReport(r, kind) {
+        const parts = [];
+        const ok = (r.errors || []).length === 0;
+
+        const stat = [];
+        if (r.fileRows != null) stat.push(t('common.report_rows_fmt', { n: r.fileRows }));
+        if (r.created != null && r.created > 0) stat.push(t('common.report_created_fmt', { n: r.created }));
+        if (stat.length) {
+            parts.push(`<div class="card-title">${stat.join(' · ')}<span style="font-size:12px;color:var(--c-text-3);margin-left:8px;">${t('common.report_encoding_fmt', { e: r.encoding })}</span></div>`);
+        }
+
+        if (!ok) {
+            const rows = r.errors.map(e =>
+                `<tr><td class="num" style="width:70px;">${e.lineNo}</td><td>${escapeHtml(e.message)}</td></tr>`).join('');
+            // 明细只保留前 50 条,但总数必须如实报 —— 否则用户以为改完这 50 行就好了
+            const more = (r.totalErrors > r.errors.length)
+                ? `<div class="desc" style="margin-top:6px;">${t('common.errors_more_fmt', { shown: r.errors.length, total: r.totalErrors })}</div>`
+                : '';
+            parts.push(`<div class="table-wrap" style="max-height:280px;overflow:auto;margin-top:8px;">
+                <table class="table"><thead><tr>
+                    <th>${t('common.report_col_line')}</th><th>${t('common.report_col_error')}</th>
+                </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
+        }
+
+        if ((r.warnings || []).length) {
+            parts.push('<ul style="margin:10px 0 0 18px;color:#b45309;font-size:13px;">'
+                + r.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('') + '</ul>');
+        }
+        return parts.join('');
     },
 
     /* ================== 3. 入库登记 ================== */

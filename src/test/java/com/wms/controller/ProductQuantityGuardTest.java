@@ -43,6 +43,9 @@ class ProductQuantityGuardTest {
     @MockBean private UserDao userDao;
     @MockBean private JwtService jwtService;
     @MockBean private ProductService productService;
+    // ProductController 现在多了 CSV 导入的依赖,@WebMvcTest 只加载 controller 层,
+    // 缺这个 mock 整个 ApplicationContext 起不来
+    @MockBean private com.wms.service.ProductImportService productImportService;
 
     private static final String BASE = "{\"sku\":\"P-1\",\"name\":\"螺丝\",\"location\":\"A-01-01\"}";
 

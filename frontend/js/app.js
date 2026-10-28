@@ -969,8 +969,9 @@ async function runInboundImport(isConfirm) {
             openInboundOrderModal(full);
             return;
         }
-        // 预检通过:按钮换成「确认导入 N 件」
-        const confirmBtn = freshModalOk(t('inbound.import.confirm_fmt', { n: r.totalUnits }));
+        // 预检通过:按钮换成「确认导入」
+        // 不写件数:上万件时「确认导入 12000 件」既长又没信息量,件数在报告里已经有了。
+        const confirmBtn = freshModalOk(t('inbound.import.confirm'));
         confirmBtn.addEventListener('click', () => runInboundImport(true));
         return true;
     } catch (e) {
@@ -984,6 +985,154 @@ function downloadInboundTemplate() {
     api.download('/api/inbound/import/template', '入库导入模板.csv')
         .catch(e => toast(e.message || t('err.network'), 'error'));
 }
+
+/* ---------- 基础管理:通用勾选 / 导出 / 导入 ----------
+ *
+ * 商品、供应商、仓库、库位、用户五页共用这一套。做成通用函数的原因:五个页面各写一遍
+ * 的话,「全选 / 计数 / 按钮置灰 / 导出哪些 id」这套逻辑会漂移成五份。
+ *
+ * ⚠️ 选中状态是 **DOM 驱动**(直接查 .row-cb:checked),不是 state 驱动。
+ * 这五个页面都没有分页,列表重建即全量重建,所以不会出现"切页丢选中"。
+ * 将来若给基础管理加分页,这里必须改成 state 里存 id 集合,否则切页会丢。
+ */
+
+function toggleAllRowCbs(master, kind) {
+    document.querySelectorAll(`.row-cb[data-kind="${kind}"]`).forEach(cb => { cb.checked = master.checked; });
+    updateSelectedCount(kind);
+}
+
+/** 选中数变化 → 更新「导出选中」按钮的可用性与计数文案 */
+function updateSelectedCount(kind) {
+    const checked = document.querySelectorAll(`.row-cb[data-kind="${kind}"]:checked`);
+    const btn = document.getElementById(`btn-export-selected-${kind}`);
+    const cnt = document.getElementById(`${kind}-selected-count`);
+    if (btn) btn.disabled = checked.length === 0;
+    if (cnt) cnt.textContent = checked.length > 0 ? t('common.selected_count_fmt', { n: checked.length }) : '';
+}
+
+function getSelectedRowIds(kind) {
+    return Array.from(document.querySelectorAll(`.row-cb[data-kind="${kind}"]:checked`))
+        .map(cb => parseInt(cb.dataset.id, 10))
+        .filter(n => !isNaN(n));
+}
+
+/** 模块 → 导出/模板接口与文件名。user 没有模板(不做导入)。 */
+const IMPORT_EXPORT_ENDPOINTS = {
+    product:   { base: '/api/products',   exportName: 'products.csv',   templateName: '商品导入模板.csv' },
+    supplier:  { base: '/api/suppliers',  exportName: 'suppliers.csv',  templateName: '供应商导入模板.csv' },
+    warehouse: { base: '/api/warehouses', exportName: 'warehouses.csv', templateName: '仓库导入模板.csv' },
+    location:  { base: '/api/locations',  exportName: 'locations.csv',  templateName: '库位导入模板.csv' },
+    user:      { base: '/api/users',      exportName: 'users.csv',      templateName: null }
+};
+
+/** 导出选中项(POST + id 数组) */
+function exportSelectedRows(kind) {
+    const ids = getSelectedRowIds(kind);
+    if (ids.length === 0) return;
+    const ep = IMPORT_EXPORT_ENDPOINTS[kind];
+    if (!ep) return;
+    api.downloadPost(ep.base + '/export.csv', ids, ep.exportName)
+        .catch(e => toast(e.message || t('err.network'), 'error'));
+}
+
+/** 导出当前列表(带筛选条件,与列表接口的参数完全一致) */
+function exportRowsWithFilter(kind, params) {
+    const ep = IMPORT_EXPORT_ENDPOINTS[kind];
+    if (!ep) return;
+    const qs = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => { if (v) qs.set(k, v); });
+    const url = ep.base + '/export.csv' + (qs.toString() ? '?' + qs.toString() : '');
+    api.download(url, ep.exportName).catch(e => toast(e.message || t('err.network'), 'error'));
+}
+
+/**
+ * 打开某模块的导入弹窗。交互沿用入库导入:第一次点底部按钮只做 dryRun(不落库),
+ * 报告没问题时按钮换成「确认导入」,再点一次才真正写入。
+ */
+function openModuleImport(kind) {
+    const ep = IMPORT_EXPORT_ENDPOINTS[kind];
+    if (!ep || !ep.templateName) return;
+    document.getElementById('modal-title').textContent = t('common.import') + ' - ' + t(kind + '.title');
+    document.getElementById('modal-body').innerHTML = Views.moduleImportModal(kind);
+    document.getElementById('modal-mask').hidden = false;
+    setModalWidth('modal-wide');
+
+    const ok = freshModalOk(t('common.preview'));
+    ok.addEventListener('click', () => runModuleImport(kind, false));
+    // 换文件后必须**重建按钮**:预检通过后 freshModalOk() 换掉了整个按钮元素,
+    // 只改文案不改处理器的话,按钮长得像"预检"、点下去却直接落库。
+    document.getElementById('imp-file').addEventListener('change', () => {
+        const rep = document.getElementById('imp-report');
+        if (rep) rep.innerHTML = '';
+        const btn = freshModalOk(t('common.preview'));
+        btn.addEventListener('click', () => runModuleImport(kind, false));
+    });
+}
+
+async function runModuleImport(kind, isConfirm) {
+    const ep = IMPORT_EXPORT_ENDPOINTS[kind];
+    const fileEl = document.getElementById('imp-file');
+    if (!fileEl || !fileEl.files || fileEl.files.length === 0) {
+        toast(t('common.import_no_file'), 'error');
+        return true;
+    }
+    const fd = new FormData();
+    fd.append('file', fileEl.files[0]);
+    fd.append('dryRun', isConfirm ? 'false' : 'true');
+
+    const okBtn = document.getElementById('modal-ok');
+    if (okBtn && okBtn._inFlight) return true;
+    if (okBtn) { okBtn._inFlight = true; okBtn.disabled = true; okBtn.textContent = t('common.submitting'); }
+
+    try {
+        const r = await api.upload(ep.base + '/import', fd);
+        document.getElementById('imp-report').innerHTML = Views.importReport(r, kind);
+
+        if (r.errors && r.errors.length) {
+            if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('common.preview'); }
+            return true;
+        }
+        if (r.created != null && r.created > 0) {
+            toast(t('common.import_done_fmt', { n: r.created }), 'success');
+            closeModal();
+            await reloadModule(kind);
+            return;
+        }
+        const confirmBtn = freshModalOk(t('common.import_confirm'));
+        confirmBtn.addEventListener('click', () => runModuleImport(kind, true));
+        return true;
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+        if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('common.preview'); }
+        return true;
+    }
+}
+
+/** 导入成功后刷新对应页面 */
+async function reloadModule(kind) {
+    if (kind === 'product')   { state.products = []; await loadProducts(); }
+    if (kind === 'supplier')  { state.suppliers = []; await loadSuppliers(); }
+    if (kind === 'warehouse') { state.warehouses = []; await loadWarehouses(); }
+    if (kind === 'location')  { state.locations = []; await loadLocations(); }
+    if (kind === 'user')      { await loadUsers(); }
+}
+
+function downloadModuleTemplate(kind) {
+    const ep = IMPORT_EXPORT_ENDPOINTS[kind];
+    if (!ep || !ep.templateName) return;
+    api.download(ep.base + '/import/template', ep.templateName)
+        .catch(e => toast(e.message || t('err.network'), 'error'));
+}
+
+/* ---------- 商品页的入口(views.js 直接引用这些名字) ---------- */
+function exportProducts() {
+    exportRowsWithFilter('product', {
+        keyword: state.productsKw || '',
+        supplier: state.productsSupplier || ''
+    });
+}
+function exportSelectedProducts() { exportSelectedRows('product'); }
+function openProductImport()      { openModuleImport('product'); }
 
 /* 提交入库单 */
 async function commitInboundOrder(id, btn) {

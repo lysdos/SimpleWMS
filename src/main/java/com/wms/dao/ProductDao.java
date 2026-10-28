@@ -134,6 +134,22 @@ public class ProductDao {
         }
     }
 
+    /**
+     * 按 id 批量取(导出选中项用)。
+     *
+     * 一条 `IN (?,...)` 而不是循环调 findById:N 次往返在几百条时也是白白多花的时间。
+     * 空集合直接返回空表 —— 拼成 `IN ()` 是语法错误。
+     */
+    public List<Product> findByIds(java.util.Collection<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return new java.util.ArrayList<>();
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        List<Product> list = jdbc.query(
+                "SELECT * FROM product WHERE id IN (" + placeholders + ") ORDER BY id ASC",
+                ROW, ids.toArray());
+        attachSuppliers(list);   // 一条 SQL 批量回填,不是逐行查
+        return list;
+    }
+
     public Optional<Product> findBySku(String sku) {
         try {
             Product p = jdbc.queryForObject(

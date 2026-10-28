@@ -44,6 +44,30 @@ const api = {
         return fetch(url, { method: 'POST', headers: h, body: formData }).then(r => this._handle(r));
     },
 
+    /** 导出选中项:POST + JSON body 传 id 列表。
+     *  为什么不用 GET + query:ID 一多就超 URL 长度限制,还得操心编码。
+     *  注意这里**必须**带 Content-Type: application/json(与 api.upload 相反)。 */
+    async downloadPost(url, body, filename) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: this._hdr(),          // 内含 Authorization 与 Content-Type
+            body: JSON.stringify(body || [])
+        });
+        if (res.status === 401) {
+            Auth.clearToken();
+            if (!location.pathname.endsWith('/login.html')) location.href = '/login.html';
+            throw new Error('未登录');
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const blob = await res.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename || url.split('/').pop() || 'download';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+    },
+
     /** 导出 CSV / 二进制:用 fetch 带 Authorization 头,再以 Blob 触发下载。
      *  直接 <a href> 或 window.open 顶层导航不会带 Authorization,会 401。 */
     async download(url, filename) {

@@ -65,6 +65,11 @@ public class ProductService {
         return productDao.findAll(keyword, supplier);
     }
 
+    /** 按 id 批量取(导出选中项用)。空集合返回空表。 */
+    public List<Product> listByIds(java.util.Collection<Integer> ids) {
+        return productDao.findByIds(ids);
+    }
+
     public Optional<Product> get(int id) {
         return productDao.findById(id);
     }
