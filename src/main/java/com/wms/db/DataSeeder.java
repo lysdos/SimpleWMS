@@ -87,6 +87,51 @@ public class DataSeeder implements CommandLineRunner {
         // 都是按 code 裸字符串引用的,一码两行会让库存列表的 LEFT JOIN 把每个
         // 单元返回两行(列表与 total 对不上),并让按仓盘点把别的仓库的货也算进来。
         ensureLocationCodeUnique();
+
+        // 2026-10-28: supplier.name 补唯一索引。
+        // 此前只有 PRIMARY KEY,同名能建出来,而 SupplierService.create 里的
+        // DuplicateKeyException 分支因此是死代码。名称在下单弹窗里是下拉框的 value,
+        // 重名会让两个选项长得一模一样、选谁都写同一个名字。
+        ensureSupplierNameUnique();
+    }
+
+    /**
+     * 给 supplier.name 补唯一索引(幂等),写法照 {@link #ensureLocationCodeUnique()}。
+     *
+     * 先体检再 ALTER:老库可能有历史重名,直接 ALTER 会失败并让应用启动即崩。
+     * 有重复就报错日志 + 跳过,下次启动再试。
+     */
+    private void ensureSupplierNameUnique() {
+        Integer cnt;
+        try {
+            cnt = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.statistics " +
+                    "WHERE table_schema = DATABASE() AND table_name = 'supplier' " +
+                    "AND index_name = 'uk_supplier_name'", Integer.class);
+        } catch (Exception e) {
+            cnt = null;
+        }
+        if (cnt != null && cnt > 0) return;
+
+        List<String> dups;
+        try {
+            dups = jdbc.queryForList(
+                    "SELECT name FROM supplier GROUP BY name HAVING COUNT(*) > 1", String.class);
+        } catch (Exception e) {
+            log.warn("DataSeeder: 检查供应商重复名称失败 - {}", e.getMessage());
+            return;
+        }
+        if (!dups.isEmpty()) {
+            log.error("DataSeeder: supplier 表存在重复的供应商名称 {} —— 唯一索引未创建。" +
+                    "请先在供应商管理里合并这些名称,下次启动会自动补上。", dups);
+            return;
+        }
+        try {
+            jdbc.execute("ALTER TABLE supplier ADD UNIQUE KEY uk_supplier_name (name)");
+            log.info("DataSeeder: 已为 supplier.name 创建唯一索引 uk_supplier_name");
+        } catch (Exception e) {
+            log.warn("DataSeeder: 创建 uk_supplier_name 失败 - {}", e.getMessage());
+        }
     }
 
     /**

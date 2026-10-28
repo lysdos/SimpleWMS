@@ -1134,6 +1134,14 @@ function exportProducts() {
 function exportSelectedProducts() { exportSelectedRows('product'); }
 function openProductImport()      { openModuleImport('product'); }
 
+/* ---------- 供应商页入口 ---------- */
+function exportSuppliers() {
+    exportRowsWithFilter('supplier', {
+        keyword: state.supplierKw || '',
+        status : state.supplierStatus || ''
+    });
+}
+
 /* 提交入库单 */
 async function commitInboundOrder(id, btn) {
     const orderNo = btnData(btn, 'orderNo', '#' + id);

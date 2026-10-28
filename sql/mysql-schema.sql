@@ -99,7 +99,13 @@ CREATE TABLE IF NOT EXISTS supplier (
     created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_by   VARCHAR(64) DEFAULT NULL COMMENT '更新人',
     updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`)
+    PRIMARY KEY (`id`),
+    -- 供应商名称唯一。此前只有 PRIMARY KEY,同名能建出来,而 SupplierService.create
+    -- 里的 DuplicateKeyException 分支因此是**死代码**(永远不触发)。
+    -- 名称在下单弹窗里是下拉框的 value,重名会让两个选项长得一模一样、选谁都写同一个名字。
+    -- ⚠️ 老库若有历史重名,ALTER 会失败 —— DataSeeder.ensureSupplierNameUnique()
+    --    会先体检并跳过,不阻断启动。
+    UNIQUE KEY `uk_supplier_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='供应商';
 
 -- ============================================================

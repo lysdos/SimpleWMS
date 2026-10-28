@@ -75,6 +75,14 @@ public class SupplierDao {
         return list.isEmpty() ? null : list.get(0);
     }
 
+    /** 按 id 批量取(导出选中项用)。空集合返回空表 —— 拼成 `IN ()` 是语法错误。 */
+    public List<Supplier> findByIds(java.util.Collection<Integer> ids) {
+        if (ids == null || ids.isEmpty()) return new java.util.ArrayList<>();
+        String placeholders = String.join(",", java.util.Collections.nCopies(ids.size(), "?"));
+        return jdbc.query("SELECT * FROM supplier WHERE id IN (" + placeholders + ") ORDER BY id ASC",
+                ROW, ids.toArray());
+    }
+
     public int insert(Supplier s) {
         String sql = "INSERT INTO supplier (name, contact, phone, email, address, remark, enabled) " +
                 "VALUES (?,?,?,?,?,?,?)";

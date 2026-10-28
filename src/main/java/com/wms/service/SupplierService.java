@@ -32,6 +32,11 @@ public class SupplierService {
         return supplierDao.findById(id);
     }
 
+    /** 按 id 批量取(导出选中项用) */
+    public List<Supplier> listByIds(java.util.Collection<Integer> ids) {
+        return supplierDao.findByIds(ids);
+    }
+
     @Transactional
     public Supplier create(Supplier s) {
         validate(s);
@@ -48,7 +53,13 @@ public class SupplierService {
     public Supplier update(Supplier s) {
         if (s.getId() == null) throw new IllegalArgumentException("更新失败:缺少 id");
         validate(s);
-        supplierDao.update(s);
+        try {
+            supplierDao.update(s);
+        } catch (DuplicateKeyException e) {
+            // 改名撞上已有名称 —— 与新建同一个口径。不处理的话冒到 catch-all 变成
+            // 500「服务器异常」,用户不知道是重名。
+            throw new IllegalArgumentException("供应商名称已存在: " + s.getName());
+        }
         return supplierDao.findById(s.getId());
     }
 

@@ -1263,9 +1263,10 @@ const Views = {
     /* ================== 供应商管理列表 ================== */
     suppliers(suppliers, statusFilter) {
         const rows = suppliers.length === 0
-            ? `<tr><td colspan="8" class="empty">${t('supplier.empty')}</td></tr>`
+            ? `<tr><td colspan="9" class="empty">${t('supplier.empty')}</td></tr>`
             : suppliers.map(s => `
                 <tr>
+                    <td><input type="checkbox" class="row-cb" data-kind="supplier" data-id="${s.id}" onchange="updateSelectedCount('supplier')"></td>
                     <td>${s.id}</td>
                     <td><strong>${escapeHtml(s.name)}</strong></td>
                     <td>${escapeHtml(s.contact || '')}</td>
@@ -1285,6 +1286,9 @@ const Views = {
                 <div class="desc">${t('supplier.desc')}</div>
             </div>
             <div class="right">
+                <button class="btn" onclick="openModuleImport('supplier')">${t('common.import')}</button>
+                <button class="btn" onclick="exportSuppliers()">${t('common.export')}</button>
+                <button class="btn" id="btn-export-selected-supplier" disabled onclick="exportSelectedRows('supplier')">${t('common.export_selected')}</button>
                 <button class="btn btn-primary" onclick="newSupplier()">${t('supplier.create')}</button>
             </div>
         </div>
@@ -1298,10 +1302,12 @@ const Views = {
                 </select>
                 <button class="btn btn-sm" onclick="searchSuppliers()">${t('common.search')}</button>
                 <button class="btn btn-sm" onclick="document.getElementById('sup-kw').value='';document.getElementById('sup-status-filter').value='';searchSuppliers()">${t('common.clear')}</button>
+                <span id="supplier-selected-count" style="font-size:12px;color:var(--c-text-3);"></span>
             </div>
             <div class="table-wrap">
                 <table class="table">
                     <thead><tr>
+                        <th style="width:36px;"><input type="checkbox" onchange="toggleAllRowCbs(this,'supplier')"></th>
                         <th style="width:60px;">ID</th>
                         <th>${t('supplier.col.name')}</th>
                         <th>${t('supplier.col.contact')}</th>
