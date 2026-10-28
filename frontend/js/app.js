@@ -899,6 +899,88 @@ function openOrderDetailModal(type, o) {
     setModalWidth('modal-wide');
 }
 
+/* ---------- 入库 CSV 导入 ---------- */
+
+/**
+ * 打开导入弹窗。
+ *
+ * 交互是"预检 → 确认"两趟:第一次点底部按钮只做 dryRun(不写任何东西),
+ * 报告没问题时按钮变成「确认导入」,第二次点才真正建单。
+ * 为什么不在选完文件就自动预检:dryRun 也要上传整份文件,自动触发会让大文件白传两次。
+ */
+async function openInboundImport() {
+    document.getElementById('modal-title').textContent = t('inbound.import.title');
+    document.getElementById('modal-body').innerHTML = Views.inboundImportModal();
+    document.getElementById('modal-mask').hidden = false;
+    setModalWidth('modal-xwide');
+
+    // freshModalOk 只清 _inFlight / disabled,**不清文案**。而下面的流程会把按钮改成
+    // 「确认导入 N 件」;用户点「取消」关掉再重开时,若不显式设回来,新弹窗的按钮
+    // 会顶着上一次的「确认导入 500 件」—— 看着像预检已经过了,其实什么都没传。
+    const ok = freshModalOk(t('inbound.import.preview'));
+    ok.addEventListener('click', () => runInboundImport(false));
+
+    // 换文件后必须回到「预检」:否则用户预检通过后又选了另一个文件,按钮还是
+    // 「确认导入 500 件」,一点就按**新文件**直接建单 —— 他以为还要再预检一次。
+    document.getElementById('imp-file').addEventListener('change', () => {
+        const report = document.getElementById('imp-report');
+        if (report) report.innerHTML = '';
+        const btn = document.getElementById('modal-ok');
+        if (btn) { btn._inFlight = false; btn.disabled = false; btn.textContent = t('inbound.import.preview'); }
+    });
+}
+
+/** dryRun=false 时,先看有没有已通过预检的报告;没有则先预检 */
+async function runInboundImport(isConfirm) {
+    const fileEl = document.getElementById('imp-file');
+    if (!fileEl || !fileEl.files || fileEl.files.length === 0) {
+        toast(t('inbound.import.err_no_file'), 'error');
+        return true;   // 保留弹窗
+    }
+    const fd = new FormData();
+    fd.append('file', fileEl.files[0]);
+    fd.append('dryRun', isConfirm ? 'false' : 'true');
+    fd.append('externalNo', (document.getElementById('imp-external-no') || {}).value || '');
+    fd.append('remark', (document.getElementById('imp-remark') || {}).value || '');
+
+    const okBtn = document.getElementById('modal-ok');
+    if (okBtn && okBtn._inFlight) return true;
+    if (okBtn) { okBtn._inFlight = true; okBtn.disabled = true; okBtn.textContent = t('common.submitting'); }
+
+    try {
+        const r = await api.upload('/api/inbound/import', fd);
+        document.getElementById('imp-report').innerHTML = Views.inboundImportReport(r);
+
+        if (r.errors && r.errors.length) {
+            // 有错:停在预检,按钮回到「预检」
+            if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('inbound.import.preview'); }
+            return true;
+        }
+        if (r.orderNo) {
+            // 已建单:关窗 + 刷新列表 + 直接打开单据让用户核对
+            toast(t('inbound.import.done_fmt', { n: r.orderNo }), 'success');
+            closeModal();
+            await loadInbound();
+            const full = await api.get('/api/inbound/orders/' + r.orderId);
+            openInboundOrderModal(full);
+            return;
+        }
+        // 预检通过:按钮换成「确认导入 N 件」
+        const confirmBtn = freshModalOk(t('inbound.import.confirm_fmt', { n: r.totalUnits }));
+        confirmBtn.addEventListener('click', () => runInboundImport(true));
+        return true;
+    } catch (e) {
+        toast(e.message || t('err.network'), 'error');
+        if (okBtn) { okBtn._inFlight = false; okBtn.disabled = false; okBtn.textContent = t('inbound.import.preview'); }
+        return true;
+    }
+}
+
+function downloadInboundTemplate() {
+    api.download('/api/inbound/import/template', '入库导入模板.csv')
+        .catch(e => toast(e.message || t('err.network'), 'error'));
+}
+
 /* 提交入库单 */
 async function commitInboundOrder(id, btn) {
     const orderNo = btnData(btn, 'orderNo', '#' + id);

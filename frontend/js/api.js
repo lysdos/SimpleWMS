@@ -34,6 +34,16 @@ const api = {
     put(url, body)  { return fetch(url, { method: 'PUT',  headers: this._hdr(), body: JSON.stringify(body || {}) }).then(r => this._handle(r)); },
     del(url)        { return fetch(url, { method: 'DELETE', headers: this._hdr() }).then(r => this._handle(r)); },
 
+    /** 上传 multipart。**不能套用 _hdr()**:那里写死了 Content-Type: application/json,
+     *  手写的 Content-Type 会盖掉浏览器自动生成的 multipart 边界(boundary),
+     *  服务端解析不出任何字段,只会报"请选择要导入的 CSV 文件"。这里只带 Authorization。 */
+    upload(url, formData) {
+        const h = {};
+        const t = Auth.getToken();
+        if (t) h['Authorization'] = 'Bearer ' + t;
+        return fetch(url, { method: 'POST', headers: h, body: formData }).then(r => this._handle(r));
+    },
+
     /** 导出 CSV / 二进制:用 fetch 带 Authorization 头,再以 Blob 触发下载。
      *  直接 <a href> 或 window.open 顶层导航不会带 Authorization,会 401。 */
     async download(url, filename) {

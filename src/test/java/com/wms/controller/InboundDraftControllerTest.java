@@ -47,6 +47,9 @@ class InboundDraftControllerTest {
     // UserDao(用于 UserStatusFilter)。缺这个 mock 整个 ApplicationContext 起不来。
     @MockBean private UserDao userDao;
     @MockBean private InboundService inboundService;
+    // InboundController 现在多了一个依赖(CSV 导入),@WebMvcTest 只加载 controller 层,
+    // 缺这个 mock 整个 ApplicationContext 起不来
+    @MockBean private com.wms.service.InboundImportService inboundImportService;
     @MockBean private JwtService jwtService;
 
     private InboundOrder sampleDraft() {

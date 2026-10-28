@@ -25,5 +25,18 @@ spring:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
 
+  # 入库 CSV 导入要传文件。Spring 默认单文件 1MB —— 一万行 CSV 约 1MB 左右,正好卡在边界,
+  # 不抬就会在数据多一点点时突然 413。nginx 侧另有 client_max_body_size(见 docker/nginx.conf),
+  # 两处必须同时抬起,只改一边不生效。
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
 wms:
   low-stock-threshold: 10
+  inbound:
+    import:
+      # 单次导入最多多少**件**(不是行数:一行可以填数量 500)。
+      # 每件货要生成一个 24 位码 + 两行写库,件数直接决定耗时,所以按件限而不是按行限。
+      max-units: 10000

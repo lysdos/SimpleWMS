@@ -464,10 +464,7 @@ public class InboundService {
         // 另一边的货凭空跑到主仓去,且不报任何错。
         Map<String, BatchItem> merged = new LinkedHashMap<>();
         for (BatchItem raw : items) {
-            String key = raw.productId + "|" + (raw.supplier == null ? "" : raw.supplier)
-                    + "|" + (raw.productionDate == null ? "" : raw.productionDate)
-                    + "|" + (raw.shelfLifeDays == null ? "" : raw.shelfLifeDays)
-                    + "|" + (raw.location == null ? "" : raw.location);
+            String key = mergeKeyOf(raw);
             BatchItem acc = merged.get(key);
             if (acc == null) {
                 merged.put(key, raw);
@@ -636,6 +633,22 @@ public class InboundService {
         if (s == null) return null;
         String t = s.trim();
         return t.isEmpty() ? null : t;
+    }
+
+    /**
+     * 同一批次行的合并键。**必须与 addItemsToDraftInternal 的合并用同一份实现**:
+     * CSV 导入的预检报告要如实告诉用户"文件 12 行 → 合并后 9 条明细",如果这里
+     * 与那里的口径漂移,报告说 9 条而实际建出 10 条,用户就再也不信这份报告了。
+     *
+     * 键里必须含批次字段(生产日期/保质期):同 SKU 同供应商但生产日期不同的两行
+     * 是两个批次,合并会把另一批的日期抹掉。库位同理:同一批次拆到主仓/副仓两行时,
+     * 合并会把这批的库位抹成第一行的,另一边的货凭空跑到主仓去,且不报任何错。
+     */
+    static String mergeKeyOf(BatchItem b) {
+        return b.productId + "|" + (b.supplier == null ? "" : b.supplier)
+                + "|" + (b.productionDate == null ? "" : b.productionDate)
+                + "|" + (b.shelfLifeDays == null ? "" : b.shelfLifeDays)
+                + "|" + (b.location == null ? "" : b.location);
     }
 
     /** 控制器层的入参载体,避免直接暴露 DTO */

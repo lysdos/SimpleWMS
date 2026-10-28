@@ -4,6 +4,7 @@ import com.wms.model.ApiResponse;
 import com.wms.model.InboundOrder;
 import com.wms.model.InboundOrderItem;
 import com.wms.service.InboundService;
+import com.wms.service.InboundImportService;
 import com.wms.util.Csv;
 import com.wms.util.Dates;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -26,10 +28,13 @@ import java.util.zip.ZipOutputStream;
 public class InboundController {
 
     private final InboundService inboundService;
+    private final InboundImportService inboundImportService;
 
     @Autowired
-    public InboundController(InboundService inboundService) {
+    public InboundController(InboundService inboundService,
+                             InboundImportService inboundImportService) {
         this.inboundService = inboundService;
+        this.inboundImportService = inboundImportService;
     }
 
     // 早先还有一个 POST /api/inbound(单货入库)的老接口,2026-09-24 删除:
@@ -211,6 +216,52 @@ public class InboundController {
     public ApiResponse<Void> cancel(@PathVariable int id) {
         inboundService.cancelDraft(id);
         return ApiResponse.ok();
+    }
+
+    /**
+     * CSV 批量导入入库明细。
+     *
+     * 一个端点而不是两个:`dryRun` 只决定最后是否落库,解析与校验始终是同一段代码 ——
+     * 分成两个端点就得维护两条几乎一样的路径,迟早漂移(预检说没问题、提交却报错)。
+     *
+     * 表单字段:
+     *   file       CSV 文件(必填)
+     *   dryRun     true = 只做预检,不写任何东西;false/缺省 = 校验通过后建 DRAFT 单
+     *   externalNo 外部单号(可选,整单级)
+     *   remark     整单备注(可选,整单级)
+     *
+     * 返回 ImportReport:逐行错误(带文件行号)、警告、合并后的预览行、以及落库后的单号。
+     * 权限与其它入库接口一致 —— ADMIN / OPERATOR 都可操作,不加 @RequireRole。
+     */
+    @PostMapping("/import")
+    public ApiResponse<InboundImportService.ImportReport> importCsv(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "dryRun", defaultValue = "false") boolean dryRun,
+            @RequestParam(value = "externalNo", required = false) String externalNo,
+            @RequestParam(value = "remark", required = false) String remark,
+            HttpServletRequest req) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("请选择要导入的 CSV 文件");
+        }
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("读取上传文件失败: " + e.getMessage());
+        }
+        String createdBy = currentUsername(req);
+        return ApiResponse.ok(inboundImportService.importInbound(
+                bytes, asString(externalNo), asString(remark), createdBy, dryRun));
+    }
+
+    /** 导入模板:带 BOM 的中文表头 CSV(表头语言与既有的 4 个导出一致,都只用中文) */
+    @GetMapping(value = "/import/template", produces = "text/csv;charset=UTF-8")
+    public ResponseEntity<byte[]> importTemplate() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType("text/csv;charset=UTF-8"));
+        headers.setContentDispositionFormData("attachment",
+                URLEncoder.encode("入库导入模板.csv", StandardCharsets.UTF_8).replace("+", "%20"));
+        return new ResponseEntity<>(InboundImportService.template(), headers, 200);
     }
 
     /** 入库单导出 CSV(明细) */

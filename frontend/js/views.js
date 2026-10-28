@@ -270,6 +270,7 @@ const Views = {
                 <div class="desc">${t('inbound.desc')}</div>
             </div>
             <div class="right">
+                <button class="btn" onclick="openInboundImport()">${t('inbound.import')}</button>
                 <button class="btn btn-primary" onclick="openNewOrderModal('IN')">${t('inbound.create')}</button>
             </div>
         </div>
@@ -294,6 +295,90 @@ const Views = {
             </div>
             <div id="inbound-recent-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
+    },
+
+    /* ================== 入库 CSV 导入 ================== */
+
+    /** 导入弹窗:上半是选文件 + 单头字段,下半是预检报告(预检后才出现) */
+    inboundImportModal() {
+        return `
+        <div class="form-row">
+            <div class="form-field">
+                <label>${t('inbound.import.file')}<span class="req">*</span></label>
+                <input id="imp-file" type="file" accept=".csv,text/csv" class="input">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-field">
+                <label>${t('inbound.import.external_no')}</label>
+                <input id="imp-external-no" class="input" placeholder="${t('new_order.ph.external_no_in')}">
+            </div>
+            <div class="form-field">
+                <label>${t('inbound.import.remark')}</label>
+                <input id="imp-remark" class="input" placeholder="${t('new_order.ph.remark')}">
+            </div>
+        </div>
+        <div class="desc" style="margin:8px 0;">
+            ${t('inbound.import.tip')}
+            <button class="btn-link" onclick="downloadInboundTemplate()">${t('inbound.import.template')}</button>
+        </div>
+        <div id="imp-report"></div>`;
+    },
+
+    /** 预检报告。errors 一旦非空,就不渲染"确认导入"的入口 */
+    inboundImportReport(r) {
+        const parts = [];
+        const ok = (r.errors || []).length === 0;
+
+        parts.push(`<div class="card-title">${t('inbound.import.summary_fmt', {
+            rows: r.fileRows, lines: r.mergedLines, units: r.totalUnits
+        })}<span style="font-size:12px;color:var(--c-text-3);margin-left:8px;">${t('inbound.import.encoding_fmt', { e: r.encoding })}</span></div>`);
+
+        if (!ok) {
+            const rows = r.errors.map(e =>
+                `<tr><td class="num" style="width:70px;">${e.lineNo}</td><td>${escapeHtml(e.message)}</td></tr>`).join('');
+            // 明细只保留前 50 条(见 InboundImportService.MAX_ERRORS)。不告诉用户"还有多少条",
+            // 他会以为改完这 50 行就好了,再导一次又失败,来回好几轮。
+            const more = (r.totalErrors > r.errors.length)
+                ? `<div class="desc" style="margin-top:6px;">${t('inbound.import.errors_more_fmt', {
+                      shown: r.errors.length, total: r.totalErrors })}</div>`
+                : '';
+            parts.push(`<div class="table-wrap" style="max-height:260px;overflow:auto;margin-top:8px;">
+                <table class="table"><thead><tr>
+                    <th>${t('inbound.import.col_line')}</th><th>${t('inbound.import.col_error')}</th>
+                </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
+        }
+
+        if ((r.warnings || []).length) {
+            parts.push('<ul style="margin:10px 0 0 18px;color:var(--c-warning,#b45309);font-size:13px;">'
+                + r.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('') + '</ul>');
+        }
+
+        if (ok && (r.lines || []).length) {
+            const rows = r.lines.map(l => `
+                <tr>
+                    <td><strong>${escapeHtml(l.sku || '')}</strong></td>
+                    <td>${escapeHtml(l.productName || '')}</td>
+                    <td class="num">${l.quantity}</td>
+                    <td>${escapeHtml(l.supplier || '-')}</td>
+                    <td>${escapeHtml(l.productionDate || '-')}</td>
+                    <td>${Views.locLabel(l.location)}</td>
+                    <td>${escapeHtml(l.rowRemark || '')}</td>
+                    <td style="color:var(--c-text-3);font-size:12px;">${(l.sourceLines || []).join(', ')}</td>
+                </tr>`).join('');
+            parts.push(`<div class="table-wrap" style="max-height:300px;overflow:auto;margin-top:8px;">
+                <table class="table"><thead><tr>
+                    <th>SKU</th><th>${t('product.col.name')}</th><th class="num">${t('new_order.label.qty')}</th>
+                    <th>${t('new_order.label.supplier')}</th><th>${t('new_order.label.production_date')}</th>
+                    <th>${t('new_order.label.loc')}</th><th>${t('new_order.label.row_remark')}</th>
+                    <th>${t('inbound.import.col_src')}</th>
+                </tr></thead><tbody>${rows}</tbody></table></div>`);
+        }
+
+        if (r.orderNo) {
+            parts.push(`<div style="margin-top:10px;">${t('inbound.import.created_fmt', { n: escapeHtml(r.orderNo) })}</div>`);
+        }
+        return parts.join('');
     },
 
     inboundRecentRows(recentOrders) {

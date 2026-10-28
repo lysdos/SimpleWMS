@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -129,6 +130,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> missingParam(MissingServletRequestParameterException e) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.fail(400, "缺少必填参数: " + e.getParameterName()));
+    }
+
+    /**
+     * 上传文件超过大小限制 → 413。
+     *
+     * **必须显式映射**:没有这条时它会掉进下面的 catch-all,变成 500「服务器异常」——
+     * 用户传了个大文件却被告知服务器坏了,没人会想到是文件太大。
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> tooLarge(MaxUploadSizeExceededException e) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.fail(413, "文件过大,请拆分后重试(单个文件上限 10MB)"));
     }
 
     @ExceptionHandler(Exception.class)
