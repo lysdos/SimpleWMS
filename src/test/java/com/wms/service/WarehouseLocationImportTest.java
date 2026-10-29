@@ -52,8 +52,8 @@ class WarehouseLocationImportTest {
         lenient().when(warehouseDao.findAll(isNull(), isNull())).thenReturn(List.of(wh, disabled));
         lenient().when(locationDao.findAll(isNull(), isNull(), isNull())).thenReturn(List.of());
 
-        whImport  = new WarehouseImportService(warehouseService, warehouseDao);
-        locImport = new LocationImportService(locationService, locationDao, warehouseDao);
+        whImport  = new WarehouseImportService(warehouseService, warehouseDao, 5000);
+        locImport = new LocationImportService(locationService, locationDao, warehouseDao, 5000);
     }
 
     // ==================== 仓库 ====================

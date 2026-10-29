@@ -55,7 +55,7 @@ class ProductImportServiceTest {
         lenient().when(locationDao.findAll(isNull(), isNull(), isNull())).thenReturn(List.of(
                 location("A-01-01", true), location("C-03-03", false)));
         lenient().when(supplierDao.findAll(isNull(), isNull())).thenReturn(List.of(supplier(10, "戴尔")));
-        service = new ProductImportService(productService, productDao, locationDao, supplierDao);
+        service = new ProductImportService(productService, productDao, locationDao, supplierDao, 5000);
     }
 
     // ---------- 正常 ----------
@@ -244,6 +244,45 @@ class ProductImportServiceTest {
         var r = service.importProducts(gbk, true);
         assertTrue(r.isOk());
         assertEquals("GBK", r.getEncoding());
+    }
+
+    // ---------- 行数上限 / 预览上限 ----------
+
+    @Test
+    void overRowLimit_rejected() {
+        // 基础数据导入没有逐件的天然上限,而走的是 nginx 的 60 秒超时。
+        // 超时后用户只看到网关错误;提前拦住才能告诉他"拆文件"。
+        var small = new ProductImportService(productService, productDao, locationDao, supplierDao, 3);
+        StringBuilder sb = new StringBuilder("SKU,名称\n");
+        for (int i = 1; i <= 5; i++) sb.append("LIM-").append(i).append(",x\n");
+
+        var r = small.importProducts(csv(sb.toString()), true);
+
+        assertFalse(r.isOk());
+        assertTrue(r.getErrors().get(0).getMessage().contains("上限"),
+                () -> "应提示超限: " + r.getErrors());
+    }
+
+    @Test
+    void atRowLimit_isAllowed() {
+        var small = new ProductImportService(productService, productDao, locationDao, supplierDao, 3);
+        StringBuilder sb = new StringBuilder("SKU,名称\n");
+        for (int i = 1; i <= 3; i++) sb.append("LIM-").append(i).append(",x\n");
+
+        assertTrue(small.importProducts(csv(sb.toString()), true).isOk(), "正好等于上限应放行");
+    }
+
+    @Test
+    void previewLines_cappedButFileRowsIsTrue() {
+        // 预览只留前 200 条,但 fileRows 必须是真实行数 —— 否则用户以为只导入了 200 行
+        StringBuilder sb = new StringBuilder("SKU,名称\n");
+        for (int i = 1; i <= 300; i++) sb.append("PREV-").append(i).append(",x\n");
+
+        var r = service.importProducts(csv(sb.toString()), true);
+
+        assertTrue(r.isOk(), () -> "errors=" + r.getErrors());
+        assertEquals(300, r.getFileRows(), "文件行数必须如实");
+        assertEquals(ImportSupport.MAX_PREVIEW_LINES, r.getLines().size(), "预览条数应有上限");
     }
 
     // ---------- helpers ----------

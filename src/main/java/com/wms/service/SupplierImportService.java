@@ -25,6 +25,8 @@ public class SupplierImportService {
 
     private final SupplierService supplierService;
     private final SupplierDao supplierDao;
+    /** 单次导入行数上限,见 application.yml 的 wms.import.max-rows */
+    private final int maxRows;
 
     private static final Map<String, List<String>> ALIASES = Map.of(
             "name",    List.of("名称", "供应商名称", "供应商"),
@@ -39,9 +41,11 @@ public class SupplierImportService {
     private static final List<String> REQUIRED = List.of("name");
 
     @Autowired
-    public SupplierImportService(SupplierService supplierService, SupplierDao supplierDao) {
+    public SupplierImportService(SupplierService supplierService, SupplierDao supplierDao,
+                                 @org.springframework.beans.factory.annotation.Value("${wms.import.max-rows:5000}") int maxRows) {
         this.supplierService = supplierService;
         this.supplierDao = supplierDao;
+        this.maxRows = maxRows;
     }
 
     @org.springframework.transaction.annotation.Transactional
@@ -80,6 +84,7 @@ public class SupplierImportService {
             List<String> cells = r.cells();
             if (ImportSupport.isBlankRow(cells)) continue;
             fileRows++;
+            if (ImportSupport.overRowLimit(fileRows, maxRows, report)) break;
             int lineNo = r.lineNo();
             Map<String, Integer> col = header.columns();
 

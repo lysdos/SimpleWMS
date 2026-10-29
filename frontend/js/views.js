@@ -297,8 +297,10 @@ const Views = {
         }
 
         if (!ok) {
+            // lineNo<=0 表示"整份文件的问题"(超行数上限、没有数据行);
+            // 显示成 0 会让人以为是第 0 行,渲染成 — 更清楚
             const rows = r.errors.map(e =>
-                `<tr><td class="num" style="width:70px;">${e.lineNo}</td><td>${escapeHtml(e.message)}</td></tr>`).join('');
+                `<tr><td class="num" style="width:70px;">${e.lineNo > 0 ? e.lineNo : '—'}</td><td>${escapeHtml(e.message)}</td></tr>`).join('');
             // 明细只保留前 50 条,但总数必须如实报 —— 否则用户以为改完这 50 行就好了
             const more = (r.totalErrors > r.errors.length)
                 ? `<div class="desc" style="margin-top:6px;">${t('common.errors_more_fmt', { shown: r.errors.length, total: r.totalErrors })}</div>`
@@ -312,6 +314,27 @@ const Views = {
         if ((r.warnings || []).length) {
             parts.push('<ul style="margin:10px 0 0 18px;color:#b45309;font-size:13px;">'
                 + r.warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('') + '</ul>');
+        }
+
+        // 有效行预览。后端最多给 200 条(见 ImportSupport.MAX_PREVIEW_LINES),
+        // 用户能核对自己填的每一行解析成了什么 —— 尤其是供应商关联匹配到了几个。
+        if (ok && (r.lines || []).length) {
+            const rows = r.lines.map(l => `
+                <tr>
+                    <td class="num" style="width:70px;">${l.lineNo}</td>
+                    <td><strong>${escapeHtml(l.sku || '')}</strong></td>
+                    <td>${escapeHtml(l.name || '')}</td>
+                    <td class="num">${l.supplierCount == null ? '-' : l.supplierCount}</td>
+                </tr>`).join('');
+            const more = (r.fileRows > r.lines.length)
+                ? `<div class="desc" style="margin-top:6px;">${t('common.report_preview_more_fmt', {
+                      shown: r.lines.length, total: r.fileRows })}</div>`
+                : '';
+            parts.push(`<div class="table-wrap" style="max-height:240px;overflow:auto;margin-top:10px;">
+                <table class="table"><thead><tr>
+                    <th>${t('common.report_col_line')}</th><th>${t('product.col.sku')}</th>
+                    <th>${t('product.col.name')}</th><th class="num">${t('product.col.suppliers')}</th>
+                </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
         }
         return parts.join('');
     },

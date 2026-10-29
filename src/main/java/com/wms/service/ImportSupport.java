@@ -21,6 +21,24 @@ public final class ImportSupport {
     /** 预检最多报多少条错误 —— 一千行全错时不该让用户翻一千条 */
     public static final int MAX_ERRORS = 50;
 
+    /** 预览最多保留多少条有效行。无限保留的话,导入一万条会往响应里塞约 670KB 的无用数据 */
+    public static final int MAX_PREVIEW_LINES = 200;
+
+    /**
+     * 行数上限检查。返回 true 表示已超限、调用方应立即停止解析。
+     *
+     * **为什么要有上限**:基础数据导入没有逐件的天然上限(不像入库按件),
+     * 而 nginx 只给 /api/inbound/import 放宽到 300 秒,基础数据走的是 60 秒。
+     * 实测商品导入约 155 行/秒,一万行要 60 秒以上 —— 超时后用户只会看到
+     * 一个没头没脑的网关错误,不如提前告诉他"文件太大,请分批"。
+     */
+    public static boolean overRowLimit(int fileRows, int maxRows, Report report) {
+        if (fileRows <= maxRows) return false;
+        report.error(0, "文件超过单次上限 " + maxRows + " 行,请拆分成多个文件分批导入"
+                + "(上限可在配置 wms.import.max-rows 中调整)。");
+        return true;
+    }
+
     /** 表头在前多少行内找。用户常常在上面加一行"XX公司清单"。 */
     private static final int HEADER_SCAN_ROWS = 10;
 

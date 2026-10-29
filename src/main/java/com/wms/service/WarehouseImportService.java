@@ -23,6 +23,8 @@ public class WarehouseImportService {
 
     private final WarehouseService warehouseService;
     private final WarehouseDao warehouseDao;
+    /** 单次导入行数上限,见 application.yml 的 wms.import.max-rows */
+    private final int maxRows;
 
     private static final Map<String, List<String>> ALIASES = Map.of(
             "code",    List.of("编码", "仓库编码", "仓库代码"),
@@ -34,9 +36,11 @@ public class WarehouseImportService {
     private static final List<String> REQUIRED = List.of("code", "name");
 
     @Autowired
-    public WarehouseImportService(WarehouseService warehouseService, WarehouseDao warehouseDao) {
+    public WarehouseImportService(WarehouseService warehouseService, WarehouseDao warehouseDao,
+                                  @org.springframework.beans.factory.annotation.Value("${wms.import.max-rows:5000}") int maxRows) {
         this.warehouseService = warehouseService;
         this.warehouseDao = warehouseDao;
+        this.maxRows = maxRows;
     }
 
     @Transactional
@@ -73,6 +77,7 @@ public class WarehouseImportService {
             List<String> cells = r.cells();
             if (ImportSupport.isBlankRow(cells)) continue;
             fileRows++;
+            if (ImportSupport.overRowLimit(fileRows, maxRows, report)) break;
             int lineNo = r.lineNo();
             Map<String, Integer> col = header.columns();
 

@@ -43,7 +43,7 @@ class SupplierImportServiceTest {
     void setUp() {
         lenient().when(supplierDao.findAll(isNull(), isNull()))
                 .thenReturn(List.of(supplier(1, "戴尔")));
-        service = new SupplierImportService(supplierService, supplierDao);
+        service = new SupplierImportService(supplierService, supplierDao, 5000);
     }
 
     @Test
@@ -85,7 +85,7 @@ class SupplierImportServiceTest {
         var r = service.importSuppliers(csv("名称\nABC\n"), true);
         assertTrue(r.isOk());
         lenient().when(supplierDao.findAll(isNull(), isNull())).thenReturn(List.of(supplier(2, "ABC")));
-        var r2 = new SupplierImportService(supplierService, supplierDao)
+        var r2 = new SupplierImportService(supplierService, supplierDao, 5000)
                 .importSuppliers(csv("名称\nabc\n"), true);
         assertFalse(r2.isOk(), "大小写不同应视为同名");
     }

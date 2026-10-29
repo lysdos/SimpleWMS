@@ -37,6 +37,8 @@ public class ProductImportService {
     private final ProductDao productDao;
     private final LocationDao locationDao;
     private final SupplierDao supplierDao;
+    /** 单次导入行数上限,见 application.yml 的 wms.import.max-rows */
+    private final int maxRows;
 
     /** 逻辑列 → 可接受的中文写法。第一项是模板里用的那个。 */
     private static final Map<String, List<String>> ALIASES = Map.ofEntries(
@@ -60,11 +62,13 @@ public class ProductImportService {
 
     @Autowired
     public ProductImportService(ProductService productService, ProductDao productDao,
-                                LocationDao locationDao, SupplierDao supplierDao) {
+                                LocationDao locationDao, SupplierDao supplierDao,
+                                @org.springframework.beans.factory.annotation.Value("${wms.import.max-rows:5000}") int maxRows) {
         this.productService = productService;
         this.productDao = productDao;
         this.locationDao = locationDao;
         this.supplierDao = supplierDao;
+        this.maxRows = maxRows;
     }
 
     // ==================== 入口 ====================
@@ -132,6 +136,8 @@ public class ProductImportService {
             List<String> cells = r.cells();
             if (ImportSupport.isBlankRow(cells)) continue;
             fileRows++;
+            // 超限立即停:再往下解析只是白白消耗时间,而结果一定是"导不了"
+            if (ImportSupport.overRowLimit(fileRows, maxRows, report)) break;
             int lineNo = r.lineNo();
             Map<String, Integer> col = header.columns();
 
@@ -265,7 +271,11 @@ public class ProductImportService {
         private final List<Line> lines = new ArrayList<>();
 
         void addLine(String sku, String name, Integer supplierCount, int lineNo) {
-            lines.add(new Line(sku, name, supplierCount, lineNo));
+            // 只留前 200 条:预览是让用户扫一眼核对,不是清单的全部。
+            // 不设限的话,导入一万条会往响应里塞约 670KB 前端根本不用的数据。
+            if (lines.size() < ImportSupport.MAX_PREVIEW_LINES) {
+                lines.add(new Line(sku, name, supplierCount, lineNo));
+            }
         }
 
         public int getCreated() { return created; }
