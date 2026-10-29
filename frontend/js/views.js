@@ -1878,6 +1878,9 @@ const Views = {
         const allItems = c.items || [];
         const detailItems  = allItems.filter(it => !isSurplus(it));
         const surplusItems = allItems.filter(isSurplus);
+        // 提交后仍可能留下未盘行(提交不改写明细,见 StockCheckService.commit)——
+        // 这些行按盘亏计入差异数,但格子里必须写明「未盘」,否则表头差异数与空行对不上
+        const uncountedCount = detailItems.filter(it => it.countedQty == null).length;
 
         const rowHtml = (it, idx) => `
             <tr style="${scStyle(it.systemQty, it.countedQty)}">
@@ -1890,7 +1893,9 @@ const Views = {
                 <td class="num">
                     ${isDraft
                         ? `<input id="sci-qty-${it.id}" type="number" min="0" class="input input-sm" style="width:90px;" value="${it.countedQty == null ? '' : it.countedQty}">`
-                        : (it.countedQty == null ? '-' : it.countedQty)}
+                        : (it.countedQty == null
+                            ? `<span style="color:var(--c-text-3);">${t('stock_check.state.uncounted')}</span>`
+                            : it.countedQty)}
                 </td>
                 <td class="num"><strong>${it.diff == null ? '-' : (it.diff > 0 ? '+' + it.diff : it.diff)}</strong></td>
                 <td>
@@ -1925,6 +1930,9 @@ const Views = {
                 <span>${t('common.createdBy')}:<strong>${escapeHtml(c.createdBy)}</strong></span>
                 <span>${t('common.status')}:<strong>${t('doc.' + c.status)}</strong></span>
                 <span>${t('stock_check.detail.total')}:<strong>${c.totalCount} / ${c.countedCount} / ${c.diffCount}</strong></span>
+                ${c.status === 'COMMITTED' && uncountedCount > 0
+                    ? `<span style="color:var(--c-text-3);">${t('stock_check.detail.uncounted_note', { n: uncountedCount })}</span>`
+                    : ''}
                 <span>${t('stock_check.detail.surplus')}:<strong>${surplusItems.length}</strong></span>
                 <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
             </div>`;

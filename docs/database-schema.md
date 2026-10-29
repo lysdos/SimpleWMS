@@ -230,7 +230,7 @@ UNIQUE(product_id, supplier_id)
 | remark | VARCHAR(255) | |
 | created_by | VARCHAR(64) | 创建人 |
 | **status** | VARCHAR(16) | **NOT NULL DEFAULT 'DRAFT'** |
-| total_count / counted_count / diff_count | INT | 汇总数 |
+| total_count / counted_count / diff_count | INT | 汇总数:应盘行数 / 已盘行数(实盘数非空) / 差异行数(COMMITTED 下未盘行按盘亏计入) |
 | committed_at | TIMESTAMP | |
 | created_at / updated_at | TIMESTAMP | |
 

@@ -396,7 +396,7 @@
 | POST | `/` | 已登录 | `{scope:ALL/SKU/WAREHOUSE, keyword?, warehouseId?, remark?}` | `StockCheck`(快照所有 in_stock 单元到明细) | 400 scope 错 |
 | POST | `/{id}/items/{itemId}/count` | 已登录 | `{countedQty, remark?}` | `{code:0}` | 400 / 404 |
 | **POST** | **`/{id}/scan`** | **已登录** | **`{code}`** | **`StockCheck`** 刷新:命中快照 → 记已盘;快照外 → 追加盘盈行(应盘 0 / 实盘 1) | **404 码不存在 / 409 盘点单非 DRAFT / 422 该码已盘过(含并发重复)、或按仓库盘点扫到非在库的跨仓库码** |
-| POST | `/{id}/commit` | 已登录 | — | `StockCheck`(status=COMMITTED,生成 diff 报告) | 409 |
+| POST | `/{id}/commit` | 已登录 | — | `StockCheck`(status=COMMITTED;**未盘行不改写**,差异数按 0 计入) | 409 |
 | POST | `/{id}/cancel` | 已登录 | — | `{code:0}` | 409 |
 | GET | `/{id}/export.csv` | 已登录 | — | 差异报告(每行 system/counted/diff) | — |
 
@@ -405,6 +405,9 @@
 > (`来自其他仓库,记录库位 X` / `记录库位 X 未挂到任何仓库`);**非在库** → 422。
 > 分界理由:非在库单元不在**任何**盘点的快照里,放行会让同一实物被两张单各记一次盘盈;而在库单元在它**自己仓库**的快照里,那边扫到算「已盘」,不会双记。
 > 盘盈行**不计入** `totalCount / countedCount / diffCount` 三个汇总(口径见 `StockCheckDao.SURPLUS_COND`),只在详情页单独成区、导出 CSV 里按「盘盈数 / 盘亏数」两行体现。
+
+> **提交不改写明细(2026-10-29)**:未盘行(`countedQty` 为 `null`)提交后**仍为 `null`**,所以 `countedCount` 始终是「真数过的行数」。未盘行按盘亏计入 `diffCount` —— 这条口径只在 `status=COMMITTED` 生效(`StockCheckDao.updateStats`),`DRAFT` 状态下未盘行不计入差异。导出 CSV 的 `盘亏数` 同口径。
+> 历史数据例外:本次改动之前提交的单子,未盘行当时就被补写成了 0,无法与「人工填 0」区分,这些单子的 `countedCount` 会等于 `totalCount`。
 
 > **整条线不设角色门槛(2026-09-24 起)**:此前只有 `/scan` 不限角色,`create/count/commit/cancel` 要 ADMIN —— 而两端界面把「新建盘点」「提交」都摆给了操作员,点了必然 403。现在统一放开:盘点在本系统**不动库存**(提交只固化差异记录,库存校正另行处理),作业员自己发起、盘完、提交即可。
 > 作为对比,`/api/inventory/items/{id}/scrap`(报废,不可逆减库存)**仍限 ADMIN**,`/transfer`(调拨,可逆)不限。

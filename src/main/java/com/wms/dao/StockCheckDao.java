@@ -231,7 +231,10 @@ public class StockCheckDao {
 
     /**
      * 重算盘点单的三个汇总列。口径:应盘 = 非盘盈行;已盘 = 非盘盈且 counted_qty 非空;
-     * 差异 = 非盘盈且已盘且实盘≠账面(未盘行不计入已盘,也不计入差异)。
+     * 差异 = 非盘盈且实盘≠账面,**按单据状态分两种**:
+     *   - DRAFT:只数已盘行(还没盘的行谈不上对不对,不计入差异);
+     *   - COMMITTED:未盘行按 0 计入(`COALESCE(counted_qty,0) <> system_qty`)。
+     * 「已盘」在两种状态下都不含未盘行 —— 提交也不再改写明细,见 StockCheckService.commit。
      *
      * **为什么整段算在一条 SQL 里、不把明细读进 Java 再写回**:UHF 连续扫码会并发提交
      * (现场一秒几十个请求),若先在应用层 SELECT 明细、算好、再 UPDATE 写回字面量,两个事务的
@@ -259,8 +262,10 @@ public class StockCheckDao {
                 "                     AND i.counted_qty IS NOT NULL), " +
                 "  diff_count = (SELECT COUNT(*) FROM stock_check_item i " +
                 "                WHERE i.check_id = c.id AND NOT (" + SURPLUS_COND + ") " +
-                "                  AND i.counted_qty IS NOT NULL " +
-                "                  AND i.counted_qty <> i.system_qty), " +
+                "                  AND ((i.counted_qty IS NOT NULL AND i.counted_qty <> i.system_qty) " +
+                "                    OR (c.status = '" + StockCheck.STATUS_COMMITTED + "' " +
+                "                        AND i.counted_qty IS NULL " +
+                "                        AND COALESCE(i.system_qty, 0) <> 0))), " +
                 "  updated_at = CURRENT_TIMESTAMP " +
                 "WHERE c.id = ?",
                 checkId);

@@ -553,6 +553,8 @@ const I18N = (() => {
         'stock_check.detail.scope':{ 'zh-CN': '范围',                       'en-US': 'Scope' },
         'stock_check.detail.total':{ 'zh-CN': '明细/已盘/差异',              'en-US': 'Items/Counted/Diff' },
         'stock_check.detail.surplus':{ 'zh-CN': '盘盈',                      'en-US': 'Surplus' },
+        'stock_check.state.uncounted':{ 'zh-CN': '未盘',                    'en-US': 'Not counted' },
+        'stock_check.detail.uncounted_note':{ 'zh-CN': '其中 {n} 行未盘(按盘亏计入差异)', 'en-US': '{n} rows not counted (counted as shortage in the variance)' },
         'stock_check.detail.created_at':{ 'zh-CN': '创建时间',               'en-US': 'Created At' },
         'stock_check.detail.tip_draft':{ 'zh-CN': '草稿:填入实盘数后点每行的「保存」,全部填完后回到此弹窗点底部「提交盘点」','en-US': 'Draft: enter counted qty and click Save on each row. When all rows are filled, click "Commit" at the bottom of this dialog.' },
         'stock_check.detail.tip_committed':{ 'zh-CN': '已提交:报告只读,可导出 CSV', 'en-US': 'Committed: report is read-only, exportable as CSV' },
@@ -573,7 +575,7 @@ const I18N = (() => {
         'stock_check.btn.cancel':{ 'zh-CN': '取消盘点',                    'en-US': 'Cancel Check' },
         'stock_check.btn.saved':{ 'zh-CN': '已保存',                        'en-US': 'Saved' },
         'stock_check.btn.committed_diff':{ 'zh-CN': '已提交,差异 {n} 条',   'en-US': 'Committed, {n} variances' },
-        'stock_check.confirm.submit_unfinished':{ 'zh-CN': '还有 {n} 行未盘,未盘行将按 0 计入盘亏。仍要提交吗?', 'en-US': '{n} rows are not counted yet. They will be recorded as 0 (shortage). Submit anyway?' },
+        'stock_check.confirm.submit_unfinished':{ 'zh-CN': '还有 {n} 行未盘,未盘行按盘亏计入差异(实盘数仍留空)。仍要提交吗?', 'en-US': '{n} rows are not counted yet; they will be counted as shortage in the variance (counted qty stays empty). Submit anyway?' },
         'stock_check.confirm.submit_all':{ 'zh-CN': '确认提交盘点结果?\n提交后本单定格为只读(不调整库存),差异可继续导出 CSV。', 'en-US': 'Commit the stock check?\nThe check becomes read-only (stock is not adjusted); you can still export the variance CSV.' },
         'stock_check.err.qty_invalid':{ 'zh-CN': '实盘数必须 ≥ 0',          'en-US': 'Counted qty must be ≥ 0' },
 

@@ -220,8 +220,14 @@ public class StockCheckService {
 
     /**
      * 提交盘点 → 定格为只读(status=COMMITTED),不再可改。
-     * (差异数据是**边盘边写**的,提交不做"生成":只是把未盘行补 0 并重算汇总。)
-     * 允许带未盘行提交:未盘(实盘数为空)按 0 落库,即计入盘亏。
+     *
+     * **提交不改写明细**:未盘行(counted_qty 为 NULL)保持 NULL,所以「已盘数」在提交后
+     * 仍是**真数过**的行数。未盘行按盘亏计入差异 —— 这件事由
+     * {@link com.wms.dao.StockCheckDao#updateStats(int)} 在 COMMITTED 状态下的 SQL 口径完成,
+     * 派生结论放在汇总里算,不回头篡改观测事实。
+     * (旧实现提交时把未盘行补 0,于是 7 行里只盘了 4 行、提交后已盘数变 7。)
+     *
+     * 允许带未盘行提交:这些行按盘亏计入差异,但明细上仍标「未盘」,看得出是真的没盘过。
      * 注意:提交只固化差异记录,**不调整库存**(库存校正另行处理)。
      */
     @Transactional
@@ -230,9 +236,6 @@ public class StockCheckService {
         if (c == null) throw new NotFoundException("盘点单不存在, id=" + checkId);
         if (!StockCheck.STATUS_DRAFT.equals(c.getStatus())) {
             throw new IllegalStateException("仅 DRAFT 可提交,当前: " + c.getStatus());
-        }
-        for (StockCheckItem it : dao.findItemsByCheckId(checkId)) {
-            if (it.getCountedQty() == null) dao.updateCountedQty(it.getId(), 0);
         }
         int rows = dao.commit(checkId);
         if (rows == 0) throw new IllegalStateException("提交失败,状态已变更");

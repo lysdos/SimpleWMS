@@ -190,7 +190,7 @@ PDA 端 (StockCheckActivity)               Backend
 
 **关键点**:
 - **快照机制**:创建盘点单时所有 in_stock 单元被锁到明细,之后这些单元被出库/报废不影响盘点结果
-- **未扫 = 盘亏**:盘点单 commit 时,所有明细行的 counted_qty vs system_qty 自动算 diff
+- **未扫 = 盘亏**:提交时未盘行的 `counted_qty` vs `system_qty` 按盘亏计入差异;**不把未盘行补写成 0**,已盘数始终是实际盘过的行数
 - **扫码校验 422**:扫错单子的码被拒(避免混盘)
 
 ### 3.5 查询与基础数据
