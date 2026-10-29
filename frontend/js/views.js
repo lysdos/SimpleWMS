@@ -215,7 +215,7 @@ const Views = {
                     <td class="actions">
                         <button class="btn-link" onclick="viewProduct(${p.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editProduct(${p.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delProduct(${p.id})">${t('common.delete')}</button>
+                        <button class="btn-link danger" data-name="${escapeHtml(p.name)}" onclick="delProduct(${p.id}, this)">${t('common.delete')}</button>
                     </td>
                 </tr>`;
             }).join('');
@@ -1325,7 +1325,7 @@ const Views = {
                     <td class="actions">
                         <button class="btn-link" onclick="viewSupplier(${s.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editSupplier(${s.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delSupplier(${s.id})">${t('common.delete')}</button>
+                        <button class="btn-link danger" data-name="${escapeHtml(s.name)}" onclick="delSupplier(${s.id}, this)">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         return `
@@ -1571,7 +1571,7 @@ const Views = {
                     <td class="actions">
                         <button class="btn-link" onclick="viewWarehouse(${w.id})">${t('common.view')}</button>
                         <button class="btn-link" onclick="editWarehouse(${w.id})">${t('common.edit')}</button>
-                        <button class="btn-link danger" onclick="delWarehouse(${w.id})">${t('common.delete')}</button>
+                        <button class="btn-link danger" data-code="${escapeHtml(w.code)}" onclick="delWarehouse(${w.id}, this)">${t('common.delete')}</button>
                     </td>
                 </tr>`).join('');
         return `

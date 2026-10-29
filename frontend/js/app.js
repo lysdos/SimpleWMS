@@ -1332,10 +1332,11 @@ async function editProduct(id) {
     } catch (e) { toast(e.message, 'error'); }
 }
 
-function delProduct(id) {
-    // 仅传 ID,显示名从已加载的 state 里取(避免把商品名拼进 inline onclick 造成 XSS 逃逸)
-    const p = (state.products || []).find(x => x.id === id);
-    const label = p ? p.name : ('#' + id);
+function delProduct(id, btn) {
+    // 显示名由按钮的 data-name 带进来,**不再从 state.products 反查**:
+    // 那份缓存现在只在"下拉要被打开时"才由 ensureProducts 加载,光进商品管理页
+    // 它可能是空的,反查会退化成「#12」。库位删除早就是这个写法(见 delLocation)。
+    const label = btnData(btn, 'name', '#' + id);
     confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}`, async () => {
         try {
             await api.del('/api/products/' + id);
@@ -1469,9 +1470,9 @@ async function editSupplier(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delSupplier(id) {
-    const s = (state.suppliers || []).find(x => x.id === id);
-    const label = s ? s.name : ('#' + id);
+function delSupplier(id, btn) {
+    // 同上:名称由 data-name 带进来,不依赖 state.suppliers(分页后它只由 ensureSuppliers 填)
+    const label = btnData(btn, 'name', '#' + id);
     confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}`, async () => {
         try {
             await api.del('/api/suppliers/' + id);
@@ -1637,9 +1638,9 @@ async function editWarehouse(id) {
         });
     } catch (e) { toast(e.message, 'error'); }
 }
-function delWarehouse(id) {
-    const w = (state.warehouses || []).find(x => x.id === id);
-    const label = w ? w.code : ('#' + id);
+function delWarehouse(id, btn) {
+    // 同上:编码由 data-code 带进来,不依赖 state.warehouses(分页后它只由 ensureWarehouses 填)
+    const label = btnData(btn, 'code', '#' + id);
     confirmModal(`${t('common.confirm_delete')}「${label}」?${t('common.delete_irreversible')}\n\n${t('warehouse.del_tip')}`, async () => {
         try {
             await api.del('/api/warehouses/' + id);
