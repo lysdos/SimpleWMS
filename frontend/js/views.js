@@ -1878,8 +1878,8 @@ const Views = {
         const allItems = c.items || [];
         const detailItems  = allItems.filter(it => !isSurplus(it));
         const surplusItems = allItems.filter(isSurplus);
-        // 提交后仍可能留下未盘行(提交不改写明细,见 StockCheckService.commit)——
-        // 这些行按盘亏计入差异数,但格子里必须写明「未盘」,否则表头差异数与空行对不上
+        // 未盘行:提交后仍可能留下(提交不改写明细,见 StockCheckService.commit)。
+        // 顶部「明细/已盘/未盘」的第三个数用它;明细行里也据此标「未盘」
         const uncountedCount = detailItems.filter(it => it.countedQty == null).length;
 
         // 行级差异与表头同口径:COMMITTED 下未盘行按 0 代入(0 - 账面),与 diffCount / 导出对齐;
@@ -1939,11 +1939,12 @@ const Views = {
                 <span>${t('stock_check.detail.scope')}:<strong>${escapeHtml(scopeLabel(c.scope))}${c.scopeKeyword ? ' / ' + escapeHtml(c.scopeKeyword) : ''}</strong></span>
                 <span>${t('common.createdBy')}:<strong>${escapeHtml(c.createdBy)}</strong></span>
                 <span>${t('common.status')}:<strong>${t('doc.' + c.status)}</strong></span>
-                <span>${t('stock_check.detail.total')}:<strong>${c.totalCount} / ${c.countedCount} / ${c.diffCount}</strong></span>
+                <span>${t('stock_check.detail.progress')}:<strong>${c.totalCount} / ${c.countedCount} / ${uncountedCount}</strong></span>
+                <span>${t('stock_check.detail.diff')}:<strong>${c.diffCount}</strong></span>
                 ${c.status === 'COMMITTED' && uncountedCount > 0
-                    ? `<span style="color:var(--c-text-3);">${t('stock_check.detail.uncounted_note', { n: uncountedCount })}</span>`
+                    ? `<span style="color:var(--c-text-3);">${t('stock_check.detail.uncounted_hint')}</span>`
                     : ''}
-                <span>${t('stock_check.detail.surplus')}:<strong>${surplusItems.length}</strong></span>
+                <span>${t('stock_check.detail.surplus_rows')}:<strong>${surplusItems.length}</strong></span>
                 <span>${t('stock_check.detail.created_at')}:<strong>${formatDate(c.createdAt)}</strong></span>
             </div>`;
 
