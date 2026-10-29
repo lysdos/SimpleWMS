@@ -59,6 +59,7 @@ public class SupplierImportService {
 
         ImportReport report = new ImportReport();
         report.setEncoding(parsed.encoding());
+        report.preview("name", "contact", "status");
 
         ImportSupport.Header header = ImportSupport.findHeader(rows, ALIASES, REQUIRED);
         if (header == null) {
@@ -119,6 +120,7 @@ public class SupplierImportService {
             s.setEnabled(enabled);
 
             toCreate.add(s);
+            report.previewLine(lineNo, name, s.getContact(), enabled);
         }
 
         if (fileRows == 0) report.error(1, "文件里没有数据行(只有表头)");

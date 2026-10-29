@@ -66,6 +66,7 @@ public class LocationImportService {
 
         ImportReport report = new ImportReport();
         report.setEncoding(parsed.encoding());
+        report.preview("code", "name", "warehouse");
 
         ImportSupport.Header header = ImportSupport.findHeader(rows, ALIASES, REQUIRED);
         if (header == null) {
@@ -116,6 +117,7 @@ public class LocationImportService {
 
             // 所属仓库:空 = 未分配;填了就必须存在且启用(与 LocationService.validate 同口径)
             Integer warehouseId = null;
+            String warehouseName = null;   // 仅用于预览展示
             String whRaw = ImportSupport.cell(cells, col.get("warehouse"));
             if (!whRaw.isBlank()) {
                 String k = ImportSupport.norm(whRaw);
@@ -130,6 +132,7 @@ public class LocationImportService {
                     continue;
                 }
                 warehouseId = w.getId();
+                warehouseName = w.getName();
             }
 
             String statusRaw = ImportSupport.cell(cells, col.get("enabled"));
@@ -146,6 +149,7 @@ public class LocationImportService {
             l.setRemark(remark.isBlank() ? null : remark);
             l.setEnabled(enabled);
             toCreate.add(l);
+            report.previewLine(lineNo, code, l.getName(), warehouseName);
         }
 
         if (fileRows == 0) report.error(1, "文件里没有数据行(只有表头)");

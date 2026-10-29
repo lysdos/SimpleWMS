@@ -98,6 +98,22 @@ function productSuppliersHtml(p) {
         .join('、');
 }
 
+/**
+ * 导入预览的列名映射:后端 `previewColumns` 给的是 key(如 sku/contact/status),
+ * 这里翻成界面文案;不认识的 key 原样显示,后端加新列也不至于渲染成空白。
+ *
+ * 为什么不给后端直接传中文:界面有中英两套,后端塞中文的话英文界面会冒出中文表头。
+ */
+const PREVIEW_COL_I18N = {
+    sku:           'product.col.sku',
+    name:          'product.col.name',
+    code:          'location.col.code',
+    contact:       'supplier.col.contact',
+    status:        'common.status',
+    warehouse:     'location.col.warehouse',
+    supplierCount: 'common.report_col_supplier_count'
+};
+
 const Views = {
 
     /* ================== 1. 仪表盘 ================== */
@@ -318,24 +334,33 @@ const Views = {
         }
 
         // 有效行预览。后端最多给 200 条(见 ImportSupport.MAX_PREVIEW_LINES),
-        // 用户能核对自己填的每一行解析成了什么 —— 尤其是供应商关联匹配到了几个。
+        // 用户能核对自己填的每一行解析成了什么 —— 尤其是商品关联到几个供应商。
+        // 列由后端声明(previewColumns 是一串 key),这里映射到 i18n,英文界面才不会冒出中文表头。
         if (ok && (r.lines || []).length) {
-            const rows = r.lines.map(l => `
-                <tr>
-                    <td class="num" style="width:70px;">${l.lineNo}</td>
-                    <td><strong>${escapeHtml(l.sku || '')}</strong></td>
-                    <td>${escapeHtml(l.name || '')}</td>
-                    <td class="num">${l.supplierCount == null ? '-' : l.supplierCount}</td>
-                </tr>`).join('');
+            const cols = r.previewColumns || [];
+            const head = `<th>${t('common.report_col_line')}</th>`
+                + cols.map(k => `<th>${t(PREVIEW_COL_I18N[k] || k)}</th>`).join('');
+            const body = r.lines.map(l => {
+                const cells = (l.cells || []).slice(0, cols.length);
+                while (cells.length < cols.length) cells.push('');   // 列数与值可能对不上,补齐
+                return `<tr><td class="num" style="width:70px;">${l.lineNo}</td>`
+                    + cells.map((c, i) => {
+                        let v = c;
+                        // status 列后端传布尔,这里翻成"启用/停用"
+                        if (cols[i] === 'status' && typeof v === 'boolean') {
+                            v = v ? t('common.enabled') : t('common.disabled');
+                        }
+                        const txt = escapeHtml(v == null ? '' : String(v));
+                        return i === 0 ? `<td><strong>${txt}</strong></td>` : `<td>${txt}</td>`;
+                    }).join('')
+                    + '</tr>';
+            }).join('');
             const more = (r.fileRows > r.lines.length)
                 ? `<div class="desc" style="margin-top:6px;">${t('common.report_preview_more_fmt', {
                       shown: r.lines.length, total: r.fileRows })}</div>`
                 : '';
             parts.push(`<div class="table-wrap" style="max-height:240px;overflow:auto;margin-top:10px;">
-                <table class="table"><thead><tr>
-                    <th>${t('common.report_col_line')}</th><th>${t('product.col.sku')}</th>
-                    <th>${t('product.col.name')}</th><th class="num">${t('common.report_col_supplier_count')}</th>
-                </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
+                <table class="table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>${more}`);
         }
         return parts.join('');
     },

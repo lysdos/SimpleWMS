@@ -134,6 +134,33 @@ public final class ImportSupport {
         private final List<RowError> errors = new ArrayList<>();
         private final List<String> warnings = new ArrayList<>();
 
+        /**
+         * 预览:让用户核对"每一行被解析成了什么"。
+         *
+         * 列名传的是**key**(如 {@code "sku"} / {@code "contact"}),不是中文 ——
+         * 由前端映射到 i18n,英文界面才不会冒出中文表头。
+         *
+         * ⚠️ 这两个字段放在**基类**而不是各模块的 ImportReport 子类里:四个模块要的
+         * 是同一个渲染,各写一份的话前端得跟着写四套。子类**不要**再定义同名的
+         * getter —— Jackson 会因为 "Conflicting getter definitions" 在启动时直接失败。
+         */
+        private List<String> previewColumns;
+        private final List<PreviewRow> lines = new ArrayList<>();
+
+        /** 声明预览列(只需调一次) */
+        public void preview(String... columnKeys) {
+            this.previewColumns = List.of(columnKeys);
+        }
+
+        /** 追加一条预览行;超过 {@link ImportSupport#MAX_PREVIEW_LINES} 直接丢弃 */
+        public void previewLine(int lineNo, Object... cells) {
+            if (lines.size() >= MAX_PREVIEW_LINES) return;
+            lines.add(new PreviewRow(lineNo, cells));
+        }
+
+        public List<String> getPreviewColumns() { return previewColumns; }
+        public List<PreviewRow> getLines() { return lines; }
+
         public void error(int line, String msg) {
             totalErrors++;
             if (errors.size() < MAX_ERRORS) errors.add(new RowError(line, msg));
@@ -155,6 +182,18 @@ public final class ImportSupport {
     }
 
     // ==================== 近似名 ====================
+
+    /** 预览行:文件行号 + 与 previewColumns 一一对应的单元格值 */
+    public static class PreviewRow {
+        private final int lineNo;
+        private final List<Object> cells;
+        public PreviewRow(int lineNo, Object[] cells) {
+            this.lineNo = lineNo;
+            this.cells = cells == null ? new ArrayList<>() : new ArrayList<>(java.util.Arrays.asList(cells));
+        }
+        public int getLineNo() { return lineNo; }
+        public List<Object> getCells() { return cells; }
+    }
 
     /**
      * 编辑距离 ≤ 2 的快速判定(早退,不建完整矩阵)。

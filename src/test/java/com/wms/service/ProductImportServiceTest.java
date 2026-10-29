@@ -67,6 +67,9 @@ class ProductImportServiceTest {
         assertTrue(r.isOk(), () -> "errors=" + r.getErrors());
         assertEquals(1, r.getFileRows());
         assertEquals(0, r.getCreated());
+        // 预览列由后端声明 key,前端负责翻译
+        assertEquals(List.of("sku", "name", "supplierCount"), r.getPreviewColumns());
+        assertEquals(1, r.getLines().size());
         verifyNoInteractions(productService);
     }
 

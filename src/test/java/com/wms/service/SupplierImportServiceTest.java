@@ -53,6 +53,8 @@ class SupplierImportServiceTest {
         assertTrue(r.isOk(), () -> "errors=" + r.getErrors());
         assertEquals(1, r.getFileRows());
         assertEquals(0, r.getCreated());
+        assertEquals(List.of("name", "contact", "status"), r.getPreviewColumns());
+        assertEquals(1, r.getLines().size());
         verifyNoInteractions(supplierService);
     }
 

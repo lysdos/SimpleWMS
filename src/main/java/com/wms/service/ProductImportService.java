@@ -94,6 +94,7 @@ public class ProductImportService {
 
         ImportReport report = new ImportReport();
         report.setEncoding(parsed.encoding());
+        report.preview("sku", "name", "supplierCount");
 
         ImportSupport.Header header = ImportSupport.findHeader(rows, ALIASES, REQUIRED);
         if (header == null) {
@@ -197,7 +198,7 @@ public class ProductImportService {
             if (links != null) p.setSuppliersAsList(links);
 
             toCreate.add(p);
-            report.addLine(sku, name, supplierCount, lineNo);
+            report.previewLine(lineNo, sku, name, supplierCount);
         }
 
         if (fileRows == 0) report.error(1, "文件里没有数据行(只有表头)");
@@ -266,27 +267,14 @@ public class ProductImportService {
 
     // ==================== 报告 ====================
 
+    /**
+     * 商品导入的报告。预览行由**基类** {@link ImportSupport.Report} 提供 ——
+     * 这里不能再定义 `lines` / `getLines()`,否则 Jackson 会因
+     * "Conflicting getter definitions" 在启动时直接失败。
+     */
     public static class ImportReport extends ImportSupport.Report {
         private int created;
-        private final List<Line> lines = new ArrayList<>();
-
-        void addLine(String sku, String name, Integer supplierCount, int lineNo) {
-            // 只留前 200 条:预览是让用户扫一眼核对,不是清单的全部。
-            // 不设限的话,导入一万条会往响应里塞约 670KB 前端根本不用的数据。
-            if (lines.size() < ImportSupport.MAX_PREVIEW_LINES) {
-                lines.add(new Line(sku, name, supplierCount, lineNo));
-            }
-        }
-
         public int getCreated() { return created; }
         public void setCreated(int v) { this.created = v; }
-        public List<Line> getLines() { return lines; }
-    }
-
-    public record Line(String sku, String name, Integer supplierCount, int lineNo) {
-        public String getSku() { return sku; }
-        public String getName() { return name; }
-        public Integer getSupplierCount() { return supplierCount; }
-        public int getLineNo() { return lineNo; }
     }
 }

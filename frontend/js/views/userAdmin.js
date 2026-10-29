@@ -50,9 +50,11 @@ window.UserAdminView = {
                     <h2>${t('user.title')}</h2>
                     <div class="desc">${t('user.desc')}</div>
                 </div>
-                <button class="btn" onclick="exportUsers()">${t('common.export')}</button>
-                <button class="btn" id="btn-export-selected-user" disabled onclick="exportSelectedRows('user')">${t('common.export_selected')}</button>
-                <button class="btn btn-primary" onclick="UserAdminView.newUser()">${t('user.create')}</button>
+                <div class="right">
+                    <button class="btn" onclick="exportUsers()">${t('common.export')}</button>
+                    <button class="btn" id="btn-export-selected-user" disabled onclick="exportSelectedRows('user')">${t('common.export_selected')}</button>
+                    <button class="btn btn-primary" onclick="UserAdminView.newUser()">${t('user.create')}</button>
+                </div>
             </div>
             <div class="card">
                 <div class="toolbar">

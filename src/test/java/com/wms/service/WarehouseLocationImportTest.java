@@ -63,6 +63,8 @@ class WarehouseLocationImportTest {
         var r = whImport.importWarehouses(csv("编码,名称\nWH-NEW,新仓库\n"), true);
         assertTrue(r.isOk(), () -> "errors=" + r.getErrors());
         assertEquals(0, r.getCreated());
+        assertEquals(List.of("code", "name", "status"), r.getPreviewColumns());
+        assertEquals(1, r.getLines().size());
         verifyNoInteractions(warehouseService);
     }
 
@@ -123,6 +125,8 @@ class WarehouseLocationImportTest {
     void location_dryRunNeverWrites() {
         var r = locImport.importLocations(csv("编码\nA-01-01\n"), true);
         assertTrue(r.isOk(), () -> "errors=" + r.getErrors());
+        assertEquals(List.of("code", "name", "warehouse"), r.getPreviewColumns());
+        assertEquals(1, r.getLines().size());
         verifyNoInteractions(locationService);
     }
 

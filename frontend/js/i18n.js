@@ -54,6 +54,8 @@ const I18N = (() => {
         'common.errors_more_fmt':   { 'zh-CN': '仅显示前 {shown} 条,共 {total} 条错误。', 'en-US': 'Showing first {shown} of {total} errors.' },
         'common.report_preview_more_fmt': { 'zh-CN': '仅显示前 {shown} 条,共 {total} 行。', 'en-US': 'Showing first {shown} of {total} rows.' },
         'common.report_col_supplier_count': { 'zh-CN': '供应商数', 'en-US': 'Suppliers' },
+        'common.enabled':                   { 'zh-CN': '启用', 'en-US': 'Enabled' },
+        'common.disabled':                  { 'zh-CN': '停用', 'en-US': 'Disabled' },
         'common.print':        { 'zh-CN': '打印',                          'en-US': 'Print' },
         'common.back':         { 'zh-CN': '返回',                          'en-US': 'Back' },
         'common.all':          { 'zh-CN': '全部',                          'en-US': 'All' },
