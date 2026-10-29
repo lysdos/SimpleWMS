@@ -48,7 +48,35 @@ public class LocationDao {
     }
 
     public List<Location> findAll(String keyword, String status, Integer warehouseId) {
-        StringBuilder sb = new StringBuilder(SELECT_WITH_WAREHOUSE);
+        Where w = where(keyword, status, warehouseId);
+        return jdbc.query(SELECT_WITH_WAREHOUSE + w.sql() + " ORDER BY l.code ASC", ROW, w.args().toArray());
+    }
+
+    /** 分页查询。条件与 {@link #count} 共用 {@link #where},避免两条 SQL 的条件漂移。 */
+    public List<Location> findPage(String keyword, String status, Integer warehouseId,
+                                   int offset, int limit) {
+        Where w = where(keyword, status, warehouseId);
+        Object[] args = new Object[w.args().size() + 2];
+        for (int i = 0; i < w.args().size(); i++) args[i] = w.args().get(i);
+        args[w.args().size()] = limit;
+        args[w.args().size() + 1] = offset;
+        return jdbc.query(SELECT_WITH_WAREHOUSE + w.sql() + " ORDER BY l.code ASC LIMIT ? OFFSET ?",
+                ROW, args);
+    }
+
+    /** 与 {@link #findPage} 同条件的总数 */
+    public long count(String keyword, String status, Integer warehouseId) {
+        Where w = where(keyword, status, warehouseId);
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM location l WHERE 1=1" + w.sql(),
+                Long.class, w.args().toArray());
+        return n == null ? 0 : n;
+    }
+
+    private record Where(String sql, java.util.List<Object> args) {}
+
+    /** 只拼 " AND ..." —— SELECT_WITH_WAREHOUSE 自带 WHERE 1=1 */
+    private static Where where(String keyword, String status, Integer warehouseId) {
+        StringBuilder sb = new StringBuilder();
         java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sb.append(" AND (l.code LIKE ? OR l.name LIKE ?)");
@@ -64,8 +92,7 @@ public class LocationDao {
         } else if ("disabled".equals(status)) {
             sb.append(" AND l.enabled = FALSE");
         }
-        sb.append(" ORDER BY l.code ASC");
-        return jdbc.query(sb.toString(), ROW, args.toArray());
+        return new Where(sb.toString(), args);
     }
 
     public Location findById(int id) {

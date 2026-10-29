@@ -38,6 +38,17 @@ public class LocationController {
         return ApiResponse.ok(locationService.list(keyword, status, warehouseId));
     }
 
+    /** 分页列表 —— 只给 Web 管理页用;全量的 {@link #list} 仍供库位下拉等使用。 */
+    @GetMapping("/page")
+    public ApiResponse<com.wms.model.PageResult<Location>> listPage(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "warehouseId", required = false) Integer warehouseId,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(locationService.listPage(keyword, status, warehouseId, page, pageSize));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Location> get(@PathVariable int id) {
         Location l = locationService.get(id);

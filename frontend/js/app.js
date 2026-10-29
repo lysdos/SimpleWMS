@@ -138,15 +138,55 @@ async function renderExpiringList() {
     }
 }
 
-async function loadProducts() {
+/* ---------- 基础管理:通用分页 ----------
+ *
+ * 五个模块的列表都走 ?page 端点(分页),全量的 /api/x 只留给下拉框与 PDA。
+ *
+ * ⚠️ 分页结果**绝不能写回** state.products / state.suppliers / state.locations /
+ * state.warehouses —— 那几份缓存是各弹窗下拉的数据源,必须是全量。写回去的话,
+ * 筛一次、翻一页,后面的下拉就只剩当前页那 20 条(商品页以前就是这个写法,
+ * 只是没分页时症状不明显)。
+ */
+
+/** 每页条数(与单据页一致:10/20/50,默认 20) */
+const MODULE_PAGE_SIZES = { product: 20, supplier: 20, warehouse: 20, location: 20, user: 20 };
+
+function gotoModulePage(kind, page) {
+    if (page < 1) return;
+    const loader = {
+        product: () => loadProducts(page),
+        supplier: () => loadSuppliers(page),
+        warehouse: () => loadWarehouses(page),
+        location: () => loadLocations(page),
+        user: () => loadUsers(page)
+    }[kind];
+    if (loader) loader();
+}
+
+function changeModulePageSize(kind, el) {
+    const size = parseInt(el.value, 10) || 20;
+    MODULE_PAGE_SIZES[kind] = size;
+    gotoModulePage(kind, 1);   // 改每页条数后回到第 1 页,否则可能落到不存在的页
+}
+
+/** 把分页结果渲染进指定容器 */
+function renderModulePager(kind, containerId, p) {
+    const el = document.getElementById(containerId);
+    if (el && p) el.innerHTML = Views.modulePager(kind, p);
+}
+
+async function loadProducts(page) {
     setActive('products');
     await ensureSuppliers();
     const qs = new URLSearchParams();
     if (state.productsKw) qs.set('keyword', state.productsKw);
     if (state.productsSupplier) qs.set('supplier', state.productsSupplier);
-    const products = await api.get('/api/products' + (qs.toString() ? '?' + qs.toString() : ''));
-    state.products = products;
-    document.getElementById('view').innerHTML = Views.products(products, state.suppliers, state.productsKw, state.productsSupplier);
+    qs.set('page', page || 1);
+    qs.set('pageSize', MODULE_PAGE_SIZES.product);
+    const p = await api.get('/api/products/page?' + qs.toString());
+    // 只渲染、不写 state.products(那是全量缓存)
+    document.getElementById('view').innerHTML = Views.products(p.list, state.suppliers, state.productsKw, state.productsSupplier);
+    renderModulePager('product', 'product-pager', p);
 }
 
 async function loadInbound() {
@@ -264,33 +304,38 @@ async function ensureProducts() {
  * 无筛选时这一次结果本身就是全量,顺手当缓存用;增删改后由调用方清空缓存触发重取。
  * (与 loadLocations 同一套做法,见那边的注释。)
  */
-async function loadSuppliers() {
+async function loadSuppliers(page) {
     setActive('suppliers');
     const qs = new URLSearchParams();
     if (state.supplierKw) qs.set('keyword', state.supplierKw);
     if (state.supplierStatus) qs.set('status', state.supplierStatus);
-    const query = qs.toString();
-    const list = await api.get('/api/suppliers' + (query ? '?' + query : ''));
-    if (!query) state.suppliers = list;
-    document.getElementById('view').innerHTML = Views.suppliers(list, state.supplierStatus);
+    qs.set('page', page || 1);
+    qs.set('pageSize', MODULE_PAGE_SIZES.supplier);
+    const p = await api.get('/api/suppliers/page?' + qs.toString());
+    // 只渲染、不写 state.suppliers(全量缓存由 ensureSuppliers 走 /api/suppliers 填充)
+    document.getElementById('view').innerHTML = Views.suppliers(p.list, state.supplierStatus);
+    renderModulePager('supplier', 'supplier-pager', p);
 }
 
-async function loadLocations() {
+async function loadLocations(page) {
     setActive('locations');
     await ensureWarehouses();
     const qs = new URLSearchParams();
     if (state.locationKw) qs.set('keyword', state.locationKw);
     if (state.locationStatus) qs.set('status', state.locationStatus);
     if (state.locationWarehouseId) qs.set('warehouseId', state.locationWarehouseId);
+    qs.set('page', page || 1);
+    qs.set('pageSize', MODULE_PAGE_SIZES.location);
     // 这份结果**只用于本屏渲染,不写回 state.locations**。
     // state.locations 是各弹窗「库位下拉」的数据源,必须是**全量**;写回去的话,在库位管理页
     // 筛过之后,商品/出入库单的库位下拉就只剩筛出来的那几个 —— 更糟的是商品自己那个**启用中**
     // 的库位会因为"不在这份清单里"被渲染成「(已停用或已删除)」。
     // 筛选条件本身就存在 state.locationKw / locationStatus / locationWarehouseId 里,
     // 所以不需要再缓存一份筛选结果。
-    const data = await api.get('/api/locations' + (qs.toString() ? '?' + qs.toString() : ''));
+    const p = await api.get('/api/locations/page?' + qs.toString());
     document.getElementById('view').innerHTML =
-        Views.locations(data, state.locationStatus, state.warehouses, state.locationWarehouseId);
+        Views.locations(p.list, state.locationStatus, state.warehouses, state.locationWarehouseId);
+    renderModulePager('location', 'location-pager', p);
 }
 
 async function loadInventory() {
@@ -689,9 +734,9 @@ async function openStockCheckDetail(id) {
     }
 }
 
-async function loadUsers() {
+async function loadUsers(page) {
     setActive('users');
-    const html = await UserAdminView.render();
+    const html = await UserAdminView.render(page, MODULE_PAGE_SIZES.user);
     document.getElementById('view').innerHTML = html;
 }
 
@@ -1536,15 +1581,18 @@ async function ensureWarehouses() {
  * 以及商品页的数据源,必须是全量。以前筛一次「停用」,后面所有下拉就只剩停用仓库。
  * 增删改路径已有 `state.warehouses = []` 失效缓存,所以无筛选时才顺手回填。
  */
-async function loadWarehouses() {
+async function loadWarehouses(page) {
     setActive('warehouses');
     const qs = new URLSearchParams();
     if (state.warehouseKw) qs.set('keyword', state.warehouseKw);
     if (state.warehouseStatus) qs.set('status', state.warehouseStatus);
-    const query = qs.toString();
-    const list = await api.get('/api/warehouses' + (query ? '?' + query : ''));
-    if (!query) state.warehouses = list;
-    document.getElementById('view').innerHTML = Views.warehouses(list, state.warehouseStatus);
+    qs.set('page', page || 1);
+    qs.set('pageSize', MODULE_PAGE_SIZES.warehouse);
+    // 只渲染、不写 state.warehouses(全量缓存由 ensureWarehouses 走 /api/warehouses 填充)。
+    // 那份缓存是库位表单的「所属仓库」下拉、库位页的仓库筛选器以及商品页的数据源,必须是全量。
+    const p = await api.get('/api/warehouses/page?' + qs.toString());
+    document.getElementById('view').innerHTML = Views.warehouses(p.list, state.warehouseStatus);
+    renderModulePager('warehouse', 'warehouse-pager', p);
 }
 
 function searchWarehouses() {

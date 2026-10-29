@@ -37,6 +37,19 @@ public class SupplierService {
         return supplierDao.findByIds(ids);
     }
 
+    /**
+     * 分页列表(Web 管理页用)。与全量的 {@link #list} 并存 ——
+     * 全量版本仍被商品表单的供应商多选与 PDA 使用。
+     */
+    public com.wms.model.PageResult<Supplier> listPage(String keyword, String status,
+                                                       int page, int pageSize) {
+        int ps = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
+        long total = supplierDao.count(keyword, status);
+        int p = com.wms.model.PageResult.clampPage(page, ps, total);
+        List<Supplier> list = supplierDao.findPage(keyword, status, (p - 1) * ps, ps);
+        return new com.wms.model.PageResult<>(list, total, p, ps);
+    }
+
     @Transactional
     public Supplier create(Supplier s) {
         validate(s);

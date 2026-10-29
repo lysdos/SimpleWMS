@@ -35,6 +35,16 @@ public class WarehouseService {
         return warehouseDao.findByIds(ids);
     }
 
+    /** 分页列表(Web 管理页用)。全量 {@link #list} 仍被各处的仓库下拉使用。 */
+    public com.wms.model.PageResult<Warehouse> listPage(String keyword, String status,
+                                                        int page, int pageSize) {
+        int ps = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
+        long total = warehouseDao.count(keyword, status);
+        int p = com.wms.model.PageResult.clampPage(page, ps, total);
+        List<Warehouse> list = warehouseDao.findPage(keyword, status, (p - 1) * ps, ps);
+        return new com.wms.model.PageResult<>(list, total, p, ps);
+    }
+
     @Transactional
     public Warehouse create(Warehouse w) {
         validate(w);

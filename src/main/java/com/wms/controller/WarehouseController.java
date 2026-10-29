@@ -37,6 +37,16 @@ public class WarehouseController {
         return ApiResponse.ok(warehouseService.list(keyword, status));
     }
 
+    /** 分页列表 —— 只给 Web 管理页用;全量的 {@link #list} 仍供各下拉框使用。 */
+    @GetMapping("/page")
+    public ApiResponse<com.wms.model.PageResult<Warehouse>> listPage(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(warehouseService.listPage(keyword, status, page, pageSize));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Warehouse> get(@PathVariable int id) {
         Warehouse w = warehouseService.get(id);

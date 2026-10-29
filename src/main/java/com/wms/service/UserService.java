@@ -93,6 +93,18 @@ public class UserService {
         return userDao.findByIds(ids);
     }
 
+    /** 分页列表(Web 管理页用)。全量的 findUsers 仍被导出使用。 */
+    public com.wms.model.PageResult<AppUser> listPage(String keyword, String role, String status,
+                                                      String beginDate, String endDate,
+                                                      int page, int pageSize) {
+        int ps = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
+        long total = userDao.countUsers(keyword, role, status, beginDate, endDate);
+        int p = com.wms.model.PageResult.clampPage(page, ps, total);
+        List<AppUser> list = userDao.findUsersPage(keyword, role, status, beginDate, endDate,
+                (p - 1) * ps, ps);
+        return new com.wms.model.PageResult<>(list, total, p, ps);
+    }
+
     @Transactional
     public AppUser create(String username, String rawPassword, String role) {
         if (username == null || username.isBlank()) throw new IllegalArgumentException("用户名不能为空");

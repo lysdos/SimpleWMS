@@ -264,6 +264,7 @@ const Views = {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+            <div id="product-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 
@@ -337,6 +338,31 @@ const Views = {
                 </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
         }
         return parts.join('');
+    },
+
+    /* ================== 通用分页器 ==================
+     *
+     * 基础管理五个模块共用。与单据页的 recentPager 分开:那个把回调函数名写死成
+     * goto{Inbound|Outbound}RecentPage,五个模块要用就得复制五份命名约定;
+     * 这里统一走 gotoModulePage(kind, n) / changeModulePageSize(kind, el)。
+     */
+    modulePager(kind, p) {
+        const pages = p.pages || 1;
+        const page = p.page || 1;
+        return `
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+                <label style="font-size:13px;color:var(--c-text-3);">${t('common.page_size')}</label>
+                <select class="select" style="width:70px;" onchange="changeModulePageSize('${kind}', this)">
+                    <option value="10" ${p.pageSize===10?'selected':''}>10</option>
+                    <option value="20" ${p.pageSize===20?'selected':''}>20</option>
+                    <option value="50" ${p.pageSize===50?'selected':''}>50</option>
+                </select>
+            </span>
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+                <span style="color:var(--c-text-3);font-size:13px;">${t('common.total')} ${p.total} ${t('common.items')} · ${t('common.page')} ${page} / ${pages}</span>
+                <button class="btn btn-sm" ${page<=1?'disabled':''} onclick="gotoModulePage('${kind}', ${page-1})">${t('common.prev')}</button>
+                <button class="btn btn-sm" ${page>=pages?'disabled':''} onclick="gotoModulePage('${kind}', ${page+1})">${t('common.next')}</button>
+            </span>`;
     },
 
     /* ================== 3. 入库登记 ================== */
@@ -1342,6 +1368,7 @@ const Views = {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+            <div id="supplier-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 
@@ -1467,6 +1494,7 @@ const Views = {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+            <div id="location-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 
@@ -1585,6 +1613,7 @@ const Views = {
                     <tbody>${rows}</tbody>
                 </table>
             </div>
+            <div id="warehouse-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;"></div>
         </div>`;
     },
 

@@ -47,6 +47,16 @@ public class LocationService {
         return locationDao.findByIds(ids);
     }
 
+    /** 分页列表(Web 管理页用)。全量 {@link #list} 仍被库位下拉与仓库映射使用。 */
+    public com.wms.model.PageResult<Location> listPage(String keyword, String status,
+                                                       Integer warehouseId, int page, int pageSize) {
+        int ps = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
+        long total = locationDao.count(keyword, status, warehouseId);
+        int p = com.wms.model.PageResult.clampPage(page, ps, total);
+        List<Location> list = locationDao.findPage(keyword, status, warehouseId, (p - 1) * ps, ps);
+        return new com.wms.model.PageResult<>(list, total, p, ps);
+    }
+
     public Location get(int id) {
         return locationDao.findById(id);
     }

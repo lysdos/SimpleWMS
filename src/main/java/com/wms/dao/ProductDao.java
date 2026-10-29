@@ -102,7 +102,42 @@ public class ProductDao {
     }
 
     public List<Product> findAll(String keyword, String supplier) {
-        StringBuilder sb = new StringBuilder("SELECT * FROM product WHERE 1=1");
+        Where w = where(keyword, supplier);
+        List<Product> list = jdbc.query("SELECT * FROM product" + w.sql() + " ORDER BY id DESC",
+                ROW, w.args().toArray());
+        attachSuppliers(list);   // 一条 SQL 批量回填(原来是每行一次查询)
+        return list;
+    }
+
+    /**
+     * 分页查询。**条件与 {@link #count} 共用同一份 {@link #where}**。
+     *
+     * 为什么强调共用:分页必须同时有「取一页」和「总数」两条 SQL,条件抄两份的话,
+     * 改一处漏一处就是"翻到第 3 页是空的,但总数说有 100 条"这类问题。
+     * 出入库单那边已经踩过,注释里写着「改一处必须同改另一处」——
+     * 这里直接用一份实现回避掉。
+     */
+    public List<Product> findPage(String keyword, String supplier, int offset, int limit) {
+        Where w = where(keyword, supplier);
+        List<Product> list = jdbc.query(
+                "SELECT * FROM product" + w.sql() + " ORDER BY id DESC LIMIT ? OFFSET ?",
+                ROW, concat(w.args(), limit, offset));
+        attachSuppliers(list);
+        return list;
+    }
+
+    /** 与 {@link #findPage} 同条件的总数 */
+    public long count(String keyword, String supplier) {
+        Where w = where(keyword, supplier);
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM product" + w.sql(), Long.class,
+                w.args().toArray());
+        return n == null ? 0 : n;
+    }
+
+    private record Where(String sql, java.util.List<Object> args) {}
+
+    private static Where where(String keyword, String supplier) {
+        StringBuilder sb = new StringBuilder(" WHERE 1=1");
         java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sb.append(" AND (sku LIKE ? OR name LIKE ? OR category LIKE ?)");
@@ -117,10 +152,15 @@ public class ProductDao {
                     + " WHERE ps.product_id = product.id AND s.name = ?)");
             args.add(supplier);
         }
-        sb.append(" ORDER BY id DESC");
-        List<Product> list = jdbc.query(sb.toString(), ROW, args.toArray());
-        attachSuppliers(list);   // 一条 SQL 批量回填(原来是每行一次查询)
-        return list;
+        return new Where(sb.toString(), args);
+    }
+
+    /** 把分页参数接在条件参数后面(JDBC 按顺序绑) */
+    private static Object[] concat(java.util.List<Object> args, Object... tail) {
+        Object[] out = new Object[args.size() + tail.length];
+        for (int i = 0; i < args.size(); i++) out[i] = args.get(i);
+        System.arraycopy(tail, 0, out, args.size(), tail.length);
+        return out;
     }
 
     public Optional<Product> findById(int id) {

@@ -40,6 +40,27 @@ public class ProductController {
         return ApiResponse.ok(productService.list(keyword, supplier));
     }
 
+    /**
+     * 分页列表 —— **只给 Web 管理页用**。
+     *
+     * 为什么不直接改 {@link #list}:PDA 用的是
+     * {@code new TypeToken<List<Dto.Product>>(){}} 解析 {@code /api/products} 的响应,
+     * 改成 {{list,total,...}} 会让它的商品下拉整块解析失败,而 PDA 是独立 APK,
+     * 改它要重新打包装机。所以两条端点并存:
+     * <ul>
+     *   <li>{@code GET /api/products} —— 全量数组(PDA、各下拉框)</li>
+     *   <li>{@code GET /api/products/page} —— 分页(Web 管理页)</li>
+     * </ul>
+     */
+    @GetMapping("/page")
+    public ApiResponse<com.wms.model.PageResult<Product>> listPage(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "supplier", required = false) String supplier,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(productService.listPage(keyword, supplier, page, pageSize));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<Product> get(@PathVariable int id) {
         Product p = productService.get(id)

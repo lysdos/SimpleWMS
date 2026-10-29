@@ -54,7 +54,32 @@ public class SupplierDao {
     }
 
     public List<Supplier> findAll(String keyword, String status) {
-        StringBuilder sb = new StringBuilder("SELECT * FROM supplier WHERE 1=1");
+        Where w = where(keyword, status);
+        return jdbc.query("SELECT * FROM supplier" + w.sql() + " ORDER BY id DESC", ROW, w.args().toArray());
+    }
+
+    /** 分页查询。条件与 {@link #count} 共用 {@link #where},避免两条 SQL 的条件漂移。 */
+    public List<Supplier> findPage(String keyword, String status, int offset, int limit) {
+        Where w = where(keyword, status);
+        Object[] args = new Object[w.args().size() + 2];
+        for (int i = 0; i < w.args().size(); i++) args[i] = w.args().get(i);
+        args[w.args().size()] = limit;
+        args[w.args().size() + 1] = offset;
+        return jdbc.query("SELECT * FROM supplier" + w.sql() + " ORDER BY id DESC LIMIT ? OFFSET ?",
+                ROW, args);
+    }
+
+    /** 与 {@link #findPage} 同条件的总数 */
+    public long count(String keyword, String status) {
+        Where w = where(keyword, status);
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM supplier" + w.sql(), Long.class, w.args().toArray());
+        return n == null ? 0 : n;
+    }
+
+    private record Where(String sql, java.util.List<Object> args) {}
+
+    private static Where where(String keyword, String status) {
+        StringBuilder sb = new StringBuilder(" WHERE 1=1");
         java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sb.append(" AND (name LIKE ? OR contact LIKE ? OR phone LIKE ?)");
@@ -66,8 +91,7 @@ public class SupplierDao {
         } else if ("disabled".equals(status)) {
             sb.append(" AND enabled = FALSE");
         }
-        sb.append(" ORDER BY id DESC");
-        return jdbc.query(sb.toString(), ROW, args.toArray());
+        return new Where(sb.toString(), args);
     }
 
     public Supplier findById(int id) {

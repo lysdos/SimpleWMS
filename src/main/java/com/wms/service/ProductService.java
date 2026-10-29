@@ -70,6 +70,21 @@ public class ProductService {
         return productDao.findByIds(ids);
     }
 
+    /**
+     * 分页列表(Web 管理页用)。
+     *
+     * 与 {@link #list} 并存而不是替换:全量版本仍被"商品下拉框"和 PDA 使用 ——
+     * PDA 按 {@code List<Product>} 解析响应,改了形状会让它整块解析失败。
+     */
+    public com.wms.model.PageResult<Product> listPage(String keyword, String supplier,
+                                                      int page, int pageSize) {
+        int ps = pageSize <= 0 || pageSize > 200 ? 20 : pageSize;
+        long total = productDao.count(keyword, supplier);
+        int p = com.wms.model.PageResult.clampPage(page, ps, total);
+        List<Product> list = productDao.findPage(keyword, supplier, (p - 1) * ps, ps);
+        return new com.wms.model.PageResult<>(list, total, p, ps);
+    }
+
     public Optional<Product> get(int id) {
         return productDao.findById(id);
     }

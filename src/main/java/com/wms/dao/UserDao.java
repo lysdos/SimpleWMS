@@ -94,9 +94,41 @@ public class UserDao {
     }
 
     public List<AppUser> findUsers(String keyword, String role, String status, String beginDate, String endDate) {
-        StringBuilder sb = new StringBuilder(
+        Where w = where(keyword, role, status, beginDate, endDate);
+        return jdbc.query(SELECT_COLS + w.sql() + " ORDER BY id", ROW, w.args().toArray());
+    }
+
+    /** 分页查询。条件与 {@link #countUsers} 共用 {@link #where}。 */
+    public List<AppUser> findUsersPage(String keyword, String role, String status,
+                                       String beginDate, String endDate, int offset, int limit) {
+        Where w = where(keyword, role, status, beginDate, endDate);
+        Object[] args = new Object[w.args().size() + 2];
+        for (int i = 0; i < w.args().size(); i++) args[i] = w.args().get(i);
+        args[w.args().size()] = limit;
+        args[w.args().size() + 1] = offset;
+        return jdbc.query(SELECT_COLS + w.sql() + " ORDER BY id LIMIT ? OFFSET ?", ROW, args);
+    }
+
+    /**
+     * 与 {@link #findUsersPage} 同条件的总数。
+     * 名字带 Users 是为了与既有的无参 {@link #count()}(全表数,删最后一名 ADMIN 时用)区分开。
+     */
+    public long countUsers(String keyword, String role, String status, String beginDate, String endDate) {
+        Where w = where(keyword, role, status, beginDate, endDate);
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE 1=1" + w.sql(),
+                Long.class, w.args().toArray());
+        return n == null ? 0 : n;
+    }
+
+    private static final String SELECT_COLS =
             "SELECT id, username, password_hash, role, enabled, must_change_pw, created_by, created_at " +
-            "FROM app_user WHERE 1=1");
+            "FROM app_user WHERE 1=1";
+
+    private record Where(String sql, java.util.List<Object> args) {}
+
+    /** 只拼 " AND ..." —— SELECT_COLS 自带 WHERE 1=1 */
+    private static Where where(String keyword, String role, String status, String beginDate, String endDate) {
+        StringBuilder sb = new StringBuilder();
         java.util.List<Object> args = new java.util.ArrayList<>();
         if (keyword != null && !keyword.isBlank()) {
             sb.append(" AND username LIKE ?");
@@ -119,8 +151,7 @@ public class UserDao {
             sb.append(" AND created_at <= ?");
             args.add(endDate + " 23:59:59");
         }
-        sb.append(" ORDER BY id");
-        return jdbc.query(sb.toString(), ROW, args.toArray());
+        return new Where(sb.toString(), args);
     }
 
     public long count() {

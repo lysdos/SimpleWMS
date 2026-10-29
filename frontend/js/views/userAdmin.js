@@ -1,13 +1,25 @@
 window.UserAdminView = {
-    async render() {
+    /**
+     * @param page     页码
+     * @param pageSize 每页条数 —— 由调用方(loadUsers)传进来,而不是直接读 app.js 里的
+     *                 MODULE_PAGE_SIZES:本文件在 index.html 里排在 app.js **前面**,
+     *                 跨脚本引用后者用 const 声明的变量虽然调用期能取到,但依赖加载顺序,
+     *                 以后调整 script 顺序就会炸。
+     */
+    async render(page, pageSize) {
         const qs = new URLSearchParams();
         if (state.userKw) qs.set('keyword', state.userKw);
         if (state.userRole) qs.set('role', state.userRole);
         if (state.userStatus) qs.set('status', state.userStatus);
         if (state.userDateFrom) qs.set('beginDate', state.userDateFrom);
         if (state.userDateTo) qs.set('endDate', state.userDateTo);
-        const users = await api.get('/api/users' + (qs.toString() ? '?' + qs.toString() : ''));
-        state.users = users;   // resetPw / deleteUser 的确认文案要按 id 反查用户名
+        qs.set('page', page || 1);
+        qs.set('pageSize', pageSize || 20);
+        const p = await api.get('/api/users/page?' + qs.toString());
+        const users = p.list;
+        // 当前页的用户列表 —— resetPw / deleteUser 的确认文案要按 id 反查用户名,
+        // 而这两个动作只可能作用在当前可见行上,所以当前页足够。
+        state.users = users;
         const meId = state.currentUser ? (await api.get('/api/auth/me')).userId : null;
         const rows = users.length === 0
             ? `<tr><td colspan="10" class="empty">${t('user.empty')}</td></tr>`
@@ -76,6 +88,9 @@ window.UserAdminView = {
                         </tr></thead>
                         <tbody>${rows}</tbody>
                     </table>
+                </div>
+                <div id="user-pager" class="toolbar" style="margin-top:10px;justify-content:flex-end;">
+                    ${Views.modulePager('user', p)}
                 </div>
             </div>
         `;

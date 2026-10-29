@@ -36,6 +36,19 @@ public class UserController {
         return ApiResponse.ok(userService.findUsers(keyword, role, status, beginDate, endDate));
     }
 
+    /** 分页列表 —— 只给 Web 管理页用;全量的 {@link #list} 仍供导出使用。 */
+    @GetMapping("/page")
+    public ApiResponse<com.wms.model.PageResult<AppUser>> listPage(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String beginDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(userService.listPage(keyword, role, status, beginDate, endDate, page, pageSize));
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<AppUser> get(@PathVariable int id) {
         return ApiResponse.ok(userService.get(id));
