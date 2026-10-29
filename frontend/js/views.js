@@ -333,7 +333,7 @@ const Views = {
             parts.push(`<div class="table-wrap" style="max-height:240px;overflow:auto;margin-top:10px;">
                 <table class="table"><thead><tr>
                     <th>${t('common.report_col_line')}</th><th>${t('product.col.sku')}</th>
-                    <th>${t('product.col.name')}</th><th class="num">${t('product.col.suppliers')}</th>
+                    <th>${t('product.col.name')}</th><th class="num">${t('common.report_col_supplier_count')}</th>
                 </tr></thead><tbody>${rows}</tbody></table></div>${more}`);
         }
         return parts.join('');
