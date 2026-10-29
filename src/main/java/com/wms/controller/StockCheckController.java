@@ -139,7 +139,7 @@ public class StockCheckController {
 
     /**
      * 导出差异报告 CSV。
-     * filter: all=全部(盘盈行单独分区) / over=仅盘盈 / short=仅盘亏(未盘行计入盘亏)
+     * filter: all=全部(盘盈行单独分区) / over=仅盘盈 / short=仅盘亏(已提交单的未盘行计入盘亏)
      */
     @GetMapping(value = "/{id}/export.csv", produces = "text/csv;charset=UTF-8")
     public ResponseEntity<byte[]> exportCsv(@PathVariable int id,
@@ -170,12 +170,17 @@ public class StockCheckController {
         sb.append("提交时间,").append(csv(Dates.fmt(c.getCommittedAt()))).append('\n');
         sb.append("明细总数,").append(c.getTotalCount()).append('\n');
         sb.append("已盘数,").append(c.getCountedCount()).append('\n');
+        // 未盘数从明细现算,而不是拿「明细总数 - 已盘数」相减 —— 这样这一行永远与文件里列出的行对得上
+        long uncounted = normal.stream().filter(it -> it.getCountedQty() == null).count();
+        sb.append("未盘数,").append(uncounted).append('\n');
         sb.append("差异数,").append(c.getDiffCount()).append('\n');
-        // 盘盈/盘亏件数:从明细现算(不落库、不加列)。口径:盘盈 = 实盘-账面 之和;
-        // 盘亏 = 账面-实盘 之和,未盘行按实盘 0 计入 —— 与 filter=short 的口径一致。
+        // 盘盈/盘亏件数:从明细现算(不落库、不加列)。盘盈 = 实盘-账面 之和;
+        // 盘亏 = 账面-实盘 之和。**未盘行只在已提交的单子上按实盘 0 计入** ——
+        // 与差异数同一口径(草稿/已取消不含未盘行),否则草稿导出会出现
+        // 「差异数 0、盘亏数 3」这种自相矛盾。
         //
-        // ⚠️ 上面三行(明细总数/已盘数/差异数)是**行数**,这两行是**件数**:老数据一个单元
-        //    remaining>1 时一个 code 算多件,两者会不等,别混着读。标签上不加单位,保持简洁。
+        // ⚠️ 上面几行(明细总数/已盘数/未盘数/差异数)是**行数**,下面两行是**件数**:老数据
+        //    一个单元 remaining>1 时一个 code 算多件,两者会不等,别混着读。标签上不加单位。
         int overQty = 0, shortQty = 0;
         for (StockCheckItem it : over) {
             overQty += (it.getCountedQty() == null ? 0 : it.getCountedQty())
@@ -183,7 +188,7 @@ public class StockCheckController {
         }
         for (StockCheckItem it : normal) {
             String st = rowState(it);
-            if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) {
+            if (STATE_SHORT.equals(st) || (committed && STATE_UNCOUNTED.equals(st))) {
                 shortQty += (it.getSystemQty() == null ? 0 : it.getSystemQty())
                           - (it.getCountedQty() == null ? 0 : it.getCountedQty());
             }
@@ -199,8 +204,8 @@ public class StockCheckController {
             sb.append(CSV_HEADER).append('\n');
             for (StockCheckItem it : normal) {
                 String st = rowState(it);
-                // 未盘行按口径计入盘亏
-                if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) appendRow(sb, it, committed);
+                // 未盘行只在已提交时算盘亏(与盘亏数同口径);草稿导不出"还没发生"的盘亏
+                if (STATE_SHORT.equals(st) || (committed && STATE_UNCOUNTED.equals(st))) appendRow(sb, it, committed);
             }
         } else {
             sb.append("盘点明细\n").append(CSV_HEADER).append('\n');
@@ -222,7 +227,7 @@ public class StockCheckController {
         return new ResponseEntity<>(body, h, 200);
     }
 
-    /** 明细区表头:应盘数=系统账面,实盘数与差异未盘时留空 */
+    /** 明细区表头:应盘数=系统账面;未盘行实盘数留空,差异列在已提交的单子上按 0-账面 填 */
     private static final String CSV_HEADER = "24位编码,SKU,商品,库位,应盘数,实盘数,差异,盘点状态,行备注";
 
     private static final String STATE_OVER      = "盘盈";

@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -83,10 +84,66 @@ class StockCheckExportControllerTest {
         assertTrue(csv.contains("C3,SKU-3,商品3,A-03,0,,,未盘,"), csv);
     }
 
+    // ---- 表头六个汇总数 / filter=short 的口径 ----
+
+    /** 草稿:未盘行不计入差异与盘亏,单独用「未盘数」报告进度 */
+    @Test
+    void draftHeader_reportsUncounted_butNoShortage() throws Exception {
+        when(stockCheckService.get(CHECK_ID)).thenReturn(sheet(StockCheck.STATUS_DRAFT));
+
+        String csv = export();
+
+        assertTrue(csv.contains("明细总数,2"), csv);
+        assertTrue(csv.contains("已盘数,1"), csv);
+        assertTrue(csv.contains("未盘数,1"), csv);
+        assertTrue(csv.contains("差异数,0"), csv);
+        assertTrue(csv.contains("盘盈数,0"), csv);
+        assertTrue(csv.contains("盘亏数,0"), csv);
+    }
+
+    /** 已提交:未盘行按盘亏计入,盘亏数/差异数都跟着算;未盘数仍然如实报 */
+    @Test
+    void committedHeader_countsUncountedAsShortage() throws Exception {
+        when(stockCheckService.get(CHECK_ID)).thenReturn(sheet(StockCheck.STATUS_COMMITTED));
+
+        String csv = export();
+
+        assertTrue(csv.contains("未盘数,1"), csv);
+        assertTrue(csv.contains("差异数,1"), csv);
+        assertTrue(csv.contains("盘亏数,1"), csv);
+    }
+
+    /** 草稿导「盘亏清单」:没盘的行不算盘亏,不该出现在清单里(否则与「盘亏数 0」打架) */
+    @Test
+    void draftShortFilter_excludesUncountedRows() throws Exception {
+        when(stockCheckService.get(CHECK_ID)).thenReturn(sheet(StockCheck.STATUS_DRAFT));
+
+        String csv = export("short");
+
+        assertTrue(csv.contains("盘亏数,0"), csv);
+        assertFalse(csv.contains("C2,SKU-2"), "草稿的未盘行不该进盘亏清单:\n" + csv);
+    }
+
+    /** 已提交导「盘亏清单」:未盘行要进来,和盘亏数对得上 */
+    @Test
+    void committedShortFilter_includesUncountedRows() throws Exception {
+        when(stockCheckService.get(CHECK_ID)).thenReturn(sheet(StockCheck.STATUS_COMMITTED));
+
+        String csv = export("short");
+
+        assertTrue(csv.contains("盘亏数,1"), csv);
+        assertTrue(csv.contains("C2,SKU-2,商品2,A-02,1,,-1,未盘,"), csv);
+    }
+
     // ---- helpers ----
 
     private String export() throws Exception {
-        byte[] body = mvc.perform(get("/api/stock-checks/" + CHECK_ID + "/export.csv"))
+        return export("all");
+    }
+
+    private String export(String filter) throws Exception {
+        byte[] body = mvc.perform(get("/api/stock-checks/" + CHECK_ID + "/export.csv")
+                        .param("filter", filter))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray();
         return new String(body, StandardCharsets.UTF_8);
@@ -101,7 +158,8 @@ class StockCheckExportControllerTest {
         c.setCreatedBy("admin");
         c.setTotalCount(2);
         c.setCountedCount(1);
-        c.setDiffCount(1);
+        // 差异数按状态给:草稿只算已盘行(C1 与账面一致)→ 0;已提交把未盘的 C2 算盘亏 → 1
+        c.setDiffCount(StockCheck.STATUS_COMMITTED.equals(status) ? 1 : 0);
         c.setItems(new java.util.ArrayList<>(List.of(
                 item("C1", "A-01", 1, 1),
                 item("C2", "A-02", 1, null))));
