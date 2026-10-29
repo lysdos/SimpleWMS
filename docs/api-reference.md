@@ -29,6 +29,7 @@
 | 405 | 路径匹配但 HTTP 方法不支持 | 405 |
 | 406 | 客户端 `Accept` 无法满足(Spring 自身处理,**响应体为空**) | — |
 | 409 | 业务冲突(库存不足 / 状态不对 / 并发下已被改动)。数据库约束冲突(`DataIntegrityViolationException`)也走这里,但**只回通用文案**,驱动原文(表名/列名/约束名)只记服务端日志 | 409 |
+| 413 | 上传文件过大(`MaxUploadSizeExceededException`,单文件 10MB;nginx 侧同一文案) | 413 |
 | 415 | 请求 `Content-Type` 不支持(应为 `application/json`) | 415 |
 | 422 | 不可处理实体(扫码校验失败) | 422 |
 | 429 | 请求过于频繁(登录失败次数超限,`TooManyRequestsException`) | 429 |
@@ -105,8 +106,16 @@
 
 `page>=1, pageSize∈(0, 200]`,出参固定结构:
 ```json
-{ "list": [...], "total": 123, "page": 1, "pageSize": 20 }
+{ "list": [...], "total": 123, "page": 1, "pageSize": 20, "pages": 7 }
 ```
+
+- 出入库单 / 盘点单的分页接口**没有** `pages`(由前端按 `total/pageSize` 自己算);
+  基础管理的 `/page` 接口由 `model/PageResult` 直接返回 `pages`。
+- 页码越界会被**钳到最后一页**(`PageResult.clampPage`):别人删了几行后你还停在第 3 页,
+  刷新会拿到最后一页而不是空列表。
+- 基础管理(商品/供应商/仓库/库位/用户)的分页接口是 `GET /api/{module}/page`,
+  与**全量**的 `GET /api/{module}` 并存 —— 后者仍被各下拉框和 **PDA** 使用。
+  PDA 用 `List<Dto.X>` 直接解析响应,把全量端点改成分页对象会让它整块解析失败。
 
 ### 1.6 时间字段
 
@@ -148,6 +157,27 @@
 | POST | `/` | **ADMIN** | `{sku, name, category?, unit?, location?, quantity?, unitPrice?, lowStock?, remark?, suppliers?:[]}` | 创建后 | 400 |
 | PUT | `/{id}` | **ADMIN** | 同上去掉 `quantity` | 更新后 | 404 |
 | DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404 |
+| GET | `/page?keyword&supplier&page&pageSize` | 已登录 | 参数同 `GET /`,另加分页 | `PageResult`,见 §1.5 | — |
+| GET | `/export.csv?keyword&supplier` | 已登录 | 与列表同一套筛选,不传即全量 | `text/csv`(UTF-8 + BOM) | — |
+| POST | `/export.csv` | 已登录 | body: `[1,2,3]`(选中项 id) | `text/csv` | 400 空数组 |
+| GET | `/import/template` | 已登录 | — | 模板 CSV(表头 + 一行示例) | — |
+| POST | `/import` | **ADMIN** | `multipart/form-data`:`file`、`dryRun` | `ImportReport`,见下 | 400 / 413 |
+
+> **导入(`POST /import`)走"预检 → 确认"两趟**:`dryRun=true` 只解析校验、**不写库**,
+> 返回逐行错误(带**文件物理行号**,字段内含换行时也准)与有效行预览;`dryRun=false`
+> 才真正建数据,且整体一个事务 —— 中途任何一行失败都不会留下"导了一半"的商品。
+>
+> `ImportReport` 字段:`{ok, dryRun, encoding, fileRows, totalErrors, errors:[{lineNo,message}],
+> warnings:[], created, lines:[{lineNo,sku,name,supplierCount}]}`。`errors` 明细最多 50 条
+> (`totalErrors` 是真实总数);`lines` 最多 200 条(`fileRows` 是真实行数)。
+>
+> **不接受「数量」列**:`product.quantity` 只由出入库/报废维护。文件里出现该列时给一条
+> **不阻断**的警告并忽略;新建的商品数量恒为 0。
+>
+> **供应商列**:`默认供应商`(名称)+ `全部供应商`(分号分隔)。按名称匹配档案,
+> 匹配不上只警告并跳过该关联;两列都空时不改动商品原有的供应商关联。
+>
+> 单个文件上限 **5000 行**(`wms.import.max-rows`);支持 UTF-8(含 BOM)与 GBK 自动识别。
 
 > **`PUT` 不接受 `quantity`(2026-09-28 起)**:商品数量不是资料的一部分,只由出入库 / 报废的原子增减维护
 > (`ProductDao.adjustQuantity`)。此前 create/update 共用一个解析方法、把缺失的 `quantity` 补成 0,而 DAO 的
@@ -169,6 +199,18 @@
 | POST | `/` | **ADMIN** | |
 | PUT | `/{id}` | **ADMIN** | |
 | DELETE | `/{id}` | **ADMIN** | |
+| GET | `/page?keyword&status&page&pageSize` | 已登录 | 分页,见 §1.5 |
+| GET / POST | `/export.csv` | 已登录 | GET 跟筛选全量;POST body `[id,...]` 导出选中 |
+| GET | `/import/template` | 已登录 | 模板 CSV |
+| POST | `/import` | **ADMIN** | 预检 → 确认,规则同商品(不含"数量"列的概念) |
+
+> **`name` 唯一(2026-10-28 起)**:`supplier` 加了 `UNIQUE KEY uk_supplier_name`。
+> 此前只有主键,同名能建出来,而 `SupplierService.create` 里的 `DuplicateKeyException`
+> 分支因此是**死代码**。重名不是洁癖问题:供应商名称在新建单据弹窗里是下拉框的 `value`,
+> 重名会让两个选项长得一模一样、选谁都写同一个名字。
+> 新建、改名、CSV 导入三条路径都按同一口径拦(400「供应商名称已存在」)。
+>
+> 老库若有历史重名,`DataSeeder.ensureSupplierNameUnique()` 会先体检并跳过、不阻断启动。
 
 ### 2.5 仓库 — `/api/warehouses`
 
@@ -179,6 +221,10 @@
 | POST | `/` | **ADMIN** | `{code, name, remark?, enabled?}` | 创建后 | 400 code 空/重复、name 空 |
 | PUT | `/{id}` | **ADMIN** | 同上 | 更新后 | 404 / 400 code 重复 |
 | DELETE | `/{id}` | **ADMIN** | — | `{code:0,message:ok}` | 404;**409 名下还有库位** |
+| GET | `/page?keyword&status&page&pageSize` | 已登录 | 参数同 `GET /`,另加分页 | `PageResult`,见 §1.5 | — |
+| GET / POST | `/export.csv` | 已登录 | GET 跟筛选全量;POST body `[id,...]` 导出选中(含 `locationCount`) | `text/csv` | — |
+| GET | `/import/template` | 已登录 | — | 模板 CSV | — |
+| POST | `/import` | **ADMIN** | `file`、`dryRun` | `ImportReport` | 400 / 413 |
 
 - `code` 唯一(`VARCHAR(32)`),`name` 必填(`VARCHAR(64)`)。
 - `locationCount` 是列表/详情带出的**展示字段**(名下库位数),不是表列。
@@ -193,6 +239,15 @@
 | GET | `/?keyword&status&warehouseId=` | 已登录 | `warehouseId` 可选,按所属仓库过滤 | 响应每个库位带 `warehouseId` + `warehouseName` |
 | GET | `/{id}` | 已登录 | — | 同上 |
 | POST | `/` / PUT `/{id}` / DELETE `/{id}` | **ADMIN** | 请求体含 `warehouseId`(可空 = 未分配) | `warehouseId` 给了但仓库不存在 → 400 |
+| GET | `/page?keyword&status&warehouseId&page&pageSize` | 已登录 | 分页,参数同 `GET /` | `PageResult` |
+| GET / POST | `/export.csv` | 已登录 | GET 跟筛选全量;POST body `[id,...]` 导出选中 | `text/csv` |
+| GET | `/import/template` | 已登录 | — | 模板 CSV |
+| POST | `/import` | **ADMIN** | `file`、`dryRun` | `ImportReport` |
+
+> **导入的「所属仓库」列,编码和名称都认**:库位管理页的筛选下拉显示的是仓库**名称**,
+> 而导出/接口给的是编码 —— 用户照着界面填多半写名称、照着导出文件改会写编码。
+> 只认一种就会莫名其妙报"所属仓库不存在"。填了必须存在且**启用**(停用仓库不允许再挂库位)。
+> 库位名称为空时退回编码(与 `LocationService.validate` 同口径,DDL 是 `NOT NULL`)。
 
 **库位编码全局唯一**,跨仓库不重复(仓库只是分组标签)。这样 `inventory_item.location_code`、
 出入库单明细的 `location` 等"存裸库位码"的地方无需改动即可唯一定位。
@@ -208,6 +263,15 @@
 | POST | `/{id}/password` | `{password}` | 管理员重置(用户不存在 → 404) |
 | POST | `/{id}/enabled` | `{enabled: bool}` | 启停 |
 | DELETE | `/{id}` | — | 不能删自己 / 最后一名 ADMIN |
+| GET | `/page?keyword&role&status&beginDate&endDate&page&pageSize` | 分页,参数同 `GET /` | `PageResult` |
+| GET / POST | `/export.csv` | GET 跟筛选全量;POST body `[id,...]` 导出选中 | `text/csv` |
+
+> **用户模块不做导入**。`UserService.create` 要求**明文密码**,导入等于把明文密码写进
+> CSV —— 文件会留在下载目录、被转发、进邮件;而用户数量本就少,手工建不痛。
+>
+> **导出按列白名单**:`{id, username, role, enabled, mustChangePw, createdBy, createdAt}`,
+> **不含 `password_hash`**。模型上的 `@JsonIgnore` 只挡 JSON,CSV 走的是 getter,
+> 不显式排除就会把 BCrypt 哈希写进明文件。
 
 ### 2.8 入库 — `/api/inbound`(DRAFT/COMMITTED/CANCELLED)
 
@@ -406,6 +470,8 @@ PDA 扫码链路涉及的端点(共 4 个):
 | 写入单据(批量) | | ✓ | |
 | DRAFT 单据的 scan / commit | | ✓ | |
 | 创建/删除商品/供应商/库位/仓库 | | | ✓ |
+| 基础数据导出(`/export.csv`,含选中导出) | | ✓ | |
+| 基础数据导入(`POST /import`,预检与落库**都是 ADMIN**;模板下载只需登录) | 模板 ✓ | 模板 ✓ | 导入 ✓ |
 | 盘点单(创建/计数/删行/提交/取消/扫码) | | ✓ | |
 | 用户管理 | | | ✓ |
 | transfer(调拨,实物) | | ✓ | |
