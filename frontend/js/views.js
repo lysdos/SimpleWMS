@@ -1882,7 +1882,16 @@ const Views = {
         // 这些行按盘亏计入差异数,但格子里必须写明「未盘」,否则表头差异数与空行对不上
         const uncountedCount = detailItems.filter(it => it.countedQty == null).length;
 
-        const rowHtml = (it, idx) => `
+        // 行级差异与表头同口径:COMMITTED 下未盘行按 0 代入(0 - 账面),与 diffCount / 导出对齐;
+        // DRAFT / CANCELLED 保持空 —— 那两种状态的差异数本来就不含未盘行。
+        const rowDiff = it => {
+            if (it.diff != null) return it.diff;
+            const sys = it.systemQty || 0;
+            return (c.status === 'COMMITTED' && sys !== 0) ? -sys : null;
+        };
+        const rowHtml = (it, idx) => {
+            const d = rowDiff(it);
+            return `
             <tr style="${scStyle(it.systemQty, it.countedQty)}">
                 <td class="num">${idx + 1}</td>
                 <td><span style="font-family:var(--font-mono);font-size:12px;">${escapeHtml(it.code)}</span></td>
@@ -1897,7 +1906,7 @@ const Views = {
                             ? `<span style="color:var(--c-text-3);">${t('stock_check.state.uncounted')}</span>`
                             : it.countedQty)}
                 </td>
-                <td class="num"><strong>${it.diff == null ? '-' : (it.diff > 0 ? '+' + it.diff : it.diff)}</strong></td>
+                <td class="num"><strong>${d == null ? '-' : (d > 0 ? '+' + d : d)}</strong></td>
                 <td>
                     ${isDraft
                         ? `<input id="sci-rem-${it.id}" class="input input-sm" style="width:140px;" placeholder="${t('new_order.ph.row_remark')}" value="${escapeHtml(it.rowRemark || '')}">`
@@ -1907,6 +1916,7 @@ const Views = {
                     ${isDraft ? `<button id="sci-save-${it.id}" class="btn-link">${t('stock_check.btn.save')}</button>` : '-'}
                 </td>
             </tr>`;
+        };
 
         const headHtml = `<tr>
                     <th style="width:40px;">#</th>

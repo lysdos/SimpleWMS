@@ -147,6 +147,7 @@ public class StockCheckController {
         StockCheck c = service.get(id);
         if (c == null) throw new NotFoundException("盘点单不存在");
 
+        boolean committed = StockCheck.STATUS_COMMITTED.equals(c.getStatus());
         List<StockCheckItem> items = c.getItems() == null ? List.of() : c.getItems();
         List<StockCheckItem> over = new java.util.ArrayList<>();    // 盘盈
         List<StockCheckItem> normal = new java.util.ArrayList<>();  // 未盘/一致/盘亏
@@ -193,20 +194,20 @@ public class StockCheckController {
 
         if (onlyOver) {
             sb.append(CSV_HEADER).append('\n');
-            for (StockCheckItem it : over) appendRow(sb, it);
+            for (StockCheckItem it : over) appendRow(sb, it, committed);
         } else if (onlyShort) {
             sb.append(CSV_HEADER).append('\n');
             for (StockCheckItem it : normal) {
                 String st = rowState(it);
                 // 未盘行按口径计入盘亏
-                if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) appendRow(sb, it);
+                if (STATE_SHORT.equals(st) || STATE_UNCOUNTED.equals(st)) appendRow(sb, it, committed);
             }
         } else {
             sb.append("盘点明细\n").append(CSV_HEADER).append('\n');
-            for (StockCheckItem it : normal) appendRow(sb, it);
+            for (StockCheckItem it : normal) appendRow(sb, it, committed);
             if (!over.isEmpty()) {
                 sb.append("\n盘盈明细\n").append(CSV_HEADER).append('\n');
-                for (StockCheckItem it : over) appendRow(sb, it);
+                for (StockCheckItem it : over) appendRow(sb, it, committed);
             }
         }
 
@@ -239,16 +240,23 @@ public class StockCheckController {
         return STATE_OK;
     }
 
-    private static void appendRow(StringBuilder sb, StockCheckItem it) {
+    private static void appendRow(StringBuilder sb, StockCheckItem it, boolean committed) {
         int sys = it.getSystemQty() == null ? 0 : it.getSystemQty();
         Integer counted = it.getCountedQty();
+        // 未盘行(实盘数为 null)在**已提交**的单子上按 0 代入算差异,与表头 diffCount、
+        // 盘亏数同一口径 —— 否则文件里「盘亏数 3」却找不到对应行,对不了账。
+        // 草稿/已取消的单子差异列仍留空:它们的差异数本来就不含未盘行。
+        // counted_qty 本身不动,这里只是把口径算给读的人看。
+        String diff;
+        if (counted != null) diff = String.valueOf(counted - sys);
+        else diff = (committed && sys != 0) ? String.valueOf(-sys) : "";
         sb.append(csv(it.getCode())).append(',')
           .append(csv(it.getSku())).append(',')
           .append(csv(it.getProductName())).append(',')
           .append(csv(it.getLocationCode())).append(',')
           .append(sys).append(',')
           .append(counted == null ? "" : counted.toString()).append(',')
-          .append(counted == null ? "" : String.valueOf(counted - sys)).append(',')
+          .append(diff).append(',')
           .append(rowState(it)).append(',')
           .append(csv(it.getRowRemark())).append('\n');
     }
