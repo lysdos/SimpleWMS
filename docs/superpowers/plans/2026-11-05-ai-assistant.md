@@ -464,6 +464,7 @@ import com.wms.service.ai.AiSettings;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AiClientConfigTest {
@@ -473,11 +474,6 @@ class AiClientConfigTest {
                 "qwen2.5:7b", 30000, 3, 500, 6);
     }
 
-    private static AiSettings settingsWithKey(String provider) {
-        return new AiSettings(true, provider, "https://api.anthropic.com", "sk-test",
-                "claude-opus-4-8", 30000, 3, 500, 6);
-    }
-
     @Test
     void openai_compatible_provider_builds_openai_client() {
         AiClient client = new AiClientConfig().aiClient(settings("openai-compatible"));
@@ -485,22 +481,16 @@ class AiClientConfigTest {
     }
 
     @Test
-    void anthropic_provider_builds_anthropic_client() {
-        AiClient client = new AiClientConfig().aiClient(settingsWithKey("anthropic"));
-        assertInstanceOf(com.wms.service.ai.AnthropicClient.class, client);
-    }
-
-    @Test
-    void anthropic_without_key_is_rejected_at_wiring_time() {
-        IllegalStateException e = org.junit.jupiter.api.Assertions.assertThrows(
-                IllegalStateException.class,
-                () -> new AiClientConfig().aiClient(settings("anthropic")));
-        assertTrue(e.getMessage().contains("api-key"));
+    void unknown_provider_fails_at_wiring_time() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new AiClientConfig().aiClient(settings("some-vendor")));
+        assertTrue(e.getMessage().contains("provider"));
     }
 }
 ```
 
-> 第三个用例依赖 Task 4 的 `AnthropicClient` 才编译得通;先写它,Step 2 会看到编译失败,Step 3 建一个最小 `AnthropicClient` 骨架即可。Task 4 再补它的真实实现。
+> `anthropic` 分支的装配与用例放在 Task 4 —— 那个任务才会引入 `AnthropicClient`。
+> 这样每个任务结束时测试都是绿的,不留"等下一个任务才转红"的中间态。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -519,7 +509,6 @@ package com.wms.config;
 
 import com.wms.service.ai.AiClient;
 import com.wms.service.ai.AiSettings;
-import com.wms.service.ai.AnthropicClient;
 import com.wms.service.ai.OpenAICompatibleClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -527,8 +516,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * 按配置装配 AiClient。换 provider 只改 application.yml 三行,业务代码不动。
  *
- * anthropic 缺 api-key 时**在启动阶段就失败**,而不是等用户点开助手才报 401 ——
- * 配错了就该立刻知道。
+ * 未知 provider 在**启动阶段**就失败,而不是等用户点开助手才报错 —— 配错了就该立刻知道。
  */
 @Configuration
 public class AiClientConfig {
@@ -536,11 +524,11 @@ public class AiClientConfig {
     @Bean
     public AiClient aiClient(AiSettings settings) {
         if (settings.isAnthropic()) {
-            if (settings.getApiKey().isBlank()) {
-                throw new IllegalStateException("provider=anthropic 时必须配置 wms.ai.api-key(环境变量 WMS_AI_API_KEY)");
-            }
-            return new AnthropicClient(settings.getBaseUrl(), settings.getApiKey(),
-                    settings.getModel(), settings.getTimeoutMs());
+            throw new IllegalStateException("provider=anthropic 尚未装配(Task 4 接入 AnthropicClient)");
+        }
+        if (!"openai-compatible".equalsIgnoreCase(settings.getProvider())) {
+            throw new IllegalStateException("不支持的 wms.ai.provider: " + settings.getProvider()
+                    + "(可选 openai-compatible / anthropic)");
         }
         return new OpenAICompatibleClient(settings.getBaseUrl(), settings.getApiKey(),
                 settings.getModel(), settings.getTimeoutMs());
@@ -579,7 +567,7 @@ public class AiClientConfig {
 C:/apache-maven-3.9.6/bin/mvn.cmd -q -o -Dmaven.repo.local=.m2-repo -Dtest='AiClientConfigTest,OpenAICompatibleClientTest' test
 ```
 
-Expected: PASS。注意第三个装配用例此时仍会失败(还没有真正的 `AnthropicClient`),**Task 4 完成后转绿**;本任务的验收标准是前两个装配用例 + 三个 OpenAI 用例全过。
+Expected: PASS(2 个装配用例 + 3 个 OpenAI 用例全绿)。
 
 - [ ] **Step 5: 提交**
 
@@ -592,11 +580,13 @@ git commit -m "feat(ai): provider 装配与流式解析验证"
 
 ---
 
-### Task 4: Anthropic 客户端
+### Task 4: Anthropic 客户端与装配
 
 **Files:**
 - Create: `src/main/java/com/wms/service/ai/AnthropicClient.java`
+- Modify: `src/main/java/com/wms/config/AiClientConfig.java`(接入 anthropic 分支)
 - Test: `src/test/java/com/wms/service/ai/AnthropicClientTest.java`
+- Modify: `src/test/java/com/wms/config/AiClientConfigTest.java`(追加 anthropic 装配用例)
 
 **Interfaces:**
 - Consumes: `AiClient`、`ChatMessage`、`OpenAICompatibleClient.readSse(...)`(Task 1/2)
@@ -822,19 +812,68 @@ public class AnthropicClient implements AiClient {
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [ ] **Step 4: 接入 anthropic 装配**
+
+接着把 anthropic 分支接进 `AiClientConfig`(替换 Task 3 里那行占位异常):
+
+```java
+    @Bean
+    public AiClient aiClient(AiSettings settings) {
+        if (settings.isAnthropic()) {
+            if (settings.getApiKey().isBlank()) {
+                throw new IllegalStateException(
+                        "provider=anthropic 时必须配置 wms.ai.api-key(环境变量 WMS_AI_API_KEY)");
+            }
+            return new AnthropicClient(settings.getBaseUrl(), settings.getApiKey(),
+                    settings.getModel(), settings.getTimeoutMs());
+        }
+        if (!"openai-compatible".equalsIgnoreCase(settings.getProvider())) {
+            throw new IllegalStateException("不支持的 wms.ai.provider: " + settings.getProvider()
+                    + "(可选 openai-compatible / anthropic)");
+        }
+        return new OpenAICompatibleClient(settings.getBaseUrl(), settings.getApiKey(),
+                settings.getModel(), settings.getTimeoutMs());
+    }
+```
+
+并在 `AiClientConfigTest` 追加两个用例:
+
+```java
+    private static AiSettings anthropicSettings(String apiKey) {
+        return new AiSettings(true, "anthropic", "https://api.anthropic.com", apiKey,
+                "claude-opus-4-8", 30000, 3, 500, 6);
+    }
+
+    @Test
+    void anthropic_provider_builds_anthropic_client() {
+        AiClient client = new AiClientConfig().aiClient(anthropicSettings("sk-test"));
+        assertInstanceOf(com.wms.service.ai.AnthropicClient.class, client);
+    }
+
+    @Test
+    void anthropic_without_key_is_rejected_at_wiring_time() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new AiClientConfig().aiClient(anthropicSettings("")));
+        assertTrue(e.getMessage().contains("api-key"));
+    }
+```
+
+- [ ] **Step 5: 跑测试确认通过**
 
 ```bash
 C:/apache-maven-3.9.6/bin/mvn.cmd -q -o -Dmaven.repo.local=.m2-repo -Dtest='AnthropicClientTest,AiClientConfigTest' test
 ```
 
-Expected: PASS(Task 3 遗留的装配用例此时转绿)。
+Expected: PASS(3 个 Anthropic 用例 + 4 个装配用例)。
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
-git add src/main/java/com/wms/service/ai/AnthropicClient.java src/test/java/com/wms/service/ai/AnthropicClientTest.java
-git commit -m "feat(ai): Anthropic 客户端"
+git add src/main/java/com/wms/service/ai/AnthropicClient.java \
+        src/main/java/com/wms/config/AiClientConfig.java \
+        src/test/java/com/wms/service/ai/AnthropicClientTest.java \
+        src/test/java/com/wms/config/AiClientConfigTest.java
+git commit -m "feat(ai): Anthropic 客户端与 provider 装配"
 ```
 
 ---
