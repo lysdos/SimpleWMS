@@ -27,4 +27,22 @@ class AiClientConfigTest {
                 () -> new AiClientConfig().aiClient(settings("some-vendor")));
         assertTrue(e.getMessage().contains("provider"));
     }
+
+    private static AiSettings anthropicSettings(String apiKey) {
+        return new AiSettings(true, "anthropic", "https://api.anthropic.com", apiKey,
+                "claude-opus-4-8", 30000, 3, 500, 6);
+    }
+
+    @Test
+    void anthropic_provider_builds_anthropic_client() {
+        AiClient client = new AiClientConfig().aiClient(anthropicSettings("sk-test"));
+        assertInstanceOf(com.wms.service.ai.AnthropicClient.class, client);
+    }
+
+    @Test
+    void anthropic_without_key_is_rejected_at_wiring_time() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new AiClientConfig().aiClient(anthropicSettings("")));
+        assertTrue(e.getMessage().contains("api-key"));
+    }
 }
