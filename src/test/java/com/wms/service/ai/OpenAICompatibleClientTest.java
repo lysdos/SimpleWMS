@@ -58,4 +58,24 @@ class OpenAICompatibleClientTest {
                 () -> client.complete("sys", List.of(ChatMessage.user("hi")), 64));
         assertEquals("AI 服务返回 HTTP 500", e.getMessage());
     }
+
+    @Test
+    void stream_emits_only_non_empty_deltas_and_stops_at_done() {
+        server.createContext("/v1/chat/completions", ex -> {
+            String sse = "data: {\"choices\":[{\"delta\":{\"content\":\"共 128 \"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{\"content\":\"件\"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{}}]}\n\n"
+                    + "data: [DONE]\n\n";
+            byte[] bytes = sse.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "text/event-stream");
+            ex.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
+        });
+
+        OpenAICompatibleClient client = new OpenAICompatibleClient(baseUrl, "", "test-model", 5000);
+        StringBuilder acc = new StringBuilder();
+        client.stream("sys", List.of(ChatMessage.user("hi")), 64, acc::append);
+
+        assertEquals("共 128 件", acc.toString());
+    }
 }
